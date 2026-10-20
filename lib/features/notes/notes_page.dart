@@ -924,7 +924,13 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                         ),
                       FilledButton.icon(
                         onPressed: () => _newNote(wide: wide),
-                        icon: const Icon(Icons.add, size: 18),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 40),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: Insets.m,
+                          ),
+                        ),
+                        icon: const Icon(Icons.add_rounded, size: 20),
                         label: Text(strings.notesNew),
                       ),
                       IconButton(
