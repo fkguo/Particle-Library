@@ -8,6 +8,7 @@ import 'package:file_selector/file_selector.dart';
 import '../../app/app_scope.dart';
 import '../../app/app_strings.dart';
 import '../../app/app_theme.dart';
+import '../../domain/display.dart';
 import '../../notes/notes.dart';
 import '../../notes/note_evidence.dart';
 import '../common/async_view.dart';
@@ -22,6 +23,7 @@ import 'note_editor.dart';
 import 'notes_entity.dart';
 import 'notes_format.dart';
 import 'tag_tools.dart';
+import 'note_context.dart';
 import 'note_evidence_resolver.dart';
 
 /// Fourth primary destination: local notes.
@@ -1068,7 +1070,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
   }
 
   Future<void> _copyCiteKeys() async {
-    final notes = _notes;
+    final notes = await _scopeNotesForExport();
+    if (!mounted) return;
     final scope = AppScope.maybeOf(context);
     final database = scope?.database;
     final strings = widget.strings;
@@ -1089,11 +1092,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       var doi = target.doi ?? '';
       final documentId = target.documentId;
       if (database != null && documentId != null) {
-        var reference = await database.referenceByDocumentId(documentId);
-        final referenceId = int.tryParse(documentId);
-        if (reference == null && referenceId != null) {
-          reference = await database.referenceById(referenceId);
-        }
+        final reference = await database.referenceByDocumentId(documentId);
         if (reference != null) {
           inspireId = reference.inspireId;
           if (doi.isEmpty) doi = reference.doi;
@@ -1102,9 +1101,13 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       if (!InspireBibtexService.canFetch(inspireId: inspireId, doi: doi)) {
         continue;
       }
-      final key = await service.fetchCiteKey(inspireId: inspireId, doi: doi);
-      if (key != null && key.isNotEmpty && !keys.contains(key)) {
-        keys.add(key);
+      try {
+        final key = await service.fetchCiteKey(inspireId: inspireId, doi: doi);
+        if (key != null && key.isNotEmpty && !keys.contains(key)) {
+          keys.add(key);
+        }
+      } catch (_) {
+        // A single network/decoding failure must not abort the whole batch.
       }
     }
     if (!mounted) return;
@@ -1112,7 +1115,15 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       messenger.showSnackBar(SnackBar(content: Text(strings.notesNoCiteKeys)));
       return;
     }
-    await Clipboard.setData(ClipboardData(text: '\\cite{${keys.join(',')}}'));
+    try {
+      await Clipboard.setData(ClipboardData(text: '\\cite{${keys.join(',')}}'));
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('${strings.commonCopyFailed}: $error')),
+      );
+      return;
+    }
     if (!mounted) return;
     messenger.showSnackBar(
       SnackBar(content: Text(strings.notesCiteKeysCopied(keys.length))),
@@ -1120,7 +1131,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
   }
 
   Future<void> _copyBibtex() async {
-    final notes = _notes;
+    final notes = await _scopeNotesForExport();
+    if (!mounted) return;
     final scope = AppScope.maybeOf(context);
     final database = scope?.database;
     final strings = widget.strings;
@@ -1141,11 +1153,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       var doi = target.doi ?? '';
       final documentId = target.documentId;
       if (database != null && documentId != null) {
-        var reference = await database.referenceByDocumentId(documentId);
-        final referenceId = int.tryParse(documentId);
-        if (reference == null && referenceId != null) {
-          reference = await database.referenceById(referenceId);
-        }
+        final reference = await database.referenceByDocumentId(documentId);
         if (reference != null) {
           inspireId = reference.inspireId;
           if (doi.isEmpty) doi = reference.doi;
@@ -1159,7 +1167,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
         if (entry.trim().isNotEmpty && !entries.contains(entry)) {
           entries.add(entry.trim());
         }
-      } on InspireBibtexException {
+      } catch (_) {
         // Skip entries that INSPIRE cannot resolve; the copied set remains useful.
       }
     }
@@ -1168,11 +1176,29 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       messenger.showSnackBar(SnackBar(content: Text(strings.notesNoBibtex)));
       return;
     }
-    await Clipboard.setData(ClipboardData(text: entries.join('\n\n')));
+    try {
+      await Clipboard.setData(ClipboardData(text: entries.join('\n\n')));
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('${strings.commonCopyFailed}: $error')),
+      );
+      return;
+    }
     if (!mounted) return;
     messenger.showSnackBar(
       SnackBar(content: Text(strings.notesBibtexCopied(entries.length))),
     );
+  }
+
+  Future<List<NoteRecord>> _scopeNotesForExport() async {
+    final store = widget.store;
+    if (store == null) return const <NoteRecord>[];
+    if (_collectionFilter != null) {
+      return store.notesInCollection(_collectionFilter!, limit: 1000);
+    }
+    if (_unfiledScope) return store.unfiled(limit: 1000);
+    return store.allForExport();
   }
 
   Future<void> _exportScopeMarkdown() async {
@@ -1180,11 +1206,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     if (store == null) return;
     final strings = widget.strings;
     try {
-      final notes = _collectionFilter != null
-          ? await store.notesInCollection(_collectionFilter!, limit: 1000)
-          : _unfiledScope
-          ? await store.unfiled(limit: 1000)
-          : await store.allForExport();
+      final notes = await _scopeNotesForExport();
       if (!mounted) return;
       if (notes.isEmpty) {
         ScaffoldMessenger.of(context)
@@ -2032,12 +2054,54 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       final bundle = database == null
           ? null
           : await database.measurementById(id);
-      if (database != null && bundle == null) {
+      final expectedPdgid = result.substring(0, split);
+      if (database != null &&
+          (bundle == null || bundle.measurement.pdgid != expectedPdgid)) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(widget.strings.notesReanchorInvalid)),
         );
         return;
+      }
+    }
+    Map<String, Object?>? newContext;
+    if (database != null) {
+      if (kind == NoteTargetKinds.measurement) {
+        final split = result.lastIndexOf(':');
+        final id = int.tryParse(result.substring(split + 1));
+        final bundle = id == null ? null : await database.measurementById(id);
+        final value = bundle?.primaryValue;
+        if (bundle != null && value != null) {
+          final display = DisplayQuantity.fromValue(value);
+          newContext = measurementNoteContext(
+            measurement: bundle.measurement,
+            value: value,
+            displayText: display.text,
+            edition: database.currentEdition,
+            reference: bundle.reference,
+            quantityLabel: await database.descriptionForPdgid(
+              bundle.measurement.pdgid,
+            ),
+          );
+        }
+      } else if (kind == NoteTargetKinds.pdgid) {
+        final entry = await database.entryByPdgid(result);
+        if (entry != null) {
+          final summaries = await database.summariesForEntry(
+            entry.id,
+            edition: database.currentEdition,
+          );
+          final preferred = selectBestSummary(summaries).preferred;
+          if (preferred != null) {
+            final display = DisplayQuantity.fromSummary(preferred);
+            newContext = summaryNoteContext(
+              preferred,
+              displayText: display.text,
+              edition: database.currentEdition,
+              quantityLabel: preferred.pdgid,
+            );
+          }
+        }
       }
     }
     final anchors = <NoteAnchorInput>[
@@ -2052,7 +2116,12 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
           status: anchor.status,
           context: anchor.context,
         ),
-      NoteAnchorInput(targetKind: kind, targetKey: result, targetLabel: result),
+      NoteAnchorInput(
+        targetKind: kind,
+        targetKey: result,
+        targetLabel: result,
+        context: newContext,
+      ),
     ];
     try {
       await store.update(
@@ -2131,7 +2200,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
           _csv(row.captured?.edition ?? ''),
           _csv(row.currentValue == '—' ? '' : row.currentValue),
           _csv(row.current?.edition ?? ''),
-          _csv(row.status.name),
+          _csv(row.displayStatus.name),
           '${row.noteCount}',
         ].join(','),
       );
@@ -2296,8 +2365,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     final allNotes = await store.allForExport(includeDeleted: true);
     final memberIds = [
       for (final note in allNotes)
-        if (note.deletedAt == null &&
-            note.collections.any((member) => member.id == collection.id))
+        if (note.collections.any((member) => member.id == collection.id))
           note.id,
     ];
     try {
@@ -2311,15 +2379,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
         undoLabel: widget.strings.notesUndo,
         onUndo: () async {
           try {
-            await store.createCollection(
-              collection.name,
-              id: collection.id,
-              createdAt: collection.createdAt,
-              updatedAt: collection.updatedAt,
-            );
-            for (final noteId in memberIds) {
-              await store.addNoteToCollection(noteId, collection.id);
-            }
+            await store.restoreCollection(collection, memberIds);
             widget.changes.value++;
             if (mounted) await _reload(showLoading: false);
           } catch (error) {

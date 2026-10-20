@@ -646,6 +646,54 @@ class NotesStore {
     });
   }
 
+  /// Restores a collection and its note memberships in one transaction.
+  ///
+  /// Unlike [addNoteToCollection], this also restores memberships for notes
+  /// that are currently in the trash, so undoing a collection delete does not
+  /// silently detach deleted notes.
+  Future<void> restoreCollection(
+    NoteCollection collection,
+    Iterable<String> noteIds,
+  ) async {
+    _ensureOpen();
+    final normalizedName = _normalizeCollectionName(collection.name);
+    final ids = <String>{for (final id in noteIds) id.trim()};
+    _writeSync('恢复 collection', () {
+      final nameRows = _db.select(
+        'SELECT id FROM collections WHERE name = ? COLLATE NOCASE',
+        [normalizedName],
+      );
+      if (nameRows.any((row) => row['id'] != collection.id)) {
+        throw NotesException(
+          NotesErrorCode.invalidInput,
+          'collection 名称已存在：$normalizedName',
+        );
+      }
+      final existing = _db.select('SELECT 1 FROM collections WHERE id = ?', [
+        collection.id,
+      ]);
+      if (existing.isNotEmpty) {
+        throw NotesException(
+          NotesErrorCode.invalidInput,
+          'collection id 已存在：${collection.id}',
+        );
+      }
+      _db.execute(
+        'INSERT INTO collections(id, name, created_at, updated_at) '
+        'VALUES (?, ?, ?, ?)',
+        [
+          collection.id,
+          normalizedName,
+          collection.createdAt.toUtc().toIso8601String(),
+          collection.updatedAt.toUtc().toIso8601String(),
+        ],
+      );
+      for (final noteId in ids) {
+        _insertCollections(noteId, [collection.id]);
+      }
+    });
+  }
+
   Future<void> setNoteCollections(
     String noteId,
     Iterable<String> collectionIds,
@@ -1108,16 +1156,17 @@ class NotesStore {
       if (targetName != trimmedName) {
         renamedCollections.add('$trimmedName → $targetName');
       }
+      final normalizedTarget = _normalizeCollectionName(targetName);
       final plan = _ImportCollectionPlan(
         id: id,
-        name: targetName,
+        name: normalizedTarget,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );
       plannedCollections.add(plan);
-      plannedNames.add(targetName.toLowerCase());
-      knownByName[targetName.toLowerCase()] = id;
-      if (targetName == trimmedName) knownByName[lookup] = id;
+      plannedNames.add(normalizedTarget.toLowerCase());
+      knownByName[normalizedTarget.toLowerCase()] = id;
+      if (normalizedTarget == trimmedName) knownByName[lookup] = id;
       if (trimmedId.isNotEmpty) {
         knownByImportedId[trimmedId] = id;
         localById[trimmedId] = id;

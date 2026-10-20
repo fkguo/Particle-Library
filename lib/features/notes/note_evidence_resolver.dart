@@ -24,6 +24,7 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
     String? technique,
     String? referenceDoi,
     String? referenceDocumentId,
+    String? quantityLabel,
   }) async {
     // A measurement is a paper-level object; the useful "current" comparison
     // is the current PDG summary (average/fit) for the same quantity.
@@ -36,12 +37,12 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
     if (!idMatches) {
       final candidates = await _database.measurementCandidatesForFingerprint(
         pdgid: pdgid,
-        quantityLabel: summary.quantityLabel,
+        quantityLabel: quantityLabel ?? summary.quantityLabel,
         technique: technique,
         referenceDoi: referenceDoi,
         referenceDocumentId: referenceDocumentId,
       );
-      ambiguous = candidates.length != 1;
+      ambiguous = candidates.length > 1;
     }
     if (ambiguous) {
       return CurrentEvidence(
@@ -66,7 +67,7 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
     final rowId = captured.summaryRowId;
     if (pdgid == null || valueType == null || rowId == null) return null;
     final key = '$pdgid\u0000$valueType\u0000$rowId';
-    return _summaryCache.putIfAbsent(key, () async {
+    return _cached(_summaryCache, key, () async {
       final candidates = await _database.currentSummaryCandidatesForCapture(
         pdgid: pdgid,
         valueType: valueType,
@@ -84,7 +85,7 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
   }
 
   Future<CurrentEvidence?> _summaryForQuantity(String pdgid) {
-    return _quantityCache.putIfAbsent(pdgid, () async {
+    return _cached(_quantityCache, pdgid, () async {
       final entry = await _database.entryByPdgid(pdgid);
       if (entry == null) return null;
       final summaries = await _database.summariesForEntry(
@@ -105,17 +106,30 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
   }
 
   Future<MeasurementBundle?> _measurement(int id) {
-    return _measurementCache.putIfAbsent(
-      id,
-      () => _database.measurementById(id),
-    );
+    return _cached(_measurementCache, id, () => _database.measurementById(id));
   }
 
   Future<String?> _description(String pdgid) {
-    return _descriptionCache.putIfAbsent(
+    return _cached(
+      _descriptionCache,
       pdgid,
       () => _database.descriptionForPdgid(pdgid),
     );
+  }
+
+  Future<T> _cached<T>(
+    Map<Object, Future<T>> cache,
+    Object key,
+    Future<T> Function() load,
+  ) {
+    return cache.putIfAbsent(key, () async {
+      try {
+        return await load();
+      } catch (_) {
+        cache.remove(key);
+        rethrow;
+      }
+    });
   }
 
   Future<CurrentEvidence> _fromSummary(Summary summary) async {

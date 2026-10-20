@@ -117,9 +117,11 @@ class FullBackup {
     }
     final rawNotes = payload['notes'];
     var importedNotes = 0;
+    var renamedCollections = const <String>[];
     if (rawNotes != null && notes != null) {
       final result = await notes.importJson(rawNotes);
       importedNotes = result.added;
+      renamedCollections = result.renamedCollections;
     }
     // Import notes first: a malformed notes payload must not overwrite the
     // user's settings before it is rejected.
@@ -143,6 +145,7 @@ class FullBackup {
       full: isFull,
       notes: importedNotes,
       pdfs: restoredPdfs,
+      renamedCollections: renamedCollections,
     );
   }
 }
@@ -159,9 +162,11 @@ class FullBackupImport {
     required this.full,
     required this.notes,
     required this.pdfs,
+    this.renamedCollections = const <String>[],
   });
 
   final bool full;
   final int notes;
   final int pdfs;
+  final List<String> renamedCollections;
 }

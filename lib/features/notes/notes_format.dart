@@ -208,7 +208,7 @@ String scopeMarkdown({
       buffer.writeln(
         '| ${_mdCell(row.title)} | ${_typeLabel(row.type)} | '
         '${_mdCell(row.capturedValue)} | ${_mdCell(row.currentValue)} | '
-        '${row.status.name} | ${row.noteCount} |',
+        '${row.displayStatus.name} | ${row.noteCount} |',
       );
     }
     buffer.writeln();
@@ -219,7 +219,8 @@ String scopeMarkdown({
 String _mdCell(String value) =>
     value.replaceAll('\r', ' ').replaceAll('\n', ' ').replaceAll('|', '\\|');
 
-String _yaml(String value) => '"${value.replaceAll('"', '\\"')}"';
+String _yaml(String value) =>
+    '"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"';
 
 String _typeLabel(NoteEvidenceType type) => switch (type) {
   NoteEvidenceType.measurement => 'Measurement',

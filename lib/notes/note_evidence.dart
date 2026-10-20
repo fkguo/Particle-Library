@@ -139,6 +139,7 @@ abstract class NoteEvidenceResolver {
     String? technique,
     String? referenceDoi,
     String? referenceDocumentId,
+    String? quantityLabel,
   });
   Future<CurrentEvidence?> resolveSummary(CapturedEvidence captured);
 }
@@ -166,6 +167,16 @@ class NoteEvidenceRow {
   final CurrentEvidence? current;
   NoteEvidenceStatus status;
   final String detail;
+
+  /// A paper measurement is not expected to equal the PDG average/fit.
+  /// Keep that numeric comparison informational; exports must not call it
+  /// `current`/`changed`.
+  NoteEvidenceStatus get displayStatus =>
+      type == NoteEvidenceType.measurement &&
+          (status == NoteEvidenceStatus.current ||
+              status == NoteEvidenceStatus.changed)
+      ? NoteEvidenceStatus.uncompared
+      : status;
 
   int get noteCount => noteIds.length;
 
@@ -216,6 +227,7 @@ Future<List<NoteEvidenceRow>> buildNoteEvidence(
                 technique: captured?.technique,
                 referenceDoi: captured?.referenceDoi,
                 referenceDocumentId: captured?.referenceDocumentId,
+                quantityLabel: captured?.quantityLabel,
               );
         final key =
             'measurement:${anchor.targetKey}:${captured?.quantityLabel ?? ''}:'
@@ -240,7 +252,10 @@ Future<List<NoteEvidenceRow>> buildNoteEvidence(
           ),
         );
         row.noteIds.add(note.id);
-        row.status = _status(anchor, captured, current, resolver);
+        row.status = _mergeStatus(
+          row.status,
+          _status(anchor, captured, current, resolver),
+        );
       } else if (anchor.targetKind == NoteTargetKinds.pdgid) {
         final captured = CapturedEvidence.fromContext(anchor.context);
         if (captured?.kind != 'pdg_summary') continue;
@@ -267,7 +282,10 @@ Future<List<NoteEvidenceRow>> buildNoteEvidence(
           ),
         );
         row.noteIds.add(note.id);
-        row.status = _status(anchor, captured, current, resolver);
+        row.status = _mergeStatus(
+          row.status,
+          _status(anchor, captured, current, resolver),
+        );
       } else if (anchor.targetKind == NoteTargetKinds.reference) {
         final key = 'reference:${anchor.targetKey}';
         final row = rows.putIfAbsent(
@@ -290,6 +308,20 @@ Future<List<NoteEvidenceRow>> buildNoteEvidence(
   }
   return rows.values.toList(growable: false);
 }
+
+int _statusRank(NoteEvidenceStatus status) => switch (status) {
+  NoteEvidenceStatus.unresolved => 5,
+  NoteEvidenceStatus.missing => 4,
+  NoteEvidenceStatus.fuzzy => 3,
+  NoteEvidenceStatus.changed => 2,
+  NoteEvidenceStatus.current => 1,
+  NoteEvidenceStatus.uncompared => 0,
+};
+
+NoteEvidenceStatus _mergeStatus(
+  NoteEvidenceStatus existing,
+  NoteEvidenceStatus next,
+) => _statusRank(next) > _statusRank(existing) ? next : existing;
 
 NoteEvidenceStatus _status(
   NoteAnchor anchor,

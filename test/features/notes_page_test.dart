@@ -168,6 +168,11 @@ void main() {
       title: 'Member note',
       collectionIds: [collection.id],
     );
+    final trashed = await store.create(
+      title: 'Trashed member',
+      collectionIds: [collection.id],
+    );
+    await store.delete(trashed.id);
     await pumpWorkspace(tester);
 
     await tester.tap(find.text('Project'), buttons: kSecondaryMouseButton);

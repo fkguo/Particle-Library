@@ -85,6 +85,30 @@ void main() {
     expect(rows.single.status, NoteEvidenceStatus.fuzzy);
   });
 
+  test('measurement status is informational, not current/changed', () {
+    final row = NoteEvidenceRow(
+      type: NoteEvidenceType.measurement,
+      key: 'measurement:S032M:42',
+      title: 'D0 mass',
+      sourceTargetId: 'measurement:S032M:42',
+      noteIds: {'note-1'},
+      status: NoteEvidenceStatus.changed,
+    );
+    expect(row.displayStatus, NoteEvidenceStatus.uncompared);
+  });
+
+  test('duplicate anchors keep the most severe status', () async {
+    final rows = await buildNoteEvidence(
+      [
+        note(context: measurementContext()),
+        note(context: measurementContext(), status: NoteAnchorStatus.fuzzy),
+      ],
+      resolver: _FakeResolver(currentValue: '3871.64'),
+      currentEdition: '2026',
+    );
+    expect(rows.single.status, NoteEvidenceStatus.fuzzy);
+  });
+
   test('summary rows use the quantity name, not the internal pdgid', () async {
     final rows = await buildNoteEvidence(
       [
@@ -196,6 +220,7 @@ class _FakeResolver implements NoteEvidenceResolver {
     String? technique,
     String? referenceDoi,
     String? referenceDocumentId,
+    String? quantityLabel,
   }) async => _value();
 
   @override

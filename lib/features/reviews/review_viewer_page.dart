@@ -211,7 +211,11 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       }
       if (!mounted) return false;
       _notifyNotesChanged();
-      _lastCollectionId = result.first;
+      final previous = _lastCollectionId;
+      _lastCollectionId = result.firstWhere(
+        (id) => id != previous,
+        orElse: () => result.first,
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(strings.reviewHighlightAddedToCollection)),
       );
@@ -882,28 +886,39 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (context) => SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.65,
-        child: _ReviewAnnotationSidebar(
-          annotations: _annotations,
-          palette: context.palette,
-          strings: AppScope.of(context).strings,
-          onOpen: (annotation) {
-            Navigator.of(context).pop();
-            if (_controller.isReady) {
-              unawaited(
-                _controller.goToPage(pageNumber: annotation.pageNumber),
-              );
-            }
-          },
-          onOpenNote: _openAnnotationNote,
-          onEditNote: _editNote,
-          onDelete: _deleteAnnotation,
-          selectionMode: _annotationSelectionMode,
-          selectedIds: _selectedAnnotationIds,
-          onToggleSelectionMode: _toggleAnnotationSelectionMode,
-          onToggleSelection: _toggleAnnotationSelected,
-          onAddSelected: _addSelectedAnnotationsToCollection,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.65,
+          child: _ReviewAnnotationSidebar(
+            annotations: _annotations,
+            palette: context.palette,
+            strings: AppScope.of(context).strings,
+            onOpen: (annotation) {
+              Navigator.of(context).pop();
+              if (_controller.isReady) {
+                unawaited(
+                  _controller.goToPage(pageNumber: annotation.pageNumber),
+                );
+              }
+            },
+            onOpenNote: _openAnnotationNote,
+            onEditNote: _editNote,
+            onDelete: _deleteAnnotation,
+            selectionMode: _annotationSelectionMode,
+            selectedIds: _selectedAnnotationIds,
+            onToggleSelectionMode: () {
+              _toggleAnnotationSelectionMode();
+              setSheetState(() {});
+            },
+            onToggleSelection: (id) {
+              _toggleAnnotationSelected(id);
+              setSheetState(() {});
+            },
+            onAddSelected: () async {
+              await _addSelectedAnnotationsToCollection();
+              if (context.mounted) setSheetState(() {});
+            },
+          ),
         ),
       ),
     );

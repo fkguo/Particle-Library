@@ -198,6 +198,17 @@ void main() {
     expect(markdown, contains('exported_at: 2026-10-21T01:00:00.000Z'));
     expect(markdown, contains('## Evidence'));
     expect(markdown, contains('| D0 MASS \\| selected | Measurement |'));
+    final escaped = scopeMarkdown(
+      scope: 'A "quoted" \\ path',
+      notes: [_note()],
+      evidence: const [],
+      untitled: 'Untitled note',
+    );
+    final slash = String.fromCharCode(92);
+    expect(
+      escaped,
+      contains('scope: "A $slash"quoted$slash" $slash$slash path"'),
+    );
   });
 
   test('reference anchors deduplicate into citation-key targets', () {
