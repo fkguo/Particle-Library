@@ -132,7 +132,14 @@ class _AppShellState extends State<AppShell> {
   void _select(int index) {
     if (!mounted) return;
     if (index < 0 || index >= AppTab.values.length) return;
-    if (index == _index) return;
+    if (index == _index) {
+      // Tapping the already-selected tab is the standard "return to root"
+      // gesture. Notes can have a measurement/editor route pushed on top of
+      // its tab navigator, so a no-op here would leave the user stuck on that
+      // detail page.
+      _navHub.tabController(AppTab.values[index].name)?.resetToRoot();
+      return;
+    }
     if (index == AppTab.settings.index) {
       _settingsReturnIndex = _index;
       _navHub.tabController(AppTab.settings.name)?.rootBack = _leaveSettings;
