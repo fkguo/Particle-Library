@@ -57,11 +57,13 @@ class NotesImportResult {
     required this.added,
     required this.skipped,
     required this.failed,
+    this.renamedCollections = const <String>[],
   });
 
   final int added;
   final int skipped;
   final int failed;
+  final List<String> renamedCollections;
 }
 
 class NotesStore {
@@ -1066,6 +1068,7 @@ class NotesStore {
     };
     final knownByImportedId = <String, String>{};
     final plannedCollections = <_ImportCollectionPlan>[];
+    final renamedCollections = <String>[];
     final plannedNames = <String>{
       for (final collection in localCollections) collection.name.toLowerCase(),
     };
@@ -1102,6 +1105,9 @@ class NotesStore {
         targetName = uniqueCollectionName(trimmedName);
       }
       final id = trimmedId.isEmpty ? _newUuid() : trimmedId;
+      if (targetName != trimmedName) {
+        renamedCollections.add('$trimmedName → $targetName');
+      }
       final plan = _ImportCollectionPlan(
         id: id,
         name: targetName,
@@ -1262,7 +1268,12 @@ class NotesStore {
         _insertCollections(id, note.collectionIds);
       }
     });
-    return NotesImportResult(added: notes.length, skipped: skipped, failed: 0);
+    return NotesImportResult(
+      added: notes.length,
+      skipped: skipped,
+      failed: 0,
+      renamedCollections: List<String>.unmodifiable(renamedCollections),
+    );
   }
 
   void _validateImportPayload(Object? decoded, List<Object?> root) {

@@ -8,26 +8,55 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
   PdgEvidenceResolver(this._database);
 
   final PdgDatabase _database;
+  final Map<String, Future<CurrentEvidence?>> _quantityCache =
+      <String, Future<CurrentEvidence?>>{};
+  final Map<int, Future<MeasurementBundle?>> _measurementCache =
+      <int, Future<MeasurementBundle?>>{};
+  final Map<String, Future<CurrentEvidence?>> _summaryCache =
+      <String, Future<CurrentEvidence?>>{};
+  final Map<String, Future<String?>> _descriptionCache =
+      <String, Future<String?>>{};
 
   @override
   Future<CurrentEvidence?> resolveMeasurement(
     String pdgid,
-    int measurementId,
-  ) async {
+    int measurementId, {
+    String? technique,
+    String? referenceDoi,
+    String? referenceDocumentId,
+  }) async {
     // A measurement is a paper-level object; the useful "current" comparison
-    // is the current PDG summary (average/fit) for the same quantity. Keeping
-    // the measurement row itself would compare it with an identical frozen
-    // value and would never reveal a change in the PDG consensus.
-    final entry = await _database.entryByPdgid(pdgid);
-    if (entry == null) return null;
-    final summaries = await _database.summariesForEntry(
-      entry.id,
-      edition: _database.currentEdition,
-    );
-    final selection = selectBestSummary(summaries);
-    final preferred = selection.preferred;
-    if (preferred == null) return null;
-    return _fromSummary(preferred);
+    // is the current PDG summary (average/fit) for the same quantity.
+    final summary = await _summaryForQuantity(pdgid);
+    if (summary == null) return null;
+
+    var ambiguous = false;
+    final bundle = await _measurement(measurementId);
+    final idMatches = bundle != null && bundle.measurement.pdgid == pdgid;
+    if (!idMatches) {
+      final candidates = await _database.measurementCandidatesForFingerprint(
+        pdgid: pdgid,
+        quantityLabel: summary.quantityLabel,
+        technique: technique,
+        referenceDoi: referenceDoi,
+        referenceDocumentId: referenceDocumentId,
+      );
+      ambiguous = candidates.length != 1;
+    }
+    if (ambiguous) {
+      return CurrentEvidence(
+        value: summary.value,
+        errPlus: summary.errPlus,
+        errMinus: summary.errMinus,
+        unit: summary.unit,
+        edition: summary.edition,
+        limitType: summary.limitType,
+        valueText: summary.valueText,
+        quantityLabel: summary.quantityLabel,
+        ambiguous: true,
+      );
+    }
+    return summary;
   }
 
   @override
@@ -36,18 +65,62 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
     final valueType = captured.valueType;
     final rowId = captured.summaryRowId;
     if (pdgid == null || valueType == null || rowId == null) return null;
-    final summary = await _database.currentSummaryForCapture(
-      pdgid: pdgid,
-      valueType: valueType,
-      capturedRowId: rowId,
+    final key = '$pdgid\u0000$valueType\u0000$rowId';
+    return _summaryCache.putIfAbsent(key, () async {
+      final candidates = await _database.currentSummaryCandidatesForCapture(
+        pdgid: pdgid,
+        valueType: valueType,
+        capturedRowId: rowId,
+      );
+      if (candidates.isEmpty) return null;
+      if (candidates.length > 1) {
+        return CurrentEvidence.fuzzy(
+          quantityLabel: await _description(pdgid),
+          edition: _database.currentEdition,
+        );
+      }
+      return _fromSummary(candidates.single);
+    });
+  }
+
+  Future<CurrentEvidence?> _summaryForQuantity(String pdgid) {
+    return _quantityCache.putIfAbsent(pdgid, () async {
+      final entry = await _database.entryByPdgid(pdgid);
+      if (entry == null) return null;
+      final summaries = await _database.summariesForEntry(
+        entry.id,
+        edition: _database.currentEdition,
+      );
+      final selection = selectBestSummary(summaries);
+      final preferred = selection.preferred;
+      if (preferred != null) return _fromSummary(preferred);
+      if (selection.candidates.isNotEmpty) {
+        return CurrentEvidence.fuzzy(
+          quantityLabel: await _description(pdgid),
+          edition: _database.currentEdition,
+        );
+      }
+      return null;
+    });
+  }
+
+  Future<MeasurementBundle?> _measurement(int id) {
+    return _measurementCache.putIfAbsent(
+      id,
+      () => _database.measurementById(id),
     );
-    if (summary == null) return null;
-    return _fromSummary(summary);
+  }
+
+  Future<String?> _description(String pdgid) {
+    return _descriptionCache.putIfAbsent(
+      pdgid,
+      () => _database.descriptionForPdgid(pdgid),
+    );
   }
 
   Future<CurrentEvidence> _fromSummary(Summary summary) async {
     final display = DisplayQuantity.fromSummary(summary);
-    final quantityLabel = await _database.descriptionForPdgid(summary.pdgid);
+    final quantityLabel = await _description(summary.pdgid);
     return CurrentEvidence(
       value: summary.value?.toString(),
       errPlus: summary.errorPositive?.toString(),

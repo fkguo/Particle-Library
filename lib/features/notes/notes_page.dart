@@ -1130,7 +1130,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
         SnackBar(
           content: Text(
             '${strings.notesImportDone}: '
-            '${strings.notesImportSummary(result.added, result.skipped, result.failed)}',
+            '${strings.notesImportSummary(result.added, result.skipped, result.failed)}'
+            '${result.renamedCollections.isEmpty ? '' : '\n${strings.notesImportRenamed(result.renamedCollections)}'}',
           ),
         ),
       );
@@ -1930,11 +1931,49 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final allNotes = await store.allForExport(includeDeleted: true);
+    final memberIds = [
+      for (final note in allNotes)
+        if (note.deletedAt == null &&
+            note.collections.any((member) => member.id == collection.id))
+          note.id,
+    ];
     try {
       await store.deleteCollection(collection.id);
       if (_collectionFilter == collection.id) _collectionFilter = null;
       await _reload(showLoading: true);
+      if (!mounted) return;
+      showUndoSnackBar(
+        messenger,
+        message: widget.strings.notesCollectionDeleted,
+        undoLabel: widget.strings.notesUndo,
+        onUndo: () async {
+          try {
+            await store.createCollection(
+              collection.name,
+              id: collection.id,
+              createdAt: collection.createdAt,
+              updatedAt: collection.updatedAt,
+            );
+            for (final noteId in memberIds) {
+              await store.addNoteToCollection(noteId, collection.id);
+            }
+            widget.changes.value++;
+            if (mounted) await _reload(showLoading: false);
+          } catch (error) {
+            if (!mounted) return;
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(
+                  '${widget.strings.notesCollectionFailed}: $error',
+                ),
+              ),
+            );
+          }
+        },
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

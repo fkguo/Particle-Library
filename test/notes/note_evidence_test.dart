@@ -76,6 +76,15 @@ void main() {
     expect(rows.single.title, 'chi_c1(3872) MASS');
   });
 
+  test('ambiguous identity is fuzzy even when a number is available', () async {
+    final rows = await buildNoteEvidence(
+      [note(context: measurementContext())],
+      resolver: _FakeResolver(currentValue: '3871.64', ambiguous: true),
+      currentEdition: '2026',
+    );
+    expect(rows.single.status, NoteEvidenceStatus.fuzzy);
+  });
+
   test('summary rows use the quantity name, not the internal pdgid', () async {
     final rows = await buildNoteEvidence(
       [
@@ -172,17 +181,22 @@ class _FakeResolver implements NoteEvidenceResolver {
     required this.currentValue,
     this.unit = 'MeV',
     this.quantityLabel,
+    this.ambiguous = false,
   });
 
   final String? currentValue;
   final String unit;
   final String? quantityLabel;
+  final bool ambiguous;
 
   @override
   Future<CurrentEvidence?> resolveMeasurement(
     String pdgid,
-    int measurementId,
-  ) async => _value();
+    int measurementId, {
+    String? technique,
+    String? referenceDoi,
+    String? referenceDocumentId,
+  }) async => _value();
 
   @override
   Future<CurrentEvidence?> resolveSummary(CapturedEvidence captured) async =>
@@ -200,6 +214,7 @@ class _FakeResolver implements NoteEvidenceResolver {
       limitType: null,
       valueText: '$value ± 0.06 $unit',
       quantityLabel: quantityLabel,
+      ambiguous: ambiguous,
     );
   }
 }

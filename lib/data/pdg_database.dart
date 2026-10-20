@@ -558,7 +558,7 @@ class PdgDatabase {
   /// blindly: the current edition is queried by pdgid + value_type. Exactly
   /// one match is authoritative; multiple matches are ambiguous and return
   /// null (the caller reports missing/fuzzy rather than guessing).
-  Future<Summary?> currentSummaryForCapture({
+  Future<List<Summary>> currentSummaryCandidatesForCapture({
     required String pdgid,
     required String valueType,
     required int capturedRowId,
@@ -568,14 +568,70 @@ class PdgDatabase {
         current.edition == currentEdition &&
         current.pdgid == pdgid &&
         current.valueType == valueType) {
-      return current;
+      return [current];
     }
     final rows = await executor.select(
       'SELECT * FROM pdgdata WHERE pdgid = ? AND edition = ? AND value_type = ? '
       'ORDER BY sort, id',
       [pdgid, currentEdition, valueType],
     );
-    return rows.length == 1 ? Summary(rows.first) : null;
+    return [for (final row in rows) Summary(row)];
+  }
+
+  Future<Summary?> currentSummaryForCapture({
+    required String pdgid,
+    required String valueType,
+    required int capturedRowId,
+  }) async {
+    final rows = await currentSummaryCandidatesForCapture(
+      pdgid: pdgid,
+      valueType: valueType,
+      capturedRowId: capturedRowId,
+    );
+    return rows.length == 1 ? rows.first : null;
+  }
+
+  /// Finds measurements by the identity fingerprint used when a stored id is
+  /// no longer stable. Values/errors are deliberately not part of the key.
+  Future<List<Measurement>> measurementCandidatesForFingerprint({
+    required String pdgid,
+    String? quantityLabel,
+    String? technique,
+    String? referenceDoi,
+    String? referenceDocumentId,
+  }) async {
+    final params = <Object?>[pdgid];
+    var sql =
+        'SELECT m.* FROM pdgmeasurement m '
+        'JOIN pdgid i ON i.pdgid = m.pdgid '
+        'WHERE m.pdgid = ?';
+    final label = quantityLabel?.trim() ?? '';
+    if (label.isNotEmpty) {
+      sql += ' AND i.description = ?';
+      params.add(label);
+    }
+    final method = technique?.trim() ?? '';
+    if (method.isNotEmpty) {
+      sql += ' AND m.technique = ?';
+      params.add(method);
+    }
+    final doi = referenceDoi?.trim() ?? '';
+    if (doi.isNotEmpty) {
+      sql +=
+          ' AND EXISTS (SELECT 1 FROM pdgreference r '
+          'WHERE r.id = m.pdgreference_id AND r.doi = ? COLLATE NOCASE)';
+      params.add(doi);
+    }
+    final documentId = referenceDocumentId?.trim() ?? '';
+    if (documentId.isNotEmpty) {
+      sql +=
+          ' AND EXISTS (SELECT 1 FROM pdgreference r '
+          'WHERE r.id = m.pdgreference_id AND r.document_id = ?)';
+      params.add(documentId);
+    }
+    sql += ' ORDER BY m.sort, m.id';
+    final rows = await executor.select(sql, params);
+    return [for (final row in rows) Measurement(row)];
   }
 
   Future<List<Summary>> currentSummariesForEntries(List<int> entryIds) async {

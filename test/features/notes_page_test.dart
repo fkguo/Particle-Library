@@ -157,6 +157,37 @@ void main() {
     );
   });
 
+  testWidgets('deleting a collection can be undone with its notes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final collection = await store.createCollection('Project');
+    final note = await store.create(
+      title: 'Member note',
+      collectionIds: [collection.id],
+    );
+    await pumpWorkspace(tester);
+
+    await tester.tap(find.text('Project'), buttons: kSecondaryMouseButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete collection'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(await store.collections(), isEmpty);
+    expect(find.text('Collection deleted'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(SnackBarAction, 'Undo'));
+    await tester.pumpAndSettle();
+    expect((await store.collections()).map((c) => c.name), contains('Project'));
+    expect(
+      (await store.noteById(note.id))!.collections.map((c) => c.id),
+      contains(collection.id),
+    );
+  });
+
   testWidgets('multi-select adds several notes to a collection', (
     tester,
   ) async {

@@ -68,6 +68,28 @@ void main() {
   });
 
   test(
+    'measurement fingerprint finds candidates and flags ambiguity',
+    () async {
+      final description = await db.descriptionForPdgid('M176M');
+      expect(description, isNotNull);
+      final candidates = await db.measurementCandidatesForFingerprint(
+        pdgid: 'M176M',
+        quantityLabel: description,
+      );
+      expect(candidates.length, greaterThan(1));
+
+      final resolver = PdgEvidenceResolver(db);
+      final current = await resolver.resolveMeasurement(
+        'M176M',
+        -1,
+        technique: candidates.first.technique,
+      );
+      expect(current, isNotNull);
+      expect(current!.ambiguous, isTrue);
+    },
+  );
+
+  test(
     'measurement Evidence compares against the current PDG summary',
     () async {
       final rows = await executor.select(

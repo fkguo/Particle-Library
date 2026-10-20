@@ -31,6 +31,9 @@ class CapturedEvidence {
     required this.measurementId,
     required this.pdgid,
     this.quantityLabel,
+    this.technique,
+    this.referenceDoi,
+    this.referenceDocumentId,
   });
 
   final String kind;
@@ -47,6 +50,9 @@ class CapturedEvidence {
   final int? measurementId;
   final String? pdgid;
   final String? quantityLabel;
+  final String? technique;
+  final String? referenceDoi;
+  final String? referenceDocumentId;
 
   bool get hasStructuredValue =>
       (value?.trim().isNotEmpty ?? false) ||
@@ -78,6 +84,9 @@ class CapturedEvidence {
       measurementId: _int(context['measurementId']),
       pdgid: _text(context['pdgid']),
       quantityLabel: _text(context['quantityLabel']),
+      technique: _text(context['technique']),
+      referenceDoi: _text(context['referenceDoi']),
+      referenceDocumentId: _text(context['referenceDocumentId']),
     );
   }
 }
@@ -93,6 +102,7 @@ class CurrentEvidence {
     required this.limitType,
     required this.valueText,
     this.quantityLabel,
+    this.ambiguous = false,
   });
 
   final String? value;
@@ -103,11 +113,33 @@ class CurrentEvidence {
   final String? limitType;
   final String? valueText;
   final String? quantityLabel;
+  final bool ambiguous;
+
+  factory CurrentEvidence.fuzzy({
+    String? quantityLabel,
+    required String edition,
+  }) => CurrentEvidence(
+    value: null,
+    errPlus: null,
+    errMinus: null,
+    unit: null,
+    edition: edition,
+    limitType: null,
+    valueText: '—',
+    quantityLabel: quantityLabel,
+    ambiguous: true,
+  );
 }
 
 /// Resolves current values without exposing the notes store to the PDG layer.
 abstract class NoteEvidenceResolver {
-  Future<CurrentEvidence?> resolveMeasurement(String pdgid, int measurementId);
+  Future<CurrentEvidence?> resolveMeasurement(
+    String pdgid,
+    int measurementId, {
+    String? technique,
+    String? referenceDoi,
+    String? referenceDocumentId,
+  });
   Future<CurrentEvidence?> resolveSummary(CapturedEvidence captured);
 }
 
@@ -178,7 +210,13 @@ Future<List<NoteEvidenceRow>> buildNoteEvidence(
         if (measurementId == null || pdgid == null) continue;
         final current = resolver == null
             ? null
-            : await resolver.resolveMeasurement(pdgid, measurementId);
+            : await resolver.resolveMeasurement(
+                pdgid,
+                measurementId,
+                technique: captured?.technique,
+                referenceDoi: captured?.referenceDoi,
+                referenceDocumentId: captured?.referenceDocumentId,
+              );
         final key =
             'measurement:${anchor.targetKey}:${captured?.quantityLabel ?? ''}:'
             '${captured?.value ?? ''}:${captured?.edition ?? ''}';
@@ -268,6 +306,7 @@ NoteEvidenceStatus _status(
   if (captured == null || !captured.hasStructuredValue) {
     return NoteEvidenceStatus.uncompared;
   }
+  if (current.ambiguous) return NoteEvidenceStatus.fuzzy;
   final capturedUnit = captured.unit?.trim() ?? '';
   final currentUnit = current.unit?.trim() ?? '';
   if (capturedUnit.isNotEmpty &&

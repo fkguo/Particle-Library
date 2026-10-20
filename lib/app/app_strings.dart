@@ -729,6 +729,7 @@ class AppStrings {
   String get notesManageCollections => _t('管理集合', 'Manage collections');
   String get notesRenameCollection => _t('重命名集合', 'Rename collection');
   String get notesDeleteCollection => _t('删除集合', 'Delete collection');
+  String get notesCollectionDeleted => _t('集合已删除', 'Collection deleted');
   String get notesDeleteCollectionBody => _t(
     '只删除集合和归属，不删除笔记。',
     'This deletes the collection and its assignments; notes are kept.',
@@ -936,6 +937,10 @@ class AppStrings {
   String get notesExportScopeMarkdown =>
       _t('导出当前范围 Markdown', 'Export current scope as Markdown');
   String get notesImportDone => _t('导入完成', 'Import complete');
+  String notesImportRenamed(Iterable<String> names) => _t(
+    '重命名集合：${names.join('、')}',
+    'Renamed collections: ${names.join(', ')}',
+  );
   String notesImportSummary(int added, int skipped, int failed) => _t(
     '新增 $added 条，跳过 $skipped 条，失败 $failed 条',
     'Added $added, skipped $skipped, failed $failed',

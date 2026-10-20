@@ -106,13 +106,14 @@ void main() {
     'same-name different-id collections are imported with a suffix',
     () async {
       await store.createCollection('Paper');
-      await store.importJson({
+      final result = await store.importJson({
         'schema': 'particle-library.notes.v2',
         'collections': [
           {'id': 'other-id', 'name': 'Paper'},
         ],
         'notes': <Object?>[],
       });
+      expect(result.renamedCollections, isNotEmpty);
       final names = (await store.collections())
           .map((collection) => collection.name)
           .toList();
