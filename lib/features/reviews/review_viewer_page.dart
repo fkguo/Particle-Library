@@ -43,6 +43,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   bool _saving = false;
   bool _addingHighlight = false;
   bool _highlightMode = false;
+  bool _annotationSelectionMode = false;
+  final Set<String> _selectedAnnotationIds = <String>{};
+  String? _lastCollectionId;
   Timer? _autoHighlightTimer;
   String _highlightColor = 'yellow';
   bool _started = false;
@@ -92,7 +95,11 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           reviewTitle: widget.title,
         );
         if (!mounted) return;
-        setState(() => _annotations = annotations);
+        setState(() {
+          _annotations = annotations;
+          final visible = {for (final annotation in annotations) annotation.id};
+          _selectedAnnotationIds.removeWhere((id) => !visible.contains(id));
+        });
         return;
       }
       final store = await ReviewAnnotationStore.open();
@@ -132,20 +139,24 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     );
   }
 
-  Future<void> _addAnnotationsToCollection(
+  Future<bool> _addAnnotationsToCollection(
     List<ReviewAnnotation> additions,
   ) async {
     final store = _notes;
-    if (store == null || !mounted) return;
+    if (store == null || !mounted) return false;
     final strings = AppScope.of(context).strings;
     final collections = await store.collections();
-    if (!mounted) return;
+    if (!mounted) return false;
     if (collections.isEmpty) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(strings.notesNoCollections)));
-      return;
+      return false;
     }
-    final selected = <String>{};
+    final selected = <String>{
+      if (_lastCollectionId != null &&
+          collections.any((collection) => collection.id == _lastCollectionId))
+        _lastCollectionId!,
+    };
     final result = await showDialog<Set<String>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -189,7 +200,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         ),
       ),
     );
-    if (result == null || result.isEmpty || !mounted) return;
+    if (result == null || result.isEmpty || !mounted) return false;
     try {
       for (final annotation in additions) {
         final noteId = annotation.noteId;
@@ -198,16 +209,19 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           await store.addNoteToCollection(noteId, collectionId);
         }
       }
-      if (!mounted) return;
+      if (!mounted) return false;
       _notifyNotesChanged();
+      _lastCollectionId = result.first;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(strings.reviewHighlightAddedToCollection)),
       );
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${strings.notesCollectionFailed}: $error')),
       );
+      return false;
     }
   }
 
@@ -833,6 +847,36 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     );
   }
 
+  void _toggleAnnotationSelectionMode() {
+    setState(() {
+      _annotationSelectionMode = !_annotationSelectionMode;
+      _selectedAnnotationIds.clear();
+    });
+  }
+
+  void _toggleAnnotationSelected(String id) {
+    setState(() {
+      if (!_selectedAnnotationIds.remove(id)) {
+        _selectedAnnotationIds.add(id);
+      }
+    });
+  }
+
+  Future<void> _addSelectedAnnotationsToCollection() async {
+    final selected = [
+      for (final annotation in _annotations)
+        if (_selectedAnnotationIds.contains(annotation.id)) annotation,
+    ];
+    if (selected.isEmpty) return;
+    final added = await _addAnnotationsToCollection(selected);
+    if (added && mounted) {
+      setState(() {
+        _annotationSelectionMode = false;
+        _selectedAnnotationIds.clear();
+      });
+    }
+  }
+
   void _openAnnotationsSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -855,6 +899,11 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           onOpenNote: _openAnnotationNote,
           onEditNote: _editNote,
           onDelete: _deleteAnnotation,
+          selectionMode: _annotationSelectionMode,
+          selectedIds: _selectedAnnotationIds,
+          onToggleSelectionMode: _toggleAnnotationSelectionMode,
+          onToggleSelection: _toggleAnnotationSelected,
+          onAddSelected: _addSelectedAnnotationsToCollection,
         ),
       ),
     );
@@ -1083,6 +1132,11 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                       onOpenNote: _openAnnotationNote,
                       onEditNote: _editNote,
                       onDelete: _deleteAnnotation,
+                      selectionMode: _annotationSelectionMode,
+                      selectedIds: _selectedAnnotationIds,
+                      onToggleSelectionMode: _toggleAnnotationSelectionMode,
+                      onToggleSelection: _toggleAnnotationSelected,
+                      onAddSelected: _addSelectedAnnotationsToCollection,
                     ),
                   ),
                 ],
@@ -1104,6 +1158,11 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
     required this.onOpenNote,
     required this.onEditNote,
     required this.onDelete,
+    required this.selectionMode,
+    required this.selectedIds,
+    required this.onToggleSelectionMode,
+    required this.onToggleSelection,
+    required this.onAddSelected,
   });
 
   final List<ReviewAnnotation> annotations;
@@ -1113,6 +1172,11 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
   final ValueChanged<ReviewAnnotation> onOpenNote;
   final ValueChanged<ReviewAnnotation> onEditNote;
   final ValueChanged<ReviewAnnotation> onDelete;
+  final bool selectionMode;
+  final Set<String> selectedIds;
+  final VoidCallback onToggleSelectionMode;
+  final ValueChanged<String> onToggleSelection;
+  final VoidCallback onAddSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -1144,9 +1208,39 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall
                       ?.copyWith(color: palette.textSecondary),
                 ),
+                IconButton(
+                  tooltip: selectionMode
+                      ? strings.reviewClearHighlightSelection
+                      : strings.reviewSelectHighlights,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onToggleSelectionMode,
+                  icon: Icon(
+                    selectionMode ? Icons.close : Icons.checklist,
+                    size: 18,
+                  ),
+                ),
               ],
             ),
           ),
+          if (selectionMode)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 12, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      strings.reviewSelectedHighlights(selectedIds.length),
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: palette.textSecondary),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: selectedIds.isEmpty ? null : onAddSelected,
+                    child: Text(strings.reviewAddSelectedHighlights),
+                  ),
+                ],
+              ),
+            ),
           Divider(height: 1, color: palette.divider),
           Expanded(
             child: ordered.isEmpty
@@ -1167,10 +1261,13 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
                     separatorBuilder: (_, _) => const SizedBox(height: 4),
                     itemBuilder: (context, index) {
                       final annotation = ordered[index];
+                      final selected = selectedIds.contains(annotation.id);
                       return InkWell(
                         borderRadius: BorderRadius.circular(8),
                         hoverColor: palette.accent.withValues(alpha: 0.08),
-                        onTap: () => onOpen(annotation),
+                        onTap: selectionMode
+                            ? () => onToggleSelection(annotation.id)
+                            : () => onOpen(annotation),
                         child: Container(
                           padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
                           decoration: BoxDecoration(
@@ -1182,6 +1279,17 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
                             children: [
                               Row(
                                 children: [
+                                  if (selectionMode) ...[
+                                    Checkbox(
+                                      value: selected,
+                                      onChanged: (_) =>
+                                          onToggleSelection(annotation.id),
+                                      visualDensity: VisualDensity.compact,
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    const SizedBox(width: 2),
+                                  ],
                                   Container(
                                     width: 8,
                                     height: 8,
@@ -1208,39 +1316,40 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
                                         ),
                                   ),
                                   const Spacer(),
-                                  PopupMenuButton<String>(
-                                    tooltip: strings.moreActions,
-                                    icon: const Icon(
-                                      Icons.more_horiz,
-                                      size: 18,
-                                    ),
-                                    onSelected: (value) {
-                                      switch (value) {
-                                        case 'open':
-                                          onOpenNote(annotation);
-                                        case 'edit':
-                                          onEditNote(annotation);
-                                        case 'delete':
-                                          onDelete(annotation);
-                                      }
-                                    },
-                                    itemBuilder: (context) => [
-                                      PopupMenuItem(
-                                        value: 'open',
-                                        child: Text(strings.reviewOpenNote),
+                                  if (!selectionMode)
+                                    PopupMenuButton<String>(
+                                      tooltip: strings.moreActions,
+                                      icon: const Icon(
+                                        Icons.more_horiz,
+                                        size: 18,
                                       ),
-                                      PopupMenuItem(
-                                        value: 'edit',
-                                        child: Text(
-                                          strings.reviewAnnotationEdit,
+                                      onSelected: (value) {
+                                        switch (value) {
+                                          case 'open':
+                                            onOpenNote(annotation);
+                                          case 'edit':
+                                            onEditNote(annotation);
+                                          case 'delete':
+                                            onDelete(annotation);
+                                        }
+                                      },
+                                      itemBuilder: (context) => [
+                                        PopupMenuItem(
+                                          value: 'open',
+                                          child: Text(strings.reviewOpenNote),
                                         ),
-                                      ),
-                                      PopupMenuItem(
-                                        value: 'delete',
-                                        child: Text(strings.commonDelete),
-                                      ),
-                                    ],
-                                  ),
+                                        PopupMenuItem(
+                                          value: 'edit',
+                                          child: Text(
+                                            strings.reviewAnnotationEdit,
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'delete',
+                                          child: Text(strings.commonDelete),
+                                        ),
+                                      ],
+                                    ),
                                 ],
                               ),
                               const SizedBox(height: 2),

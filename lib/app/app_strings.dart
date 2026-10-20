@@ -807,6 +807,12 @@ class AppStrings {
     '高亮已保存为笔记，可加入集合。',
     'Highlight saved as a note; add it to a collection.',
   );
+  String get reviewSelectHighlights => _t('选择高亮', 'Select highlights');
+  String get reviewClearHighlightSelection => _t('取消选择', 'Clear selection');
+  String reviewSelectedHighlights(int count) =>
+      _t('已选 $count 条高亮', '$count highlights selected');
+  String get reviewAddSelectedHighlights =>
+      _t('加入 Collection', 'Add to collection');
   String get reviewHighlightAddedToCollection =>
       _t('高亮笔记已加入集合。', 'Highlight notes added to the collection.');
   String get notesAlreadyInCollection => _t('已在其中', 'Already added');
