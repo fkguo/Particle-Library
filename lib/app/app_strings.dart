@@ -789,8 +789,18 @@ class AppStrings {
       _t('加入 Collection', 'Add to collection');
   String notesAddedToCollection(int count, String name) =>
       _t('已将 $count 条笔记加入“$name”。', 'Added $count notes to "$name".');
-  String get notesDragToCollection =>
-      _t('拖到左侧集合即可加入', 'Drag onto a collection to add');
+  String get notesDragToCollection => _t(
+    '拖动笔记到集合，或右键集合添加已有笔记',
+    'Drag notes onto a collection, or right-click a collection to add existing notes',
+  );
+  String get notesAddExistingNotes => _t('添加已有笔记…', 'Add existing notes…');
+  String notesAddExistingNotesTitle(String name) =>
+      _t('添加到“$name”', 'Add notes to “$name”');
+  String get notesNoAvailableNotes =>
+      _t('没有可添加的笔记。', 'No notes available to add.');
+  String get notesAddNotes => _t('添加', 'Add');
+  String notesAddSelectedCount(int count) =>
+      _t('添加已选 $count 条', 'Add $count selected');
   String get notesDropHere => _t('松开加入此集合', 'Drop to add here');
   String get reviewHighlightAdded => _t(
     '高亮已保存为笔记，可加入集合。',

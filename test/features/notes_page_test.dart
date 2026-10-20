@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdgapp/app/app_strings.dart';
@@ -120,6 +121,40 @@ void main() {
   ) async {
     await pumpWorkspace(tester);
     expect(find.widgetWithText(FilledButton, 'New note'), findsOneWidget);
+  });
+
+  testWidgets('right-clicking a collection can add existing notes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final collection = await store.createCollection('Project');
+    final note = await store.create(title: 'Existing note');
+    await pumpWorkspace(tester);
+
+    await tester.tap(find.text('Project'), buttons: kSecondaryMouseButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Add existing notes…'), findsOneWidget);
+    await tester.tap(find.text('Add existing notes…'));
+    await tester.pumpAndSettle();
+    final dialog = find.byType(AlertDialog);
+    await tester.tap(
+      find.descendant(of: dialog, matching: find.byType(CheckboxListTile)),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.descendant(
+        of: dialog,
+        matching: find.widgetWithText(FilledButton, 'Add'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      (await store.noteById(note.id))!.collections.map((c) => c.id),
+      contains(collection.id),
+    );
   });
 
   testWidgets('multi-select adds several notes to a collection', (

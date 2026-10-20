@@ -387,6 +387,186 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     });
   }
 
+  Future<void> _showCollectionMenu(
+    BuildContext context,
+    NoteCollection collection,
+    Offset position,
+  ) async {
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+    final strings = widget.strings;
+    final action = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        overlay.size.width - position.dx,
+        overlay.size.height - position.dy,
+      ),
+      items: [
+        if (_checkedNoteIds.isNotEmpty)
+          PopupMenuItem<String>(
+            value: 'selected',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              leading: const Icon(Icons.playlist_add, size: 19),
+              title: Text(
+                strings.notesAddSelectedCount(_checkedNoteIds.length),
+              ),
+            ),
+          ),
+        PopupMenuItem<String>(
+          value: 'existing',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            leading: const Icon(Icons.library_add_outlined, size: 19),
+            title: Text(strings.notesAddExistingNotes),
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'rename',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            leading: const Icon(Icons.edit_outlined, size: 19),
+            title: Text(strings.notesRenameCollection),
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'delete',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            leading: const Icon(Icons.delete_outline, size: 19),
+            title: Text(strings.notesDeleteCollection),
+          ),
+        ),
+      ],
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'selected':
+        final ids = Set<String>.of(_checkedNoteIds);
+        final added = await _addNoteIdsToCollection(ids, collection);
+        if (added > 0 && mounted) {
+          setState(() {
+            _multiSelect = false;
+            _checkedNoteIds.clear();
+          });
+        }
+      case 'existing':
+        await _addExistingNotesToCollection(collection);
+      case 'rename':
+        await _renameCollection(collection);
+      case 'delete':
+        await _deleteCollection(collection);
+    }
+  }
+
+  Future<void> _addExistingNotesToCollection(NoteCollection collection) async {
+    final store = widget.store;
+    if (store == null) return;
+    final strings = widget.strings;
+    final all = await store.recent(limit: 500);
+    final candidates = [
+      for (final note in all)
+        if (!note.collections.any((member) => member.id == collection.id)) note,
+    ];
+    if (candidates.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(strings.notesNoAvailableNotes)));
+      return;
+    }
+    if (!mounted) return;
+    var query = '';
+    final selected = <String>{};
+    final result = await showDialog<Set<String>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final filtered = query.trim().isEmpty
+              ? candidates
+              : candidates
+                    .where((note) => noteMatchesQuery(note, query.trim()))
+                    .toList(growable: false);
+          return AlertDialog(
+            title: Text(strings.notesAddExistingNotesTitle(collection.name)),
+            content: SizedBox(
+              width: 460,
+              height: 430,
+              child: Column(
+                children: [
+                  TextField(
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: strings.notesSearchHint,
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      isDense: true,
+                    ),
+                    onChanged: (value) => setDialogState(() => query = value),
+                  ),
+                  const SizedBox(height: Insets.s),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? Center(child: Text(strings.notesNoSearchResults))
+                        : ListView.builder(
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              final note = filtered[index];
+                              final checked = selected.contains(note.id);
+                              return CheckboxListTile(
+                                dense: true,
+                                value: checked,
+                                title: Text(
+                                  noteDisplayTitle(note, strings),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text(
+                                  noteBodyPreview(note),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                onChanged: (value) => setDialogState(() {
+                                  if (value ?? false) {
+                                    selected.add(note.id);
+                                  } else {
+                                    selected.remove(note.id);
+                                  }
+                                }),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(strings.commonCancel),
+              ),
+              FilledButton(
+                onPressed: selected.isEmpty
+                    ? null
+                    : () =>
+                          Navigator.of(dialogContext)
+                              .pop(Set<String>.of(selected)),
+                child: Text(strings.notesAddNotes),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (result == null || result.isEmpty || !mounted) return;
+    await _addNoteIdsToCollection(result, collection);
+  }
+
   Future<NoteCollection?> _pickCollectionForBulk() async {
     final strings = widget.strings;
     if (_collections.isEmpty) {
@@ -1422,6 +1602,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                     onTap: () => _selectCollectionScope(summary.collection),
                     onAcceptNote: (noteId) =>
                         _addNoteIdsToCollection({noteId}, summary.collection),
+                    onSecondaryTap: (position) => _showCollectionMenu(
+                      context,
+                      summary.collection,
+                      position,
+                    ),
                   ),
               ],
             ),
@@ -1439,6 +1624,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     required VoidCallback onTap,
     String? trailing,
     ValueChanged<String>? onAcceptNote,
+    ValueChanged<Offset>? onSecondaryTap,
   }) {
     final palette = context.palette;
     final tile = InkWell(
@@ -1475,7 +1661,14 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
         ),
       ),
     );
-    if (onAcceptNote == null) return tile;
+    final interactive = onSecondaryTap == null
+        ? tile
+        : GestureDetector(
+            onSecondaryTapDown: (details) =>
+                onSecondaryTap(details.globalPosition),
+            child: tile,
+          );
+    if (onAcceptNote == null) return interactive;
     return DragTarget<String>(
       onWillAcceptWithDetails: (_) => true,
       onAcceptWithDetails: (details) => onAcceptNote(details.data),
@@ -1491,7 +1684,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                 ? Border.all(color: palette.primary.withValues(alpha: 0.5))
                 : null,
           ),
-          child: tile,
+          child: interactive,
         );
       },
     );
