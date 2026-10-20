@@ -223,7 +223,12 @@ class NotesEvidenceView extends StatelessWidget {
             ?.copyWith(color: muted ? context.palette.textSecondary : null),
       ),
     );
-    return onTap == null ? child : InkWell(onTap: onTap, child: child);
+    return onTap == null
+        ? child
+        : Material(
+            color: Colors.transparent,
+            child: InkWell(onTap: onTap, child: child),
+          );
   }
 
   Widget _status(BuildContext context, NoteEvidenceStatus status) => Padding(
