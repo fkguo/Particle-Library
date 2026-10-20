@@ -57,6 +57,11 @@ class AppStrings {
   String get searchLoading => _t('正在搜索…', 'Searching…');
   String get searchShowingFirst =>
       _t('仅显示前若干项', 'Showing the first matches only');
+  String searchShowingFirstCount(int count) =>
+      _t('仅显示前 $count 项', 'Showing the first $count matches only');
+  String get searchKindParticleName => _t('粒子名称', 'Particle name');
+  String get searchKindPdgAlias => _t('PDG 别名', 'PDG alias');
+  String get searchKindCommonName => _t('通用名称', 'Common name');
   String get searchResultCount => _t('结果', 'Results');
   String get searchIdAccepted =>
       _t('识别为 PDG 标识符', 'Recognized as a PDG identifier');
@@ -89,6 +94,12 @@ class AppStrings {
   String get commonForward => _t('前进', 'Forward');
   String get commonClose => _t('关闭', 'Close');
   String get commonCancel => _t('取消', 'Cancel');
+  String get notesDiscardDraft => _t('放弃草稿', 'Discard draft');
+  String get notesDiscardDraftBody => _t(
+    '草稿内容（包括已自动保存的部分）会被删除，无法恢复。',
+    'The draft, including any autosaved content, will be deleted. This cannot be undone.',
+  );
+  String get notesDiscardDraftAction => _t('放弃', 'Discard');
   String get commonCreate => _t('创建', 'Create');
   String get commonSave => _t('保存', 'Save');
   String get pageOutline => _t('页面目录', 'On this page');

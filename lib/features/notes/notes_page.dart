@@ -339,10 +339,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
 
   void _onDraftSaved(NoteRecord saved) {
     if (!mounted) return;
-    setState(() {
-      _selected = saved;
-      _draftActive = false;
-    });
+    // Keep the draft session active after autosave so the Discard action is
+    // still available. Selecting a list row switches to the saved note.
   }
 
   void _onDeleted() {
@@ -1661,13 +1659,6 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
               ? strings.notesNoSearchResults
               : strings.notesEmpty,
           icon: searching ? Icons.search_off : Icons.sticky_note_2_outlined,
-          action: searching
-              ? null
-              : FilledButton.icon(
-                  onPressed: () => _newNote(wide: wide),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(strings.notesNew),
-                ),
         ),
       );
     }
@@ -1756,6 +1747,14 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
             : <String>[_collectionFilter!],
         autofocusTitle: true,
         onSaved: _onDraftSaved,
+        onCancel: () {
+          if (!mounted) return;
+          setState(() {
+            _draftActive = false;
+            _selected = null;
+            _editorSession++;
+          });
+        },
       );
     }
     final selected = _selected;
@@ -1766,11 +1765,6 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
           child: EmptyPanel(
             message: strings.notesSelectPrompt,
             icon: Icons.sticky_note_2_outlined,
-            action: FilledButton.icon(
-              onPressed: () => _newNote(wide: true),
-              icon: const Icon(Icons.add, size: 18),
-              label: Text(strings.notesNew),
-            ),
           ),
         ),
       );

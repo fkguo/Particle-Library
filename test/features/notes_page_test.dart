@@ -115,6 +115,32 @@ void main() {
     expect(find.text('Saved'), findsOneWidget);
   });
 
+  testWidgets('shows one new-note affordance on an empty workspace', (
+    tester,
+  ) async {
+    await pumpWorkspace(tester);
+    expect(find.widgetWithText(FilledButton, 'New note'), findsOneWidget);
+  });
+
+  testWidgets('discards a draft and removes its autosaved note', (tester) async {
+    await pumpWorkspace(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'New note').first);
+    await tester.pump();
+    await tester.enterText(find.byType(TextField).at(1), 'Temporary draft');
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    expect(await store.recent(), hasLength(1));
+
+    await tester.tap(find.byTooltip('Discard draft'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard draft'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Discard'));
+    await tester.pumpAndSettle();
+
+    expect(await store.recent(), isEmpty);
+    expect(find.text('New note'), findsWidgets);
+  });
+
   testWidgets('shows an unavailable panel when the notes store failed', (
     tester,
   ) async {

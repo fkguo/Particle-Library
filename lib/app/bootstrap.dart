@@ -69,6 +69,7 @@ class AppBootstrap {
           database,
           notes: notesStore,
           notesChanges: notesChanges,
+          lang: settings.language,
         ),
         userStore: userStore,
         settings: settings,

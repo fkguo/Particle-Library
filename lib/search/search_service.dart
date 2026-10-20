@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../app/app_strings.dart';
 import '../data/pdg_database.dart';
 import '../domain/labels.dart';
 import '../domain/models.dart';
@@ -293,11 +294,18 @@ class NameIndex {
 }
 
 class SearchService {
-  SearchService(this.db, {this.notes, this.notesChanges})
-    : names = NameIndex(db);
+  SearchService(
+    this.db, {
+    this.notes,
+    this.notesChanges,
+    this.lang = TextLang.zh,
+  }) : names = NameIndex(db);
 
   final NotesStore? notes;
   final ValueListenable<int>? notesChanges;
+  final TextLang lang;
+
+  AppStrings get _strings => AppStrings(lang);
 
   final PdgDatabase db;
   final NameIndex names;
@@ -355,7 +363,7 @@ class SearchService {
                 kind: SearchGroupKind.identifier,
                 title: entry.description,
                 subtitle:
-                    '${entry.pdgid} · ${dataTypeInfo(entry.dataType).label(TextLang.zh)}',
+                    '${entry.pdgid} · ${dataTypeInfo(entry.dataType).label(lang)}',
                 pdgid: entry.pdgid,
                 entry: entry,
                 reason: SearchReason.exactPdgid,
@@ -463,12 +471,12 @@ class SearchService {
           .join(' / ');
       final preferred = listing?.description ?? entry.key;
       final kind = data.item.itemType == 'G' || data.item.itemType == 'L'
-          ? '通用名称'
+          ? _strings.searchKindCommonName
           : data.item.itemType == 'A' ||
                 data.item.itemType == 'W' ||
                 data.item.itemType == 'S'
-          ? 'PDG 别名'
-          : '粒子名称';
+          ? _strings.searchKindPdgAlias
+          : _strings.searchKindParticleName;
       hits.add(
         SearchHit(
           kind: SearchGroupKind.particle,
@@ -485,7 +493,9 @@ class SearchService {
       kind: SearchGroupKind.particle,
       total: total,
       hits: hits,
-      note: total > hits.length ? '仅显示前 ${hits.length} 项' : null,
+      note: total > hits.length
+          ? _strings.searchShowingFirstCount(hits.length)
+          : null,
     );
   }
 
@@ -518,7 +528,9 @@ class SearchService {
       kind: SearchGroupKind.particle,
       total: byListing.length,
       hits: hits,
-      note: byListing.length > hits.length ? '仅显示前 ${hits.length} 项' : null,
+      note: byListing.length > hits.length
+          ? _strings.searchShowingFirstCount(hits.length)
+          : null,
     );
   }
 
@@ -553,7 +565,7 @@ class SearchService {
             kind: decaysOnly ? SearchGroupKind.decay : SearchGroupKind.topic,
             title: entry.description,
             subtitle:
-                '${entry.pdgid} · ${dataTypeInfo(entry.dataType).label(TextLang.zh)}',
+                '${entry.pdgid} · ${dataTypeInfo(entry.dataType).label(lang)}',
             pdgid: entry.pdgid,
             entry: entry,
             reason: decaysOnly
@@ -561,7 +573,9 @@ class SearchService {
                 : SearchReason.titleMatch,
           ),
       ],
-      note: total > entries.length ? '仅显示前 ${entries.length} 项' : null,
+      note: total > entries.length
+          ? _strings.searchShowingFirstCount(entries.length)
+          : null,
     );
   }
 
@@ -586,7 +600,9 @@ class SearchService {
                 : hit.text,
           ),
       ],
-      note: total > hits.length ? '仅显示前 ${hits.length} 项' : null,
+      note: total > hits.length
+          ? _strings.searchShowingFirstCount(hits.length)
+          : null,
     );
   }
 
@@ -604,12 +620,12 @@ class SearchService {
             kind: SearchGroupKind.note,
             title: note.title.trim().isEmpty
                 ? (note.bodyPlain.trim().isEmpty
-                      ? 'Untitled note'
+                      ? _strings.notesUntitled
                       : note.bodyPlain.trim())
                 : note.title,
             subtitle: note.anchors.isEmpty
-                ? 'Note · ${note.updatedAt.toLocal().toString().split('.').first}'
-                : 'Note · ${note.anchors.first.targetLabel.trim().isEmpty ? note.anchors.first.targetId : note.anchors.first.targetLabel}',
+                ? '${_strings.notesTitle} · ${note.updatedAt.toLocal().toString().split('.').first}'
+                : '${_strings.notesTitle} · ${note.anchors.first.targetLabel.trim().isEmpty ? note.anchors.first.targetId : note.anchors.first.targetLabel}',
             snippet: note.bodyPlain,
             note: note,
             reason: SearchReason.textMatch,
@@ -664,7 +680,9 @@ class SearchService {
             reason: SearchReason.referenceTitle,
           ),
       ],
-      note: total > refs.length ? '仅显示前 ${refs.length} 项' : null,
+      note: total > refs.length
+          ? _strings.searchShowingFirstCount(refs.length)
+          : null,
     );
   }
 }
