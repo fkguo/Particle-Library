@@ -95,6 +95,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
   bool _draftActive = false;
   NoteRecord? _draftRecord;
   int _editorSession = 0;
+  bool _multiSelect = false;
+  final Set<String> _checkedNoteIds = <String>{};
 
   @override
   void initState() {
@@ -215,6 +217,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
           !notes.any((note) => note.id == selectedId);
       setState(() {
         _notes = notes;
+        final visibleIds = {for (final note in notes) note.id};
+        _checkedNoteIds.removeWhere((id) => !visibleIds.contains(id));
         _collections = collections;
         _collectionSummaries = summaries;
         _tagCounts = tagCounts;
@@ -275,6 +279,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
 
   void _selectAllScope() {
     setState(() {
+      _multiSelect = false;
+      _checkedNoteIds.clear();
       _collectionFilter = null;
       _unfiledScope = false;
       _pageSize = 50;
@@ -285,6 +291,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
 
   void _selectUnfiledScope() {
     setState(() {
+      _multiSelect = false;
+      _checkedNoteIds.clear();
       _collectionFilter = null;
       _unfiledScope = true;
       _pageSize = 50;
@@ -295,6 +303,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
 
   void _selectCollectionScope(NoteCollection collection) {
     setState(() {
+      _multiSelect = false;
+      _checkedNoteIds.clear();
       _collectionFilter = collection.id;
       _unfiledScope = false;
       _pageSize = 50;
@@ -328,6 +338,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       return;
     }
     setState(() {
+      _multiSelect = false;
+      _checkedNoteIds.clear();
       _draftActive = true;
       _draftRecord = null;
       _selected = null;
@@ -346,6 +358,122 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       _draftRecord = null;
       _editorSession++;
     });
+  }
+
+  void _toggleMultiSelect() {
+    setState(() {
+      _multiSelect = !_multiSelect;
+      _checkedNoteIds.clear();
+      _showEvidence = false;
+    });
+  }
+
+  void _toggleNoteChecked(NoteRecord note) {
+    setState(() {
+      if (!_checkedNoteIds.remove(note.id)) _checkedNoteIds.add(note.id);
+    });
+  }
+
+  void _toggleSelectAllNotes() {
+    final visible = {for (final note in _notes) note.id};
+    final allChecked =
+        visible.isNotEmpty && visible.every(_checkedNoteIds.contains);
+    setState(() {
+      if (allChecked) {
+        _checkedNoteIds.removeAll(visible);
+      } else {
+        _checkedNoteIds.addAll(visible);
+      }
+    });
+  }
+
+  Future<NoteCollection?> _pickCollectionForBulk() async {
+    final strings = widget.strings;
+    if (_collections.isEmpty) {
+      return _createCollection(selectFilter: false);
+    }
+    final result = await showDialog<Object?>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.notesAddSelectedToCollection),
+        content: SizedBox(
+          width: 360,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 380),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final collection in _collections)
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.folder_outlined, size: 19),
+                    title: Text(collection.name),
+                    onTap: () => Navigator.of(dialogContext).pop(collection),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(strings.commonCancel),
+          ),
+          TextButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop('new'),
+            icon: const Icon(Icons.create_new_folder_outlined, size: 18),
+            label: Text(strings.notesNewCollection),
+          ),
+        ],
+      ),
+    );
+    if (result == 'new') return _createCollection(selectFilter: false);
+    return result is NoteCollection ? result : null;
+  }
+
+  Future<void> _addCheckedToCollection() async {
+    if (_checkedNoteIds.isEmpty) return;
+    final collection = await _pickCollectionForBulk();
+    if (collection == null || !mounted) return;
+    final ids = Set<String>.of(_checkedNoteIds);
+    final added = await _addNoteIdsToCollection(ids, collection);
+    if (added > 0 && mounted) {
+      setState(() {
+        _multiSelect = false;
+        _checkedNoteIds.clear();
+      });
+    }
+  }
+
+  Future<int> _addNoteIdsToCollection(
+    Set<String> noteIds,
+    NoteCollection collection,
+  ) async {
+    final store = widget.store;
+    if (store == null || noteIds.isEmpty) return 0;
+    final strings = widget.strings;
+    final messenger = ScaffoldMessenger.of(context);
+    var added = 0;
+    try {
+      for (final id in noteIds) {
+        await store.addNoteToCollection(id, collection.id);
+        added++;
+      }
+      widget.changes.value++;
+      await _reload(showLoading: false);
+      if (!mounted) return added;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(strings.notesAddedToCollection(added, collection.name)),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return added;
+      messenger.showSnackBar(
+        SnackBar(content: Text('${strings.notesCollectionFailed}: $error')),
+      );
+    }
+    return added;
   }
 
   void _onDraftSaved(NoteRecord saved) {
@@ -922,6 +1050,16 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                             size: 20,
                           ),
                         ),
+                      IconButton(
+                        tooltip: _multiSelect
+                            ? strings.notesClearSelection
+                            : strings.notesSelectNotes,
+                        onPressed: _toggleMultiSelect,
+                        icon: Icon(
+                          _multiSelect ? Icons.close : Icons.checklist,
+                          size: 20,
+                        ),
+                      ),
                       FilledButton.icon(
                         onPressed: () => _newNote(wide: wide),
                         style: FilledButton.styleFrom(
@@ -1251,6 +1389,14 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
             child: ListView(
               padding: const EdgeInsets.only(bottom: Insets.l),
               children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+                  child: Text(
+                    strings.notesDragToCollection,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: palette.textSecondary),
+                  ),
+                ),
                 _railTile(
                   context,
                   icon: Icons.sticky_note_2_outlined,
@@ -1274,6 +1420,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                     trailing: '${summary.activeNoteCount}',
                     selected: _collectionFilter == summary.id,
                     onTap: () => _selectCollectionScope(summary.collection),
+                    onAcceptNote: (noteId) =>
+                        _addNoteIdsToCollection({noteId}, summary.collection),
                   ),
               ],
             ),
@@ -1290,9 +1438,10 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     required bool selected,
     required VoidCallback onTap,
     String? trailing,
+    ValueChanged<String>? onAcceptNote,
   }) {
     final palette = context.palette;
-    return InkWell(
+    final tile = InkWell(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -1325,6 +1474,26 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
           ],
         ),
       ),
+    );
+    if (onAcceptNote == null) return tile;
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (_) => true,
+      onAcceptWithDetails: (details) => onAcceptNote(details.data),
+      builder: (context, candidates, rejected) {
+        final active = candidates.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          decoration: BoxDecoration(
+            color: active
+                ? palette.primary.withValues(alpha: 0.14)
+                : Colors.transparent,
+            border: active
+                ? Border.all(color: palette.primary.withValues(alpha: 0.5))
+                : null,
+          ),
+          child: tile,
+        );
+      },
     );
   }
 
@@ -1657,6 +1826,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
               ),
             ),
           ),
+        if (_multiSelect) _selectionBar(context),
         Expanded(
           child: _listBody(
             context,
@@ -1665,6 +1835,45 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _selectionBar(BuildContext context) {
+    final strings = widget.strings;
+    final palette = context.palette;
+    final allVisible =
+        _notes.isNotEmpty &&
+        _notes.every((note) => _checkedNoteIds.contains(note.id));
+    return Container(
+      padding: const EdgeInsets.fromLTRB(Insets.l, 2, Insets.l, 4),
+      decoration: BoxDecoration(
+        color: palette.primary.withValues(alpha: 0.06),
+        border: Border(bottom: BorderSide(color: palette.divider)),
+      ),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 2,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            strings.notesSelectedCount(_checkedNoteIds.length),
+            style: Theme.of(context).textTheme.labelLarge
+                ?.copyWith(color: palette.primary, fontWeight: FontWeight.w600),
+          ),
+          TextButton(
+            onPressed: _checkedNoteIds.isEmpty ? null : _addCheckedToCollection,
+            child: Text(strings.notesAddSelectedToCollection),
+          ),
+          TextButton(
+            onPressed: _toggleSelectAllNotes,
+            child: Text(
+              allVisible
+                  ? strings.notesClearSelection
+                  : strings.notesSelectAllNotes,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1738,9 +1947,23 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                 );
               }
               final note = _notes[index];
+              final tile = _NoteListTile(
+                note: note,
+                strings: strings,
+                selected: wide && !_draftActive && _selected?.id == note.id,
+                selectable: _multiSelect,
+                checked: _checkedNoteIds.contains(note.id),
+                onToggle: () => _toggleNoteChecked(note),
+                onTap: () => _select(note, wide: wide),
+                onAddToCollection: () => _addToCollection(note),
+                onCollectionTap: _filterByCollection,
+                onTagTap: _filterByTag,
+              );
               return Dismissible(
                 key: ValueKey<String>('note-swipe-${note.id}'),
-                direction: DismissDirection.endToStart,
+                direction: _multiSelect
+                    ? DismissDirection.none
+                    : DismissDirection.endToStart,
                 confirmDismiss: (_) => _confirmNoteDelete(note),
                 onDismissed: (_) => _deleteNoteFromList(note),
                 background: Container(
@@ -1752,14 +1975,43 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                     color: Theme.of(context).colorScheme.onErrorContainer,
                   ),
                 ),
-                child: _NoteListTile(
-                  note: note,
-                  strings: strings,
-                  selected: wide && !_draftActive && _selected?.id == note.id,
-                  onTap: () => _select(note, wide: wide),
-                  onAddToCollection: () => _addToCollection(note),
-                  onCollectionTap: _filterByCollection,
-                  onTagTap: _filterByTag,
+                child: LongPressDraggable<String>(
+                  data: note.id,
+                  delay: const Duration(milliseconds: 320),
+                  dragAnchorStrategy: pointerDragAnchorStrategy,
+                  feedback: Material(
+                    color: Colors.transparent,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 280),
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.sticky_note_2_outlined,
+                                size: 17,
+                              ),
+                              const SizedBox(width: 7),
+                              Flexible(
+                                child: Text(
+                                  noteDisplayTitle(note, strings),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  childWhenDragging: Opacity(opacity: 0.35, child: tile),
+                  child: tile,
                 ),
               );
             },
@@ -1902,6 +2154,9 @@ class _NoteListTile extends StatelessWidget {
     required this.note,
     required this.strings,
     required this.selected,
+    required this.selectable,
+    required this.checked,
+    required this.onToggle,
     required this.onTap,
     required this.onAddToCollection,
     required this.onCollectionTap,
@@ -1911,6 +2166,9 @@ class _NoteListTile extends StatelessWidget {
   final NoteRecord note;
   final AppStrings strings;
   final bool selected;
+  final bool selectable;
+  final bool checked;
+  final VoidCallback onToggle;
   final VoidCallback onTap;
   final VoidCallback onAddToCollection;
   final ValueChanged<NoteCollection> onCollectionTap;
@@ -1922,17 +2180,19 @@ class _NoteListTile extends StatelessWidget {
     final anchorPreview = noteAnchorPreview(note);
     final preview = noteBodyPreview(note);
     return Material(
-      color: selected
+      color: selected || checked
           ? palette.primary.withValues(alpha: 0.06)
           : Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: selectable ? onToggle : onTap,
         child: Container(
           padding: const EdgeInsets.fromLTRB(Insets.l, 10, Insets.l, 10),
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
-                color: selected ? palette.primary : Colors.transparent,
+                color: selected || checked
+                    ? palette.primary
+                    : Colors.transparent,
                 width: 3,
               ),
               bottom: BorderSide(color: palette.divider),
@@ -1944,6 +2204,15 @@ class _NoteListTile extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (selectable) ...[
+                    Checkbox(
+                      value: checked,
+                      onChanged: (_) => onToggle(),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    const SizedBox(width: 4),
+                  ],
                   Expanded(
                     child: Text(
                       noteDisplayTitle(note, strings),
@@ -1953,15 +2222,17 @@ class _NoteListTile extends StatelessWidget {
                           ?.copyWith(fontWeight: FontWeight.w600),
                     ),
                   ),
-                  const SizedBox(width: 2),
-                  IconButton(
-                    tooltip:
-                        '${strings.notesAddToCollection}: ${noteDisplayTitle(note, strings)}',
-                    visualDensity: VisualDensity.compact,
-                    iconSize: 17,
-                    onPressed: onAddToCollection,
-                    icon: const Icon(Icons.playlist_add),
-                  ),
+                  if (!selectable) ...[
+                    const SizedBox(width: 2),
+                    IconButton(
+                      tooltip:
+                          '${strings.notesAddToCollection}: ${noteDisplayTitle(note, strings)}',
+                      visualDensity: VisualDensity.compact,
+                      iconSize: 17,
+                      onPressed: onAddToCollection,
+                      icon: const Icon(Icons.playlist_add),
+                    ),
+                  ],
                   const SizedBox(width: 2),
                   Text(
                     noteUpdatedLabel(note.updatedAt, strings),

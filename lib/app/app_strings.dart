@@ -781,6 +781,17 @@ class AppStrings {
   String get notesPdgLookupAdded => _t('来源已添加到笔记', 'Source added to note');
   String notesSourceLine(String source) => _t('来源：$source', 'Source: $source');
   String get notesAddToCollection => _t('添加到 Collection', 'Add to collection');
+  String get notesSelectNotes => _t('选择笔记', 'Select notes');
+  String get notesSelectAllNotes => _t('全选', 'Select all');
+  String get notesClearSelection => _t('取消选择', 'Clear selection');
+  String notesSelectedCount(int count) => _t('已选 $count 条', '$count selected');
+  String get notesAddSelectedToCollection =>
+      _t('加入 Collection', 'Add to collection');
+  String notesAddedToCollection(int count, String name) =>
+      _t('已将 $count 条笔记加入“$name”。', 'Added $count notes to "$name".');
+  String get notesDragToCollection =>
+      _t('拖到左侧集合即可加入', 'Drag onto a collection to add');
+  String get notesDropHere => _t('松开加入此集合', 'Drop to add here');
   String get reviewHighlightAdded => _t(
     '高亮已保存为笔记，可加入集合。',
     'Highlight saved as a note; add it to a collection.',

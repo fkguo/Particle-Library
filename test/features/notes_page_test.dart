@@ -122,6 +122,37 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'New note'), findsOneWidget);
   });
 
+  testWidgets('multi-select adds several notes to a collection', (
+    tester,
+  ) async {
+    final collection = await store.createCollection('Project');
+    final first = await store.create(title: 'One');
+    final second = await store.create(title: 'Two');
+    await pumpWorkspace(tester);
+
+    await tester.tap(find.byTooltip('Select notes'));
+    await tester.pump();
+    await tester.tap(find.text('One'));
+    await tester.tap(find.text('Two'));
+    await tester.pump();
+    expect(find.text('2 selected'), findsOneWidget);
+
+    await tester.tap(find.text('Add to collection'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Project'));
+    await tester.pumpAndSettle();
+
+    expect(
+      (await store.noteById(first.id))!.collections.map((c) => c.id),
+      contains(collection.id),
+    );
+    expect(
+      (await store.noteById(second.id))!.collections.map((c) => c.id),
+      contains(collection.id),
+    );
+    expect(find.text('2 selected'), findsNothing);
+  });
+
   testWidgets('editor does not remove a collection added elsewhere', (
     tester,
   ) async {
