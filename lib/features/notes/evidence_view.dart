@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_strings.dart';
 import '../../app/app_theme.dart';
 import '../../notes/note_evidence.dart';
+import '../common/description_text.dart';
 import '../common/ui.dart';
 
 /// Read-only Evidence view for one Notes scope. It receives already-derived
@@ -157,10 +158,9 @@ class NotesEvidenceView extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
+                        child: DescriptionText(
                           row.title,
                           maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                       ),
@@ -233,10 +233,9 @@ class NotesEvidenceView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
+          DescriptionText(
             row.title,
             maxLines: 3,
-            overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 1),

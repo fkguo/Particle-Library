@@ -188,8 +188,8 @@ Future<List<NoteEvidenceRow>> buildNoteEvidence(
             type: NoteEvidenceType.measurement,
             key: key,
             title:
-                captured?.quantityLabel ??
                 current?.quantityLabel ??
+                captured?.quantityLabel ??
                 captured?.propertyId ??
                 (anchor.targetLabel.trim().isEmpty
                     ? 'Measurement ${anchor.targetKey}'
@@ -217,8 +217,8 @@ Future<List<NoteEvidenceRow>> buildNoteEvidence(
             type: NoteEvidenceType.pdgSummary,
             key: key,
             title:
-                captured?.quantityLabel ??
                 current?.quantityLabel ??
+                captured?.quantityLabel ??
                 captured?.propertyId ??
                 anchor.targetLabel,
             sourceTargetId: anchor.targetId,
