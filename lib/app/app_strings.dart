@@ -746,6 +746,14 @@ class AppStrings {
     'Open the note to remove or replace the broken anchor. Old anchors are not removed automatically, and removal is undoable.',
   );
   String get notesReviewOpenNote => _t('打开笔记', 'Open note');
+  String get notesReanchor => _t('重新锚定', 'Re-anchor');
+  String get notesReanchorPrompt => _t(
+    '输入新的 anchor key。measurement 使用 pdgid:measurementId；旧 anchor 会保留。',
+    'Enter the new anchor key. Measurements use pdgid:measurementId; the old anchor is kept.',
+  );
+  String get notesReanchorInvalid =>
+      _t('anchor key 无法解析。', 'The anchor key could not be resolved.');
+  String get notesReanchored => _t('已添加新的 anchor。', 'New anchor added.');
   String get notesEvidenceHint => _t(
     '捕获值是写入笔记时冻结的实验测量值。当前 PDG 是该测量量在当前 PDG 版本中的平均值或拟合值；单个测量本来就不会与平均值相同，因此 measurement 行只并排显示两个值，不标“变化”状态。',
     'Captured is the experimental value frozen when the note was written. PDG current is the current average or fit for that quantity; a single measurement is not expected to equal it, so measurement rows show both values without a changed/current verdict.',

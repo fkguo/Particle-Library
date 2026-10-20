@@ -1892,14 +1892,27 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                           '${_evidenceTypeLabel(row.type)} · '
                           '${row.status.name} · ${row.noteCount}',
                         ),
-                        trailing: row.noteIds.isEmpty
-                            ? null
-                            : TextButton(
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (row.noteIds.isNotEmpty)
+                              TextButton(
                                 onPressed: () =>
                                     Navigator.of(dialogContext)
                                         .pop(row.noteIds.first),
                                 child: Text(widget.strings.notesReviewOpenNote),
                               ),
+                            if (row.type != NoteEvidenceType.reference &&
+                                row.noteIds.isNotEmpty)
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.of(dialogContext).pop();
+                                  unawaited(_reanchorEvidenceRow(row));
+                                },
+                                child: Text(widget.strings.notesReanchor),
+                              ),
+                          ],
+                        ),
                       );
                     },
                   ),
@@ -1924,6 +1937,120 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     NoteEvidenceType.pdgSummary => widget.strings.notesEvidenceTypeSummary,
     NoteEvidenceType.reference => widget.strings.notesEvidenceTypeReference,
   };
+
+  Future<void> _reanchorEvidenceRow(NoteEvidenceRow row) async {
+    final store = widget.store;
+    if (store == null || row.noteIds.isEmpty) return;
+    final note = await store.noteById(row.noteIds.first);
+    if (note == null || !mounted) return;
+    final target = row.sourceTargetId;
+    final kind = row.type == NoteEvidenceType.measurement
+        ? NoteTargetKinds.measurement
+        : NoteTargetKinds.pdgid;
+    final prefix = kind == NoteTargetKinds.measurement
+        ? 'measurement:'
+        : 'pdgid:';
+    final initial = target.startsWith(prefix)
+        ? target.substring(prefix.length)
+        : target;
+    var edited = initial;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(widget.strings.notesReanchor),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.strings.notesReanchorPrompt),
+            const SizedBox(height: Insets.s),
+            TextFormField(
+              initialValue: initial,
+              autofocus: true,
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              onChanged: (value) => edited = value,
+              onFieldSubmitted: (value) =>
+                  Navigator.of(dialogContext).pop(value.trim()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(widget.strings.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(edited.trim()),
+            child: Text(widget.strings.commonSave),
+          ),
+        ],
+      ),
+    );
+    if (result == null || result.isEmpty || !mounted) return;
+    final database = AppScope.maybeOf(context)?.database;
+    if (kind == NoteTargetKinds.pdgid &&
+        database != null &&
+        await database.entryByPdgid(result) == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(widget.strings.notesReanchorInvalid)),
+      );
+      return;
+    }
+    if (kind == NoteTargetKinds.measurement) {
+      final split = result.lastIndexOf(':');
+      final id = split < 0 ? null : int.tryParse(result.substring(split + 1));
+      if (split <= 0 || id == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.strings.notesReanchorInvalid)),
+        );
+        return;
+      }
+      final bundle = database == null
+          ? null
+          : await database.measurementById(id);
+      if (database != null && bundle == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.strings.notesReanchorInvalid)),
+        );
+        return;
+      }
+    }
+    final anchors = <NoteAnchorInput>[
+      for (final anchor in note.anchors)
+        NoteAnchorInput(
+          targetKind: anchor.targetKind,
+          targetKey: anchor.targetKey,
+          snapshotHash: anchor.snapshotHash.isEmpty
+              ? null
+              : anchor.snapshotHash,
+          targetLabel: anchor.targetLabel,
+          status: anchor.status,
+          context: anchor.context,
+        ),
+      NoteAnchorInput(targetKind: kind, targetKey: result, targetLabel: result),
+    ];
+    try {
+      await store.update(
+        note.id,
+        anchors: anchors,
+        expectedRevision: note.revision,
+      );
+      widget.changes.value++;
+      await _reload(showLoading: false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(widget.strings.notesReanchored)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${widget.strings.notesSaveFailed}: $error')),
+      );
+    }
+  }
 
   Future<void> _openNoteById(String id) async {
     final store = widget.store;

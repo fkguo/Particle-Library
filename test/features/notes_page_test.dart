@@ -222,6 +222,45 @@ void main() {
     expect(find.text('Broken link note'), findsWidgets);
   });
 
+  testWidgets('re-anchoring keeps the old anchor and adds the new one', (
+    tester,
+  ) async {
+    final note = await store.create(
+      title: 'Broken link note',
+      anchors: [
+        NoteAnchorInput.pdgid(
+          'BROKEN',
+          targetLabel: 'Broken link',
+          status: NoteAnchorStatus.fuzzy,
+          context: {
+            'ctxVersion': 1,
+            'kind': 'pdg_summary',
+            'pdgid': 'BROKEN',
+            'quantityLabel': 'Broken quantity',
+            'summaryRowId': 1,
+            'value': '1.0',
+            'edition': '2026',
+          },
+        ),
+      ],
+    );
+    await pumpWorkspace(tester);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Evidence'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Review links (1)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Re-anchor'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).last, 'S032M');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    final saved = (await store.noteById(note.id))!;
+    expect(saved.anchors, hasLength(2));
+    expect(saved.anchors.last.targetKey, 'S032M');
+    expect(saved.anchors.first.targetKey, 'BROKEN');
+  });
+
   testWidgets('multi-select adds several notes to a collection', (
     tester,
   ) async {
