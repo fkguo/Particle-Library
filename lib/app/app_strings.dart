@@ -738,6 +738,14 @@ class AppStrings {
   String get notesEvidenceEmpty =>
       _t('此范围内还没有可显示数值的证据。', 'No numeric evidence in this scope yet.');
   String get notesEvidenceQuantity => _t('测量量', 'Quantity');
+  String notesReviewLinks(int count) =>
+      _t('检查失效链接（$count）', 'Review links ($count)');
+  String get notesReviewLinksTitle => _t('检查失效的关联', 'Review unresolved links');
+  String get notesReviewLinksHint => _t(
+    '打开对应笔记后移除或替换失效 anchor。旧 anchor 不会自动删除，移除操作可以撤销。',
+    'Open the note to remove or replace the broken anchor. Old anchors are not removed automatically, and removal is undoable.',
+  );
+  String get notesReviewOpenNote => _t('打开笔记', 'Open note');
   String get notesEvidenceHint => _t(
     '捕获值是写入笔记时冻结的实验测量值。当前 PDG 是该测量量在当前 PDG 版本中的平均值或拟合值；单个测量本来就不会与平均值相同，因此 measurement 行只并排显示两个值，不标“变化”状态。',
     'Captured is the experimental value frozen when the note was written. PDG current is the current average or fit for that quantity; a single measurement is not expected to equal it, so measurement rows show both values without a changed/current verdict.',
@@ -941,6 +949,11 @@ class AppStrings {
   String get notesExportFileDone => _t('笔记已导出', 'Notes exported');
   String get notesExportFileFailed => _t('导出失败', 'Export failed');
   String get notesCopyCiteKeys => _t('复制引用 key…', 'Copy citation keys…');
+  String get notesCopyBibtex => _t('复制 BibTeX…', 'Copy BibTeX…');
+  String notesBibtexCopied(int count) =>
+      _t('已复制 $count 条 BibTeX。', 'Copied $count BibTeX entries.');
+  String get notesNoBibtex =>
+      _t('没有可解析的 BibTeX。', 'No BibTeX could be resolved.');
   String notesCiteKeysCopied(int count) =>
       _t('已复制 $count 个 citation key。', 'Copied $count citation keys.');
   String get notesNoCiteKeys =>

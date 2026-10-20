@@ -16,6 +16,8 @@ class NotesEvidenceView extends StatelessWidget {
     this.onOpenRow,
     this.onOpenNote,
     this.onExport,
+    this.onReviewUnresolved,
+    this.reviewCount = 0,
   });
 
   final List<NoteEvidenceRow> rows;
@@ -23,6 +25,8 @@ class NotesEvidenceView extends StatelessWidget {
   final ValueChanged<NoteEvidenceRow>? onOpenRow;
   final ValueChanged<String>? onOpenNote;
   final VoidCallback? onExport;
+  final VoidCallback? onReviewUnresolved;
+  final int reviewCount;
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +71,15 @@ class NotesEvidenceView extends StatelessWidget {
                               ),
                         ),
                       ),
+                      if (onReviewUnresolved != null && reviewCount > 0)
+                        TextButton.icon(
+                          onPressed: onReviewUnresolved,
+                          icon: const Icon(
+                            Icons.rule_folder_outlined,
+                            size: 17,
+                          ),
+                          label: Text(strings.notesReviewLinks(reviewCount)),
+                        ),
                       if (onExport != null)
                         TextButton.icon(
                           onPressed: onExport,

@@ -188,6 +188,40 @@ void main() {
     );
   });
 
+  testWidgets('review links opens the note with a broken anchor', (
+    tester,
+  ) async {
+    await store.create(
+      title: 'Broken link note',
+      anchors: [
+        NoteAnchorInput.pdgid(
+          'BROKEN',
+          targetLabel: 'Broken link',
+          status: NoteAnchorStatus.fuzzy,
+          context: {
+            'ctxVersion': 1,
+            'kind': 'pdg_summary',
+            'pdgid': 'BROKEN',
+            'quantityLabel': 'Broken quantity',
+            'summaryRowId': 1,
+            'value': '1.0',
+            'edition': '2026',
+          },
+        ),
+      ],
+    );
+    await pumpWorkspace(tester);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Evidence'));
+    await tester.pumpAndSettle();
+    expect(find.text('Review links (1)'), findsOneWidget);
+    await tester.tap(find.text('Review links (1)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Review unresolved links'), findsOneWidget);
+    await tester.tap(find.text('Open note'));
+    await tester.pumpAndSettle();
+    expect(find.text('Broken link note'), findsWidgets);
+  });
+
   testWidgets('multi-select adds several notes to a collection', (
     tester,
   ) async {

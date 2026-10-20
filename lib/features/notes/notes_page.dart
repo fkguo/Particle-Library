@@ -1119,6 +1119,62 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     );
   }
 
+  Future<void> _copyBibtex() async {
+    final notes = _notes;
+    final scope = AppScope.maybeOf(context);
+    final database = scope?.database;
+    final strings = widget.strings;
+    final targets = referenceTargetsForCiteKeys(notes);
+    if (targets.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(strings.notesNoBibtex)));
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(content: Text(strings.notesCiteKeysFetching)),
+    );
+    final service = const InspireBibtexService();
+    final entries = <String>[];
+    for (final target in targets) {
+      var inspireId = '';
+      var doi = target.doi ?? '';
+      final documentId = target.documentId;
+      if (database != null && documentId != null) {
+        var reference = await database.referenceByDocumentId(documentId);
+        final referenceId = int.tryParse(documentId);
+        if (reference == null && referenceId != null) {
+          reference = await database.referenceById(referenceId);
+        }
+        if (reference != null) {
+          inspireId = reference.inspireId;
+          if (doi.isEmpty) doi = reference.doi;
+        }
+      }
+      if (!InspireBibtexService.canFetch(inspireId: inspireId, doi: doi)) {
+        continue;
+      }
+      try {
+        final entry = await service.fetchBibtex(inspireId: inspireId, doi: doi);
+        if (entry.trim().isNotEmpty && !entries.contains(entry)) {
+          entries.add(entry.trim());
+        }
+      } on InspireBibtexException {
+        // Skip entries that INSPIRE cannot resolve; the copied set remains useful.
+      }
+    }
+    if (!mounted) return;
+    if (entries.isEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text(strings.notesNoBibtex)));
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: entries.join('\n\n')));
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(content: Text(strings.notesBibtexCopied(entries.length))),
+    );
+  }
+
   Future<void> _exportScopeMarkdown() async {
     final store = widget.store;
     if (store == null) return;
@@ -1336,6 +1392,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                               _exportAll();
                             case 'citekeys':
                               _copyCiteKeys();
+                            case 'bibtex':
+                              _copyBibtex();
                           }
                         },
                         itemBuilder: (context) => [
@@ -1363,6 +1421,10 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                           PopupMenuItem(
                             value: 'citekeys',
                             child: Text(strings.notesCopyCiteKeys),
+                          ),
+                          PopupMenuItem(
+                            value: 'bibtex',
+                            child: Text(strings.notesCopyBibtex),
                           ),
                         ],
                       ),
@@ -1774,8 +1836,94 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       onOpenRow: _openEvidenceRow,
       onOpenNote: _openNoteById,
       onExport: _evidenceRows.isEmpty ? null : _exportEvidenceCsv,
+      reviewCount: _reviewLinkCount,
+      onReviewUnresolved: _reviewLinkCount == 0 ? null : _reviewLinks,
     );
   }
+
+  int get _reviewLinkCount => _evidenceRows
+      .where(
+        (row) =>
+            row.status == NoteEvidenceStatus.missing ||
+            row.status == NoteEvidenceStatus.fuzzy ||
+            row.status == NoteEvidenceStatus.unresolved,
+      )
+      .length;
+
+  Future<void> _reviewLinks() async {
+    final rows = [
+      for (final row in _evidenceRows)
+        if (row.status == NoteEvidenceStatus.missing ||
+            row.status == NoteEvidenceStatus.fuzzy ||
+            row.status == NoteEvidenceStatus.unresolved)
+          row,
+    ];
+    if (rows.isEmpty) return;
+    final noteId = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(widget.strings.notesReviewLinksTitle),
+        content: SizedBox(
+          width: 480,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 420),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.strings.notesReviewLinksHint,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: Insets.s),
+                Expanded(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: rows.length,
+                    itemBuilder: (context, index) {
+                      final row = rows[index];
+                      return ListTile(
+                        dense: true,
+                        title: Text(
+                          row.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          '${_evidenceTypeLabel(row.type)} · '
+                          '${row.status.name} · ${row.noteCount}',
+                        ),
+                        trailing: row.noteIds.isEmpty
+                            ? null
+                            : TextButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext)
+                                        .pop(row.noteIds.first),
+                                child: Text(widget.strings.notesReviewOpenNote),
+                              ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(widget.strings.commonClose),
+          ),
+        ],
+      ),
+    );
+    if (noteId != null && mounted) await _openNoteById(noteId);
+  }
+
+  String _evidenceTypeLabel(NoteEvidenceType type) => switch (type) {
+    NoteEvidenceType.measurement => widget.strings.notesEvidenceTypeMeasurement,
+    NoteEvidenceType.pdgSummary => widget.strings.notesEvidenceTypeSummary,
+    NoteEvidenceType.reference => widget.strings.notesEvidenceTypeReference,
+  };
 
   Future<void> _openNoteById(String id) async {
     final store = widget.store;
