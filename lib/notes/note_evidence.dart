@@ -30,6 +30,7 @@ class CapturedEvidence {
     required this.summaryRowId,
     required this.measurementId,
     required this.pdgid,
+    this.quantityLabel,
   });
 
   final String kind;
@@ -45,6 +46,7 @@ class CapturedEvidence {
   final int? summaryRowId;
   final int? measurementId;
   final String? pdgid;
+  final String? quantityLabel;
 
   bool get hasStructuredValue =>
       (value?.trim().isNotEmpty ?? false) ||
@@ -75,6 +77,7 @@ class CapturedEvidence {
       summaryRowId: _int(context['summaryRowId']),
       measurementId: _int(context['measurementId']),
       pdgid: _text(context['pdgid']),
+      quantityLabel: _text(context['quantityLabel']),
     );
   }
 }
@@ -89,6 +92,7 @@ class CurrentEvidence {
     required this.edition,
     required this.limitType,
     required this.valueText,
+    this.quantityLabel,
   });
 
   final String? value;
@@ -98,6 +102,7 @@ class CurrentEvidence {
   final String edition;
   final String? limitType;
   final String? valueText;
+  final String? quantityLabel;
 }
 
 /// Resolves current values without exposing the notes store to the PDG layer.
@@ -175,13 +180,16 @@ Future<List<NoteEvidenceRow>> buildNoteEvidence(
             ? null
             : await resolver.resolveMeasurement(pdgid, measurementId);
         final key =
-            'measurement:${anchor.targetKey}:${captured?.value ?? ''}:${captured?.edition ?? ''}';
+            'measurement:${anchor.targetKey}:${captured?.quantityLabel ?? ''}:'
+            '${captured?.value ?? ''}:${captured?.edition ?? ''}';
         final row = rows.putIfAbsent(
           key,
           () => NoteEvidenceRow(
             type: NoteEvidenceType.measurement,
             key: key,
             title:
+                captured?.quantityLabel ??
+                current?.quantityLabel ??
                 captured?.propertyId ??
                 (anchor.targetLabel.trim().isEmpty
                     ? 'Measurement ${anchor.targetKey}'
@@ -208,7 +216,11 @@ Future<List<NoteEvidenceRow>> buildNoteEvidence(
           () => NoteEvidenceRow(
             type: NoteEvidenceType.pdgSummary,
             key: key,
-            title: captured?.propertyId ?? anchor.targetLabel,
+            title:
+                captured?.quantityLabel ??
+                current?.quantityLabel ??
+                captured?.propertyId ??
+                anchor.targetLabel,
             sourceTargetId: anchor.targetId,
             noteIds: <String>{},
             captured: captured,

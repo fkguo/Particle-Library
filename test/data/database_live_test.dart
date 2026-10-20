@@ -61,6 +61,11 @@ void main() {
     );
   });
 
+  test('property descriptions are available for Evidence display', () async {
+    expect(await db.descriptionForPdgid('S032M'), 'D0 MASS');
+    expect(await db.descriptionForPdgid('not-a-pdgid'), isNull);
+  });
+
   test('captured summary resolves its current-edition counterpart', () async {
     final entry = await db.requireEntryByPdgid('S032M');
     final all = await db.summariesForEntry(entry.id);

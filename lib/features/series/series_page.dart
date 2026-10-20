@@ -276,7 +276,11 @@ class _SeriesBody extends StatelessWidget {
             const SizedBox(height: Insets.m),
             Padding(
               padding: const EdgeInsets.fromLTRB(Insets.l, 0, Insets.l, 0),
-              child: SummaryList(selection: view.selection, compact: true),
+              child: SummaryList(
+                selection: view.selection,
+                compact: true,
+                quantityLabel: entry.description,
+              ),
             ),
             const SizedBox(height: Insets.m),
             SectionHeading(

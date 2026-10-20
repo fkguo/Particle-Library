@@ -89,7 +89,7 @@ class MeasurementCard extends StatelessWidget {
             displayText: valueText,
             edition: scope.database.currentEdition,
             reference: bundle.reference,
-            quantityLabel: label,
+            quantityLabel: series,
           ),
         ),
       ],

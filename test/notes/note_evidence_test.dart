@@ -56,9 +56,51 @@ void main() {
     );
     expect(rows, hasLength(1));
     expect(rows.single.type, NoteEvidenceType.measurement);
+    expect(rows.single.title, 'chi_c1(3872) mass');
     expect(rows.single.status, NoteEvidenceStatus.current);
     expect(rows.single.capturedValue, '3871.64 ± 0.06 MeV');
     expect(rows.single.currentValue, '3871.64 ± 0.06 MeV');
+  });
+
+  test('old rows use the resolved current quantity name', () async {
+    final rows = await buildNoteEvidence(
+      [
+        note(context: {'measurementId': 42, 'pdgid': 'S008EPL'}),
+      ],
+      resolver: _FakeResolver(
+        currentValue: '3871.64',
+        quantityLabel: 'chi_c1(3872) MASS',
+      ),
+      currentEdition: '2026',
+    );
+    expect(rows.single.title, 'chi_c1(3872) MASS');
+  });
+
+  test('summary rows use the quantity name, not the internal pdgid', () async {
+    final rows = await buildNoteEvidence(
+      [
+        note(
+          kind: NoteTargetKinds.pdgid,
+          key: 'S032M',
+          context: {
+            'ctxVersion': 1,
+            'kind': 'pdg_summary',
+            'pdgid': 'S032M',
+            'propertyId': 'S032M',
+            'quantityLabel': 'D0 MASS',
+            'valueType': 'FC',
+            'summaryRowId': 7,
+            'value': '1864.84',
+            'unit': 'MeV',
+            'edition': '2026',
+            'valueText': '1864.84 ± 0.05 MeV',
+          },
+        ),
+      ],
+      resolver: _FakeResolver(currentValue: '1864.84', unit: 'MeV'),
+      currentEdition: '2026',
+    );
+    expect(rows.single.title, 'D0 MASS');
   });
 
   test(
@@ -126,10 +168,15 @@ void main() {
 }
 
 class _FakeResolver implements NoteEvidenceResolver {
-  _FakeResolver({required this.currentValue, this.unit = 'MeV'});
+  _FakeResolver({
+    required this.currentValue,
+    this.unit = 'MeV',
+    this.quantityLabel,
+  });
 
   final String? currentValue;
   final String unit;
+  final String? quantityLabel;
 
   @override
   Future<CurrentEvidence?> resolveMeasurement(
@@ -152,6 +199,7 @@ class _FakeResolver implements NoteEvidenceResolver {
       edition: '2026',
       limitType: null,
       valueText: '$value ± 0.06 $unit',
+      quantityLabel: quantityLabel,
     );
   }
 }

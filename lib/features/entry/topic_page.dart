@@ -223,7 +223,10 @@ class _TopicBody extends StatelessWidget {
               SectionHeading(strings.seriesCurrentSummaries, key: summariesKey),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: Insets.l),
-                child: SummaryList(selection: view.selection),
+                child: SummaryList(
+                  selection: view.selection,
+                  quantityLabel: entry.description,
+                ),
               ),
             ],
             const SizedBox(height: Insets.m),

@@ -18,6 +18,7 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
     final value = bundle.primaryValue;
     if (value == null) return null;
     final display = DisplayQuantity.fromValue(value);
+    final quantityLabel = await _database.descriptionForPdgid(pdgid);
     return CurrentEvidence(
       value: value.value?.toString(),
       errPlus: value.errorPositive?.toString(),
@@ -26,6 +27,7 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
       edition: _database.currentEdition,
       limitType: _limitType(value.limitType),
       valueText: display.text,
+      quantityLabel: quantityLabel,
     );
   }
 
@@ -42,6 +44,7 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
     );
     if (summary == null) return null;
     final display = DisplayQuantity.fromSummary(summary);
+    final quantityLabel = await _database.descriptionForPdgid(pdgid);
     return CurrentEvidence(
       value: summary.value?.toString(),
       errPlus: summary.errorPositive?.toString(),
@@ -50,6 +53,7 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
       edition: _database.currentEdition,
       limitType: _limitType(summary.limitType),
       valueText: display.text,
+      quantityLabel: quantityLabel,
     );
   }
 }

@@ -51,23 +51,37 @@ class NotesEvidenceView extends StatelessWidget {
                 Insets.l,
                 Insets.s,
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      '${strings.notesEvidence} · ${rows.length}',
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: context.palette.textSecondary,
-                        fontWeight: FontWeight.w600,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${strings.notesEvidence} · ${rows.length}',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: context.palette.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
                       ),
+                      if (onExport != null)
+                        TextButton.icon(
+                          onPressed: onExport,
+                          icon: const Icon(Icons.download_outlined, size: 17),
+                          label: Text(strings.notesExportCsv),
+                        ),
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      strings.notesEvidenceHint,
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: context.palette.textSecondary),
                     ),
                   ),
-                  if (onExport != null)
-                    TextButton.icon(
-                      onPressed: onExport,
-                      icon: const Icon(Icons.download_outlined, size: 17),
-                      label: Text(strings.notesExportCsv),
-                    ),
                 ],
               ),
             ),
@@ -97,7 +111,7 @@ class NotesEvidenceView extends StatelessWidget {
         children: [
           TableRow(
             children: [
-              _header(context, strings.notesEvidence),
+              _header(context, strings.notesEvidenceQuantity),
               _header(context, strings.notesEvidenceCaptured),
               _header(context, strings.notesEvidenceCurrent),
               _header(context, strings.notesEvidenceStatusLabel),

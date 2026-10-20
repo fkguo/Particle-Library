@@ -736,6 +736,11 @@ class AppStrings {
   String get notesCollectionNoteCount => _t('笔记', 'notes');
   String get notesEvidenceEmpty =>
       _t('此范围内还没有可显示数值的证据。', 'No numeric evidence in this scope yet.');
+  String get notesEvidenceQuantity => _t('测量量', 'Quantity');
+  String get notesEvidenceHint => _t(
+    '捕获值是写入笔记时冻结的值；当前值来自当前 PDG 版本，状态列比较两者。',
+    'Captured is frozen when the note is written; Current comes from the latest PDG edition. Status compares them.',
+  );
   String get notesEvidenceCaptured => _t('捕获值', 'Captured');
   String get notesEvidenceCurrent => _t('当前值', 'Current');
   String get notesEvidenceStatusCurrent => _t('一致', 'Current');

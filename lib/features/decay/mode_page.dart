@@ -294,7 +294,11 @@ class _ModeBody extends StatelessWidget {
             SectionHeading(strings.decaySummary, key: summaryKey),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Insets.l),
-              child: SummaryList(selection: view.selection, compact: true),
+              child: SummaryList(
+                selection: view.selection,
+                compact: true,
+                quantityLabel: entry.description,
+              ),
             ),
             const SizedBox(height: Insets.m),
             SectionHeading(

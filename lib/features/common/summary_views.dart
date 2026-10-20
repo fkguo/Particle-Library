@@ -21,6 +21,7 @@ class SummaryCard extends StatelessWidget {
     this.showSeriesLink = false,
     this.onOpenSeries,
     this.compact = false,
+    this.quantityLabel,
   });
 
   final Summary summary;
@@ -28,6 +29,7 @@ class SummaryCard extends StatelessWidget {
   final bool showSeriesLink;
   final VoidCallback? onOpenSeries;
   final bool compact;
+  final String? quantityLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +100,12 @@ class SummaryCard extends StatelessWidget {
                       tooltip: strings.notesAddSummary,
                       visualDensity: VisualDensity.compact,
                       onPressed: () {
+                        final quantityLabel =
+                            this.quantityLabel?.trim().isNotEmpty == true
+                            ? this.quantityLabel!.trim()
+                            : summary.pdgid;
                         final label = [
+                          quantityLabel,
                           'PDG ${summary.pdgid}',
                           if (summary.edition != null) '${summary.edition}',
                           valueTypeLabel(summary.valueType, strings.lang),
@@ -115,7 +122,7 @@ class SummaryCard extends StatelessWidget {
                                 summary,
                                 displayText: quantity.text,
                                 edition: scope.database.currentEdition,
-                                quantityLabel: summary.pdgid,
+                                quantityLabel: quantityLabel,
                               ),
                             ),
                           ],
@@ -206,11 +213,13 @@ class SummaryList extends StatelessWidget {
     required this.selection,
     this.onOpenSeries,
     this.compact = false,
+    this.quantityLabel,
   });
 
   final SummarySelection selection;
   final VoidCallback? onOpenSeries;
   final bool compact;
+  final String? quantityLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -255,6 +264,7 @@ class SummaryList extends StatelessWidget {
               showSeriesLink: onOpenSeries != null,
               onOpenSeries: onOpenSeries,
               compact: compact,
+              quantityLabel: quantityLabel,
             ),
           ),
       ],

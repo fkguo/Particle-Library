@@ -534,6 +534,17 @@ class PdgDatabase {
     return [for (final row in rows) Summary(row)];
   }
 
+  /// Returns the human-readable property description for a PDG identifier.
+  Future<String?> descriptionForPdgid(String pdgid) async {
+    final rows = await executor.select(
+      'SELECT description FROM pdgid WHERE pdgid = ? LIMIT 1',
+      [pdgid],
+    );
+    if (rows.isEmpty) return null;
+    final value = rows.first['description']?.toString().trim() ?? '';
+    return value.isEmpty ? null : value;
+  }
+
   Future<Summary?> summaryById(int id) async {
     final rows = await executor.select('SELECT * FROM pdgdata WHERE id = ?', [
       id,
