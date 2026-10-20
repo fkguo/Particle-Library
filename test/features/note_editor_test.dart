@@ -220,6 +220,27 @@ void main() {
     expect(saved!.anchors, isEmpty);
   });
 
+  testWidgets('removing an anchor can be undone before or after autosave', (
+    tester,
+  ) async {
+    final note = await store.create(
+      title: 'D0 note',
+      bodyMarkdown: 'body',
+      anchors: [NoteAnchorInput.pdgid('S032M', targetLabel: 'D0 (S032M)')],
+    );
+    await pumpEditor(tester, note: note);
+    await tester.tap(
+      find.byTooltip(const AppStrings(TextLang.en).notesRemoveAnchor),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Link removed'), findsOneWidget);
+    await tester.tap(find.widgetWithText(SnackBarAction, 'Undo'));
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+    final saved = await store.noteById(note.id);
+    expect(saved!.anchors, hasLength(1));
+  });
+
   testWidgets('removing an anchor then closing immediately flushes it', (
     tester,
   ) async {

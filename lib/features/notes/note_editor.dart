@@ -755,20 +755,60 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
 
   void _removePersistedAnchor(NoteAnchor anchor) {
     final key = _persistedAnchorKey(anchor);
+    final input = NoteAnchorInput(
+      targetKind: anchor.targetKind,
+      targetKey: anchor.targetKey,
+      snapshotHash: anchor.snapshotHash.isEmpty ? null : anchor.snapshotHash,
+      targetLabel: anchor.targetLabel,
+      status: anchor.status,
+      context: anchor.context,
+    );
+    final messenger = ScaffoldMessenger.of(context);
     setState(() => _removedAnchorIds.add(key));
     _onChanged();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(widget.strings.notesAnchorRemoved)));
+    showUndoSnackBar(
+      messenger,
+      message: widget.strings.notesAnchorRemoved,
+      undoLabel: widget.strings.notesUndo,
+      onUndo: () {
+        if (!mounted) return;
+        setState(() {
+          _removedAnchorIds.remove(key);
+          _quickAnchors.add(input);
+        });
+        _onChanged();
+      },
+    );
   }
 
   void _removeDraftAnchor(NoteAnchorInput anchor) {
-    setState(() => _quickAnchors.remove(anchor));
-    _draftAnchors.remove(anchor);
+    final wasDraft = _draftAnchors.contains(anchor);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() {
+      _quickAnchors.remove(anchor);
+      _draftAnchors.remove(anchor);
+    });
     _onChanged();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(widget.strings.notesAnchorRemoved)));
+    showUndoSnackBar(
+      messenger,
+      message: widget.strings.notesAnchorRemoved,
+      undoLabel: widget.strings.notesUndo,
+      onUndo: () {
+        if (!mounted) return;
+        setState(() {
+          if (_quickAnchors.contains(anchor) ||
+              _draftAnchors.contains(anchor)) {
+            return;
+          }
+          if (wasDraft) {
+            _draftAnchors.add(anchor);
+          } else {
+            _quickAnchors.add(anchor);
+          }
+        });
+        _onChanged();
+      },
+    );
   }
 
   Future<void> _showRelatedNotes() async {
