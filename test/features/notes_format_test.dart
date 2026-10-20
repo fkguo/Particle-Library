@@ -181,7 +181,7 @@ void main() {
       _note(anchors: [_anchor()], tags: ['lifetime']),
     ], exportedAt: DateTime.utc(2026, 10, 18, 12));
     final decoded = jsonDecode(json) as Map<String, Object?>;
-    expect(decoded['schema'], 'particle-library.notes.v1');
+    expect(decoded['schema'], 'particle-library.notes.v2');
     expect(decoded['exportedAt'], '2026-10-18T12:00:00.000Z');
     expect(decoded['count'], 1);
     final notes = decoded['notes'] as List<Object?>;

@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../features/entry/entry_route_page.dart';
 import '../features/reference/reference_page.dart';
+import '../features/series/measurement_deep_link.dart';
 import 'immersive_page.dart';
 
 /// Key of the Search tab's navigator. Kept as a string so HomePage can
@@ -405,5 +406,18 @@ class AppNav {
     int referenceId,
   ) async {
     await push(context, ReferencePage(referenceId: referenceId));
+  }
+
+  /// Opens one measurement directly. A missing row falls back inside the page
+  /// to the series route instead of silently doing nothing.
+  static Future<void> openMeasurement(
+    BuildContext context, {
+    required String pdgid,
+    required int measurementId,
+  }) async {
+    await push(
+      context,
+      MeasurementDeepLinkPage(pdgid: pdgid, measurementId: measurementId),
+    );
   }
 }

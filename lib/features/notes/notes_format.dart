@@ -142,6 +142,11 @@ String noteAsMarkdown(NoteRecord note, {String untitled = 'Untitled note'}) {
     buffer.writeln('Tags: ${tags.join(', ')}');
     buffer.writeln();
   }
+  final collections = note.collectionNames;
+  if (collections.isNotEmpty) {
+    buffer.writeln('Collections: ${collections.join(', ')}');
+    buffer.writeln();
+  }
   if (note.anchors.isNotEmpty) {
     buffer.writeln('Anchors:');
     for (final anchor in note.anchors) {
@@ -159,12 +164,24 @@ String noteAsMarkdown(NoteRecord note, {String untitled = 'Untitled note'}) {
 }
 
 /// Versioned JSON backup copied from the Notes page.
-String notesExportJson(Iterable<NoteRecord> notes, {DateTime? exportedAt}) {
+///
+/// The top-level registry preserves empty collections and collection
+/// timestamps; notes also keep their embedded collection objects so older
+/// importers can still recover referenced collections by name.
+String notesExportJson(
+  Iterable<NoteRecord> notes, {
+  DateTime? exportedAt,
+  Iterable<NoteCollection> collections = const <NoteCollection>[],
+}) {
   final records = notes.toList(growable: false);
+  final collectionList = collections.toList(growable: false);
   final payload = <String, Object?>{
-    'schema': 'particle-library.notes.v1',
+    'schema': 'particle-library.notes.v2',
     'exportedAt': (exportedAt ?? DateTime.now()).toUtc().toIso8601String(),
     'count': records.length,
+    'collections': [
+      for (final collection in collectionList) collection.toJson(),
+    ],
     'notes': [for (final note in records) note.toJson()],
   };
   return const JsonEncoder.withIndent('  ').convert(payload);

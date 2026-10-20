@@ -7,6 +7,7 @@ import '../../domain/labels.dart';
 import '../../domain/models.dart';
 import '../../notes/notes.dart';
 import '../notes/note_capture.dart';
+import '../notes/note_context.dart';
 import 'description_text.dart';
 import 'display_value.dart';
 import 'raw_fields.dart';
@@ -110,6 +111,12 @@ class SummaryCard extends StatelessWidget {
                               summary.pdgid,
                               snapshotHash: scope.snapshotHash,
                               targetLabel: label,
+                              context: summaryNoteContext(
+                                summary,
+                                displayText: quantity.text,
+                                edition: scope.database.currentEdition,
+                                quantityLabel: summary.pdgid,
+                              ),
                             ),
                           ],
                           label: label,

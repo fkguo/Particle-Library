@@ -472,6 +472,86 @@ class NotesStore {
     });
   }
 
+  /// Collections with their active-note counts in one query.
+  Future<List<NoteCollectionSummary>> collectionSummaries() async {
+    _ensureOpen();
+    return _readSync('读取 collection 计数', () {
+      final rows = _db.select('''
+        SELECT c.*, COUNT(n.id) AS active_note_count
+          FROM collections c
+          LEFT JOIN note_collections nc ON nc.collection_id = c.id
+          LEFT JOIN notes n ON n.id = nc.note_id AND n.deleted_at IS NULL
+         GROUP BY c.id
+         ORDER BY c.name COLLATE NOCASE, c.id
+      ''');
+      return [
+        for (final row in rows)
+          NoteCollectionSummary(
+            collection: _collectionFromRow(row),
+            activeNoteCount: (row['active_note_count'] as int?) ?? 0,
+          ),
+      ];
+    });
+  }
+
+  /// Adds one note to one collection. Membership-only writes do not bump the
+  /// note revision or updated_at; the operation is idempotent.
+  Future<void> addNoteToCollection(String noteId, String collectionId) async {
+    _ensureOpen();
+    final id = _requireNoteId(noteId);
+    final cid = _requireCollectionId(collectionId);
+    _writeSync('加入 collection', () {
+      _requireActiveNote(id);
+      _requireCollection(cid);
+      _db.execute(
+        'INSERT OR IGNORE INTO note_collections(note_id, collection_id) '
+        'VALUES (?, ?)',
+        [id, cid],
+      );
+    });
+  }
+
+  /// Removes one note from one collection. The note itself is preserved;
+  /// operation is idempotent.
+  Future<void> removeNoteFromCollection(
+    String noteId,
+    String collectionId,
+  ) async {
+    _ensureOpen();
+    final id = _requireNoteId(noteId);
+    final cid = _requireCollectionId(collectionId);
+    _writeSync('移出 collection', () {
+      _requireActiveNote(id);
+      _requireCollection(cid);
+      _db.execute(
+        'DELETE FROM note_collections WHERE note_id = ? AND collection_id = ?',
+        [id, cid],
+      );
+    });
+  }
+
+  /// Active notes not assigned to any collection, newest first.
+  Future<List<NoteRecord>> unfiled({
+    int limit = defaultRecentLimit,
+    int offset = 0,
+  }) async {
+    _ensureOpen();
+    _requirePositiveLimit(limit);
+    if (offset < 0) {
+      throw const NotesException(NotesErrorCode.invalidInput, 'offset 不能为负数。');
+    }
+    return _readSync('读取未归入集合的笔记', () {
+      final rows = _db.select(
+        'SELECT n.* FROM notes n '
+        'WHERE n.deleted_at IS NULL AND NOT EXISTS ('
+        '  SELECT 1 FROM note_collections nc WHERE nc.note_id = n.id'
+        ') ORDER BY n.updated_at DESC, n.id ASC LIMIT ? OFFSET ?',
+        [limit, offset],
+      );
+      return _loadNotes(rows);
+    });
+  }
+
   Future<NoteCollection> createCollection(String name) async {
     _ensureOpen();
     final normalized = _normalizeCollectionName(name);
@@ -548,28 +628,28 @@ class NotesStore {
       _db.execute('DELETE FROM note_collections WHERE note_id = ?', [id]);
       _insertCollections(id, normalized);
       // Membership-only writes do not invalidate an open editor's content
-      // revision. The editor only sends membership when the user changed it.
-      _db.execute('UPDATE notes SET updated_at = ? WHERE id = ?', [
-        _nowIso(),
-        id,
-      ]);
+      // revision and do not change the note's recent ordering.
     });
   }
 
   Future<List<NoteRecord>> notesInCollection(
     String collectionId, {
     int limit = defaultRecentLimit,
+    int offset = 0,
   }) async {
     _ensureOpen();
     _requirePositiveLimit(limit);
+    if (offset < 0) {
+      throw const NotesException(NotesErrorCode.invalidInput, 'offset 不能为负数。');
+    }
     final id = _requireCollectionId(collectionId);
     return _readSync('读取 collection 笔记', () {
       final rows = _db.select(
         'SELECT DISTINCT n.* FROM notes n '
         'JOIN note_collections nc ON nc.note_id = n.id '
         'WHERE nc.collection_id = ? AND n.deleted_at IS NULL '
-        'ORDER BY n.updated_at DESC, n.id ASC LIMIT ?',
-        [id, limit],
+        'ORDER BY n.updated_at DESC, n.id ASC LIMIT ? OFFSET ?',
+        [id, limit, offset],
       );
       return _loadNotes(rows);
     });
@@ -941,6 +1021,23 @@ class NotesStore {
       for (final collection in await collections())
         collection.name.toLowerCase(): collection.id,
     };
+    final knownCollectionIds = <String, String>{};
+    final rawRegistry = decoded is Map ? decoded['collections'] : null;
+    if (rawRegistry is List) {
+      for (final value in rawRegistry) {
+        if (value is! Map) continue;
+        final name = value['name']?.toString().trim() ?? '';
+        if (name.isEmpty) continue;
+        final lookup = name.toLowerCase();
+        var id = knownCollections[lookup];
+        if (id == null) {
+          id = (await createCollection(name)).id;
+          knownCollections[lookup] = id;
+        }
+        final rawId = value['id']?.toString().trim() ?? '';
+        if (rawId.isNotEmpty) knownCollectionIds[rawId] = id;
+      }
+    }
     var added = 0;
     var skipped = 0;
     var failed = 0;
@@ -1008,14 +1105,18 @@ class NotesStore {
         if (rawCollections is List) {
           for (final value in rawCollections) {
             if (value is! Map) continue;
+            final rawId = value['id']?.toString().trim() ?? '';
+            var id = rawId.isEmpty ? null : knownCollectionIds[rawId];
             final name = value['name']?.toString().trim() ?? '';
-            if (name.isEmpty) continue;
-            final lookup = name.toLowerCase();
-            var id = knownCollections[lookup];
             if (id == null) {
-              final created = await createCollection(name);
-              id = created.id;
-              knownCollections[lookup] = id;
+              if (name.isEmpty) continue;
+              final lookup = name.toLowerCase();
+              id = knownCollections[lookup];
+              if (id == null) {
+                final created = await createCollection(name);
+                id = created.id;
+                knownCollections[lookup] = id;
+              }
             }
             if (!collectionIds.contains(id)) collectionIds.add(id);
           }
@@ -1803,6 +1904,13 @@ CREATE INDEX idx_note_collections_collection
       throw NotesException(NotesErrorCode.notFound, 'collection 不存在：$id');
     }
     return _collectionFromRow(rows.first);
+  }
+
+  void _requireActiveNote(String id) {
+    final rows = _db.select('SELECT deleted_at FROM notes WHERE id = ?', [id]);
+    if (rows.isEmpty || rows.first['deleted_at'] != null) {
+      throw NotesException(NotesErrorCode.notFound, '笔记不存在或已删除：$id');
+    }
   }
 
   void _insertCollections(String noteId, List<String> collectionIds) {

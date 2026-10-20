@@ -344,6 +344,10 @@ class NoteRecord {
 
   List<String> get tagNames => [for (final tag in tags) tag.name];
 
+  List<String> get collectionNames => [
+    for (final collection in collections) collection.name,
+  ];
+
   /// Returns the anchor for a target, if present.
   ///
   /// When [snapshotHash] is omitted, any snapshot matches.
@@ -402,4 +406,19 @@ class NoteCollection {
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
   };
+}
+
+/// A collection plus its active-note count, returned by
+/// [NotesStore.collectionSummaries] for navigation and management.
+class NoteCollectionSummary {
+  const NoteCollectionSummary({
+    required this.collection,
+    required this.activeNoteCount,
+  });
+
+  final NoteCollection collection;
+  final int activeNoteCount;
+
+  String get id => collection.id;
+  String get name => collection.name;
 }

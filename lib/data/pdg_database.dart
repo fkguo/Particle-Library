@@ -534,6 +534,13 @@ class PdgDatabase {
     return [for (final row in rows) Summary(row)];
   }
 
+  Future<Summary?> summaryById(int id) async {
+    final rows = await executor.select('SELECT * FROM pdgdata WHERE id = ?', [
+      id,
+    ]);
+    return rows.isEmpty ? null : Summary(rows.first);
+  }
+
   Future<List<Summary>> currentSummariesForEntries(List<int> entryIds) async {
     final result = <Summary>[];
     for (final chunk in _chunk(entryIds, 350)) {

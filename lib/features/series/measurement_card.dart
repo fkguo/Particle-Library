@@ -15,6 +15,7 @@ import '../../domain/models.dart';
 import '../../notes/notes.dart';
 import '../notes/notes_entity.dart';
 import '../notes/note_capture.dart';
+import '../notes/note_context.dart';
 import '../notes/notes_format.dart';
 import '../common/description_text.dart';
 import '../common/display_value.dart';
@@ -70,9 +71,10 @@ class MeasurementCard extends StatelessWidget {
         techniqueFullName(measurement.technique),
       '#${measurement.id}',
     ].join(' · ');
-    final valueText = bundle.primaryValue == null
+    final primary = bundle.primaryValue;
+    final valueText = primary == null
         ? strings.measurementNoColumns
-        : DisplayQuantity.fromValue(bundle.primaryValue!).text;
+        : DisplayQuantity.fromValue(primary).text;
     await captureTextToNote(
       context,
       text: valueText,
@@ -81,11 +83,14 @@ class MeasurementCard extends StatelessWidget {
           key,
           snapshotHash: scope.snapshotHash,
           targetLabel: label,
-          context: {
-            'measurementId': measurement.id,
-            'pdgid': measurement.pdgid,
-            'edition': scope.database.currentEdition,
-          },
+          context: measurementNoteContext(
+            measurement: measurement,
+            value: primary,
+            displayText: valueText,
+            edition: scope.database.currentEdition,
+            reference: bundle.reference,
+            quantityLabel: label,
+          ),
         ),
       ],
       label: label,

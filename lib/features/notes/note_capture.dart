@@ -7,6 +7,12 @@ import 'note_editor.dart';
 import 'notes_anchor.dart';
 import 'notes_format.dart';
 
+/// Last collection explicitly chosen in the capture sheet. This is an
+/// in-memory convenience default, not a second source of collection truth.
+abstract final class NoteCaptureDefaults {
+  static String? lastCollectionId;
+}
+
 String selectedQuoteBlock(String text, String label) {
   final quote = text
       .trim()
@@ -48,6 +54,11 @@ Future<void> captureTextToNote(
   final unique = <String, NoteRecord>{
     for (final note in [...existing, ...recent]) note.id: note,
   }.values.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  final collections = await store.collections();
+  var selectedCollectionId = NoteCaptureDefaults.lastCollectionId;
+  if (!collections.any((collection) => collection.id == selectedCollectionId)) {
+    selectedCollectionId = null;
+  }
 
   if (!context.mounted) return;
   final searchController = TextEditingController();
@@ -89,6 +100,33 @@ Future<void> captureTextToNote(
                             : text.trim(),
                         maxLines: 7,
                         overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                  if (collections.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: strings.notesCollections,
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          isExpanded: true,
+                          value: selectedCollectionId,
+                          hint: Text(strings.notesNoCollections),
+                          items: [
+                            for (final collection in collections)
+                              DropdownMenuItem<String>(
+                                value: collection.id,
+                                child: Text(collection.name),
+                              ),
+                          ],
+                          onChanged: (value) => setDialogState(
+                            () => selectedCollectionId = value,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -230,6 +268,9 @@ Future<void> captureTextToNote(
         anchors: merged,
         expectedRevision: note.revision,
       );
+      if (selectedCollectionId != null) {
+        await store.addNoteToCollection(note.id, selectedCollectionId!);
+      }
     } else {
       record = await store.create(
         title: defaultNoteTitle(
@@ -239,8 +280,12 @@ Future<void> captureTextToNote(
         ),
         bodyMarkdown: quote,
         anchors: anchors,
+        collectionIds: selectedCollectionId == null
+            ? const <String>[]
+            : <String>[selectedCollectionId!],
       );
     }
+    NoteCaptureDefaults.lastCollectionId = selectedCollectionId;
     scope.notesChanges.value++;
   } catch (error) {
     if (!context.mounted) return;

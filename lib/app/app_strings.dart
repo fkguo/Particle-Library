@@ -706,6 +706,37 @@ class AppStrings {
   String get notesCollectionFailed =>
       _t('无法创建 collection', 'Could not create collection');
   String get notesAllCollections => _t('全部笔记', 'All notes');
+  String get notesUnfiled => _t('未归入集合', 'Unfiled');
+  String get notesEvidence => _t('证据', 'Evidence');
+  String get notesNotesView => _t('笔记', 'Notes');
+  String get notesManageCollections => _t('管理集合', 'Manage collections');
+  String get notesRenameCollection => _t('重命名集合', 'Rename collection');
+  String get notesDeleteCollection => _t('删除集合', 'Delete collection');
+  String get notesDeleteCollectionBody => _t(
+    '只删除集合和归属，不删除笔记。',
+    'This deletes the collection and its assignments; notes are kept.',
+  );
+  String get notesCollectionNoteCount => _t('笔记', 'notes');
+  String get notesEvidenceEmpty =>
+      _t('此范围内还没有可显示数值的证据。', 'No numeric evidence in this scope yet.');
+  String get notesEvidenceCaptured => _t('捕获值', 'Captured');
+  String get notesEvidenceCurrent => _t('当前值', 'Current');
+  String get notesEvidenceStatusCurrent => _t('一致', 'Current');
+  String get notesEvidenceStatusChanged => _t('已变化', 'Changed');
+  String get notesEvidenceStatusMissing => _t('找不到', 'Missing');
+  String get notesEvidenceStatusFuzzy => _t('模糊匹配', 'Fuzzy');
+  String get notesEvidenceStatusUnresolved => _t('未解析', 'Unresolved');
+  String get notesEvidenceStatusUncompared => _t('未比较', 'Uncompared');
+  String get notesEvidenceMissingSource => _t(
+    '当前快照中找不到该测量。',
+    'This measurement is missing from the current snapshot.',
+  );
+  String get notesEvidenceSourceHint => _t(
+    '数值来自只读 PDG 快照；修改笔记不会修改 PDG。',
+    'Values come from the read-only PDG snapshot; editing a note never edits PDG.',
+  );
+  String get notesExportCsv => _t('导出证据 CSV', 'Export evidence CSV');
+  String get notesExportCsvDone => _t('CSV 已导出', 'CSV exported');
   String get notesCollections => _t('Collections', 'Collections');
   String get notesPdgLookup => _t('PDG 速查', 'PDG lookup');
   String get notesPdgLookupHint =>

@@ -438,19 +438,24 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         );
       } else {
         final anchorsChanged = _anchorSignature() != _savedAnchorSignature;
-        final collectionsChanged = !_sameStringSets(
-          _collectionIds,
-          _savedCollectionIds,
-        );
-        saved = await widget.store.update(
+        await widget.store.update(
           existing.id,
           title: title,
           bodyMarkdown: body,
           anchors: anchorsChanged ? _allAnchors() : null,
           tags: tags,
-          collectionIds: collectionsChanged ? _collectionIds.toList() : null,
           expectedRevision: force ? null : _record?.revision,
         );
+        final before = {
+          for (final collection in existing.collections) collection.id,
+        };
+        for (final id in _collectionIds.difference(before)) {
+          await widget.store.addNoteToCollection(existing.id, id);
+        }
+        for (final id in before.difference(_collectionIds)) {
+          await widget.store.removeNoteFromCollection(existing.id, id);
+        }
+        saved = (await widget.store.noteById(existing.id))!;
       }
       _saving = false;
       _record = saved;
@@ -537,9 +542,17 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
             bodyMarkdown: body,
             anchors: anchors,
             tags: tags,
-            collectionIds: collectionIds,
             expectedRevision: existing.revision,
           );
+          final before = {
+            for (final collection in existing.collections) collection.id,
+          };
+          for (final id in collectionIds.toSet().difference(before)) {
+            await store.addNoteToCollection(existing.id, id);
+          }
+          for (final id in before.difference(collectionIds.toSet())) {
+            await store.removeNoteFromCollection(existing.id, id);
+          }
         }
         changeSignal?.value++;
       } catch (error) {

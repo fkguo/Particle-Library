@@ -22,11 +22,16 @@ class FullBackup {
     final notePayload = notes == null
         ? <String, Object?>{'notes': <Object?>[]}
         : Map<String, Object?>.from(
-            jsonDecode(notesExportJson(await notes.allForExport())) as Map,
+            jsonDecode(
+              notesExportJson(
+                await notes.allForExport(),
+                collections: await notes.collections(),
+              ),
+            ) as Map,
           );
     final payload = <String, Object?>{
       'format': format,
-      'formatVersion': 1,
+      'formatVersion': 2,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
       'user': user.exportData(),
       'notes': notePayload,
@@ -105,7 +110,9 @@ class FullBackup {
     }
 
     final isFull = payload['format'] == format;
-    if (isFull && payload['formatVersion'] != 1) {
+    if (isFull &&
+        payload['formatVersion'] != 1 &&
+        payload['formatVersion'] != 2) {
       throw const FormatException('不支持的完整备份版本');
     }
     final rawUser = payload['user'];
