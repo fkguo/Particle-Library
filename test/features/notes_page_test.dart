@@ -122,7 +122,56 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'New note'), findsOneWidget);
   });
 
-  testWidgets('discards a draft and removes its autosaved note', (tester) async {
+  testWidgets('editor does not remove a collection added elsewhere', (
+    tester,
+  ) async {
+    final first = await store.createCollection('One');
+    final second = await store.createCollection('Two');
+    final note = await store.create(
+      title: 'Shared note',
+      bodyMarkdown: 'body',
+      collectionIds: [first.id],
+    );
+    await pumpWorkspace(tester);
+    await tester.tap(find.text('Shared note'));
+    await tester.pumpAndSettle();
+    await store.addNoteToCollection(note.id, second.id);
+
+    await tester.enterText(find.byType(TextField).at(2), 'edited body');
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+
+    final saved = (await store.noteById(note.id))!;
+    expect(saved.collections.map((collection) => collection.id).toSet(), {
+      first.id,
+      second.id,
+    });
+  });
+
+  testWidgets('draft survives switching to Evidence and back', (tester) async {
+    await pumpWorkspace(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'New note').first);
+    await tester.pump();
+    await tester.enterText(find.byType(TextField).at(1), 'Draft survives');
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    expect(await store.recent(), hasLength(1));
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Evidence'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Notes'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Draft survives'), findsWidgets);
+    await tester.enterText(find.byType(TextField).at(2), ' more text');
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    expect(await store.recent(), hasLength(1));
+  });
+
+  testWidgets('discards a draft and removes its autosaved note', (
+    tester,
+  ) async {
     await pumpWorkspace(tester);
     await tester.tap(find.widgetWithText(FilledButton, 'New note').first);
     await tester.pump();

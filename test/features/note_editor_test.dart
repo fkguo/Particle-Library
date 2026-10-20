@@ -33,7 +33,10 @@ void main() {
     WidgetTester tester, {
     NoteRecord? note,
     List<NoteAnchorInput> anchors = const <NoteAnchorInput>[],
+    List<String> initialCollectionIds = const <String>[],
     VoidCallback? onDeleted,
+    VoidCallback? onCancel,
+    bool draft = false,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -48,8 +51,11 @@ void main() {
                 strings: const AppStrings(TextLang.en),
                 note: note,
                 initialAnchors: anchors,
+                initialCollectionIds: initialCollectionIds,
                 changeSignal: changes,
                 onDeleted: onDeleted,
+                onCancel: onCancel,
+                draft: draft,
               ),
             ),
           ),
@@ -84,6 +90,36 @@ void main() {
     expect(note.tagNames, <String>['D0', 'lifetime']);
     expect(changes.value, greaterThan(0));
     expect(find.text('Saved'), findsOneWidget);
+  });
+
+  testWidgets('an existing draft does not re-add a scope collection on every '
+      'autosave', (tester) async {
+    final first = await store.createCollection('First');
+    final second = await store.createCollection('Second');
+    final note = await store.create(
+      title: 'Existing',
+      bodyMarkdown: 'body',
+      collectionIds: [first.id],
+    );
+
+    await pumpEditor(
+      tester,
+      note: note,
+      initialCollectionIds: [second.id],
+      draft: true,
+    );
+    await tester.enterText(find.byType(TextField).at(1), 'edited body');
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+
+    final saved = (await store.noteById(note.id))!;
+    expect(saved.collections.map((collection) => collection.id).toSet(), {
+      first.id,
+    });
+    final revision = saved.revision;
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect((await store.noteById(note.id))!.revision, revision);
   });
 
   testWidgets('postpones autosave while a CJK IME composition is open', (

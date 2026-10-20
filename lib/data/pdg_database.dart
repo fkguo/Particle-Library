@@ -541,6 +541,32 @@ class PdgDatabase {
     return rows.isEmpty ? null : Summary(rows.first);
   }
 
+  /// Resolves the current-edition counterpart of a captured summary row.
+  ///
+  /// A captured row may belong to an older edition, so its row id is not used
+  /// blindly: the current edition is queried by pdgid + value_type. Exactly
+  /// one match is authoritative; multiple matches are ambiguous and return
+  /// null (the caller reports missing/fuzzy rather than guessing).
+  Future<Summary?> currentSummaryForCapture({
+    required String pdgid,
+    required String valueType,
+    required int capturedRowId,
+  }) async {
+    final current = await summaryById(capturedRowId);
+    if (current != null &&
+        current.edition == currentEdition &&
+        current.pdgid == pdgid &&
+        current.valueType == valueType) {
+      return current;
+    }
+    final rows = await executor.select(
+      'SELECT * FROM pdgdata WHERE pdgid = ? AND edition = ? AND value_type = ? '
+      'ORDER BY sort, id',
+      [pdgid, currentEdition, valueType],
+    );
+    return rows.length == 1 ? Summary(rows.first) : null;
+  }
+
   Future<List<Summary>> currentSummariesForEntries(List<int> entryIds) async {
     final result = <Summary>[];
     for (final chunk in _chunk(entryIds, 350)) {

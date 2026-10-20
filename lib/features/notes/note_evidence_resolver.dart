@@ -14,7 +14,7 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
     int measurementId,
   ) async {
     final bundle = await _database.measurementById(measurementId);
-    if (bundle == null) return null;
+    if (bundle == null || bundle.measurement.pdgid != pdgid) return null;
     final value = bundle.primaryValue;
     if (value == null) return null;
     final display = DisplayQuantity.fromValue(value);
@@ -30,8 +30,16 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
   }
 
   @override
-  Future<CurrentEvidence?> resolveSummary(int summaryRowId) async {
-    final summary = await _database.summaryById(summaryRowId);
+  Future<CurrentEvidence?> resolveSummary(CapturedEvidence captured) async {
+    final pdgid = captured.pdgid;
+    final valueType = captured.valueType;
+    final rowId = captured.summaryRowId;
+    if (pdgid == null || valueType == null || rowId == null) return null;
+    final summary = await _database.currentSummaryForCapture(
+      pdgid: pdgid,
+      valueType: valueType,
+      capturedRowId: rowId,
+    );
     if (summary == null) return null;
     final display = DisplayQuantity.fromSummary(summary);
     return CurrentEvidence(

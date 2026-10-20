@@ -74,6 +74,92 @@ void main() {
     expect(first.single.id, isNot(second.single.id));
   });
 
+  test(
+    'invalid import is rejected before any collection or note is written',
+    () async {
+      await expectLater(
+        store.importJson({
+          'schema': 'particle-library.notes.v2',
+          'collections': [
+            {'id': 'side-effect', 'name': 'Side effect'},
+          ],
+          'notes': [
+            {
+              'uuid': 'good-uuid',
+              'title': 'Good',
+              'bodyMarkdown': 'ok',
+              'anchors': <Object?>[],
+              'tags': <Object?>[],
+              'collections': <Object?>[],
+            },
+            {'title': 'Missing uuid'},
+          ],
+        }),
+        throwsA(isA<NotesException>()),
+      );
+      expect(await store.collections(), isEmpty);
+      expect(await store.recent(), isEmpty);
+    },
+  );
+
+  test(
+    'bare v1 fragment reuses a local collection by id, not by old name',
+    () async {
+      final local = await store.createCollection('Paper new');
+      await store.importJson([
+        {
+          'uuid': 'fragment-uuid',
+          'title': 'fragment',
+          'bodyMarkdown': 'body',
+          'anchors': <Object?>[],
+          'tags': <Object?>[],
+          'collections': [
+            {'id': local.id, 'name': 'Paper old'},
+          ],
+        },
+      ]);
+      expect((await store.collections()).map((collection) => collection.name), [
+        'Paper new',
+      ]);
+      expect(
+        (await store.noteByUuid('fragment-uuid'))!.collections.single.id,
+        local.id,
+      );
+    },
+  );
+
+  test('JSON v2 preserves trash and collection timestamps', () async {
+    final collection = await store.createCollection(
+      'Trash project',
+      createdAt: DateTime.utc(2026, 1, 2),
+    );
+    final note = await store.create(
+      title: 'Deleted note',
+      collectionIds: [collection.id],
+    );
+    await store.delete(note.id);
+    final json = notesExportJson(
+      await store.allForExport(includeDeleted: true),
+      collections: await store.collections(),
+    );
+    final otherDir = await Directory.systemTemp.createTemp('pdgapp-import2-');
+    final other = await NotesStore.open(
+      overridePath: '${otherDir.path}/user.db',
+    );
+    try {
+      await other.importJson(jsonDecode(json));
+      expect(await other.recent(), isEmpty);
+      expect((await other.deleted()).single.title, 'Deleted note');
+      expect(
+        (await other.collections()).single.createdAt,
+        DateTime.utc(2026, 1, 2),
+      );
+    } finally {
+      await other.close();
+      await otherDir.delete(recursive: true);
+    }
+  });
+
   test('JSON v2 exports and imports empty collections', () async {
     await store.createCollection('Empty project');
     final json = notesExportJson(

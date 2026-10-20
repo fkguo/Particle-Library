@@ -40,7 +40,7 @@ class NotesEvidenceView extends StatelessWidget {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 900;
+        final wide = MediaQuery.sizeOf(context).width >= 1280;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -100,7 +100,7 @@ class NotesEvidenceView extends StatelessWidget {
               _header(context, strings.notesEvidence),
               _header(context, strings.notesEvidenceCaptured),
               _header(context, strings.notesEvidenceCurrent),
-              _header(context, 'Status'),
+              _header(context, strings.notesEvidenceStatusLabel),
               _header(context, strings.notesCollectionNoteCount),
             ],
           ),
@@ -274,7 +274,7 @@ class NotesEvidenceView extends StatelessWidget {
     final value = row.capturedValue;
     final edition = row.captured?.edition;
     if (value == '—' && edition == null) {
-      return strings.notesEvidenceStatusUncompared;
+      return strings.notesEvidenceNotRecorded;
     }
     return [value, if (edition != null) 'PDG $edition'].join(' · ');
   }

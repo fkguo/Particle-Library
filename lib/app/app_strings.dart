@@ -719,6 +719,12 @@ class AppStrings {
   String get notesAllCollections => _t('全部笔记', 'All notes');
   String get notesUnfiled => _t('未归入集合', 'Unfiled');
   String get notesEvidence => _t('证据', 'Evidence');
+  String get notesResizeListTooltip => _t(
+    '拖动调整笔记列表宽度；拉到最窄可隐藏，双击恢复默认',
+    'Drag to resize the note list; drag to the narrowest to hide, double-click to reset',
+  );
+  String get notesEvidenceStatusLabel => _t('状态', 'Status');
+  String measurementNumber(int id) => _t('测量 #$id', 'Measurement #$id');
   String get notesNotesView => _t('笔记', 'Notes');
   String get notesManageCollections => _t('管理集合', 'Manage collections');
   String get notesRenameCollection => _t('重命名集合', 'Rename collection');
@@ -738,6 +744,8 @@ class AppStrings {
   String get notesEvidenceStatusFuzzy => _t('模糊匹配', 'Fuzzy');
   String get notesEvidenceStatusUnresolved => _t('未解析', 'Unresolved');
   String get notesEvidenceStatusUncompared => _t('未比较', 'Uncompared');
+  String get notesEvidenceNotRecorded =>
+      _t('未记录捕获值', 'No captured value recorded');
   String get notesEvidenceMissingSource => _t(
     '当前快照中找不到该测量。',
     'This measurement is missing from the current snapshot.',

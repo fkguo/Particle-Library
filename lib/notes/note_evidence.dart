@@ -26,6 +26,7 @@ class CapturedEvidence {
     required this.limitType,
     required this.valueText,
     required this.propertyId,
+    required this.valueType,
     required this.summaryRowId,
     required this.measurementId,
     required this.pdgid,
@@ -40,6 +41,7 @@ class CapturedEvidence {
   final String? limitType;
   final String? valueText;
   final String? propertyId;
+  final String? valueType;
   final int? summaryRowId;
   final int? measurementId;
   final String? pdgid;
@@ -69,6 +71,7 @@ class CapturedEvidence {
       limitType: limitType,
       valueText: _text(context['valueText']),
       propertyId: _text(context['propertyId']),
+      valueType: _text(context['valueType']),
       summaryRowId: _int(context['summaryRowId']),
       measurementId: _int(context['measurementId']),
       pdgid: _text(context['pdgid']),
@@ -100,7 +103,7 @@ class CurrentEvidence {
 /// Resolves current values without exposing the notes store to the PDG layer.
 abstract class NoteEvidenceResolver {
   Future<CurrentEvidence?> resolveMeasurement(String pdgid, int measurementId);
-  Future<CurrentEvidence?> resolveSummary(int summaryRowId);
+  Future<CurrentEvidence?> resolveSummary(CapturedEvidence captured);
 }
 
 /// One derived Evidence row. It is never persisted.
@@ -195,9 +198,9 @@ Future<List<NoteEvidenceRow>> buildNoteEvidence(
       } else if (anchor.targetKind == NoteTargetKinds.pdgid) {
         final captured = CapturedEvidence.fromContext(anchor.context);
         if (captured?.kind != 'pdg_summary') continue;
-        final current = captured?.summaryRowId == null || resolver == null
+        final current = captured == null || resolver == null
             ? null
-            : await resolver.resolveSummary(captured!.summaryRowId!);
+            : await resolver.resolveSummary(captured);
         final key =
             'pdg_summary:${anchor.targetKey}:${captured?.propertyId ?? ''}:${captured?.value ?? ''}:${captured?.edition ?? ''}';
         final row = rows.putIfAbsent(
@@ -253,6 +256,13 @@ NoteEvidenceStatus _status(
   if (captured == null || !captured.hasStructuredValue) {
     return NoteEvidenceStatus.uncompared;
   }
+  final capturedUnit = captured.unit?.trim() ?? '';
+  final currentUnit = current.unit?.trim() ?? '';
+  if (capturedUnit.isNotEmpty &&
+      currentUnit.isNotEmpty &&
+      capturedUnit != currentUnit) {
+    return NoteEvidenceStatus.uncompared;
+  }
   if (_same(captured.value, current.value) &&
       _same(captured.limitType, current.limitType) &&
       _compatible(captured.errPlus, current.errPlus) &&
@@ -263,8 +273,10 @@ NoteEvidenceStatus _status(
 }
 
 bool _compatible(String? captured, String? current) {
-  if (captured == null || captured.trim().isEmpty) return true;
-  return _same(captured, current);
+  final left = captured?.trim() ?? '';
+  final right = current?.trim() ?? '';
+  if (left.isEmpty || right.isEmpty) return true;
+  return _same(left, right);
 }
 
 bool _same(String? a, String? b) {
@@ -274,7 +286,12 @@ bool _same(String? a, String? b) {
   final leftNumber = double.tryParse(left);
   final rightNumber = double.tryParse(right);
   if (leftNumber != null && rightNumber != null) {
-    return (leftNumber - rightNumber).abs() < 1e-12;
+    final difference = (leftNumber - rightNumber).abs();
+    final scale = leftNumber.abs() > rightNumber.abs()
+        ? leftNumber.abs()
+        : rightNumber.abs();
+    if (scale == 0) return true;
+    return difference <= 1e-12 * scale;
   }
   return left == right;
 }

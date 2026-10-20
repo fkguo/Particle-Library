@@ -35,24 +35,22 @@ void main() {
   }
 
   Map<String, Object?> measurementContext({String value = '3871.64'}) => {
-        'ctxVersion': 1,
-        'kind': 'measurement',
-        'measurementId': 42,
-        'pdgid': 'S008EPL',
-        'quantityLabel': 'chi_c1(3872) mass',
-        'value': value,
-        'errPlus': '0.06',
-        'errMinus': '0.06',
-        'unit': 'MeV',
-        'edition': '2026',
-        'valueText': '$value ± 0.06 MeV',
-      };
+    'ctxVersion': 1,
+    'kind': 'measurement',
+    'measurementId': 42,
+    'pdgid': 'S008EPL',
+    'quantityLabel': 'chi_c1(3872) mass',
+    'value': value,
+    'errPlus': '0.06',
+    'errMinus': '0.06',
+    'unit': 'MeV',
+    'edition': '2026',
+    'valueText': '$value ± 0.06 MeV',
+  };
 
   test('captured measurement is compared with the current PDG row', () async {
     final rows = await buildNoteEvidence(
-      [
-        note(context: measurementContext()),
-      ],
+      [note(context: measurementContext())],
       resolver: _FakeResolver(currentValue: '3871.64'),
       currentEdition: '2026',
     );
@@ -63,34 +61,58 @@ void main() {
     expect(rows.single.currentValue, '3871.64 ± 0.06 MeV');
   });
 
-  test('changed values are marked and missing current rows are explicit',
-      () async {
-    final changed = await buildNoteEvidence(
-      [note(context: measurementContext())],
-      resolver: _FakeResolver(currentValue: '3872.00'),
-      currentEdition: '2026',
-    );
-    expect(changed.single.status, NoteEvidenceStatus.changed);
+  test(
+    'changed values are marked and missing current rows are explicit',
+    () async {
+      final changed = await buildNoteEvidence(
+        [note(context: measurementContext())],
+        resolver: _FakeResolver(currentValue: '3872.00'),
+        currentEdition: '2026',
+      );
+      expect(changed.single.status, NoteEvidenceStatus.changed);
 
-    final missing = await buildNoteEvidence(
+      final missing = await buildNoteEvidence(
+        [note(context: measurementContext())],
+        resolver: _FakeResolver(currentValue: null),
+        currentEdition: '2026',
+      );
+      expect(missing.single.status, NoteEvidenceStatus.missing);
+    },
+  );
+
+  test(
+    'old notes without structured context are uncompared, never guessed',
+    () async {
+      final rows = await buildNoteEvidence(
+        [
+          note(context: {'measurementId': 42, 'pdgid': 'S008EPL'}),
+        ],
+        resolver: _FakeResolver(currentValue: '3871.64'),
+        currentEdition: '2026',
+      );
+      expect(rows.single.captured, isNull);
+      expect(rows.single.status, NoteEvidenceStatus.uncompared);
+      expect(rows.single.capturedValue, '—');
+      expect(rows.single.currentValue, contains('3871.64'));
+    },
+  );
+
+  test('different units are not silently compared', () async {
+    final rows = await buildNoteEvidence(
       [note(context: measurementContext())],
-      resolver: _FakeResolver(currentValue: null),
+      resolver: _FakeResolver(currentValue: '3871.64', unit: 'GeV'),
       currentEdition: '2026',
     );
-    expect(missing.single.status, NoteEvidenceStatus.missing);
+    expect(rows.single.status, NoteEvidenceStatus.uncompared);
   });
 
-  test('old notes without structured context are uncompared, never guessed',
-      () async {
+  test('small magnitudes use relative tolerance', () async {
     final rows = await buildNoteEvidence(
-      [note(context: {'measurementId': 42, 'pdgid': 'S008EPL'})],
-      resolver: _FakeResolver(currentValue: '3871.64'),
+      [note(context: measurementContext(value: '1e-25')..['unit'] = 's')],
+      resolver: _FakeResolver(currentValue: '2e-25', unit: 's'),
       currentEdition: '2026',
     );
-    expect(rows.single.captured, isNull);
-    expect(rows.single.status, NoteEvidenceStatus.uncompared);
-    expect(rows.single.capturedValue, '—');
-    expect(rows.single.currentValue, contains('3871.64'));
+    expect(rows.single.status, NoteEvidenceStatus.changed);
   });
 
   test('fuzzy anchors stay fuzzy even when the current row resolves', () async {
@@ -104,9 +126,10 @@ void main() {
 }
 
 class _FakeResolver implements NoteEvidenceResolver {
-  _FakeResolver({required this.currentValue});
+  _FakeResolver({required this.currentValue, this.unit = 'MeV'});
 
   final String? currentValue;
+  final String unit;
 
   @override
   Future<CurrentEvidence?> resolveMeasurement(
@@ -115,7 +138,8 @@ class _FakeResolver implements NoteEvidenceResolver {
   ) async => _value();
 
   @override
-  Future<CurrentEvidence?> resolveSummary(int summaryRowId) async => _value();
+  Future<CurrentEvidence?> resolveSummary(CapturedEvidence captured) async =>
+      _value();
 
   CurrentEvidence? _value() {
     final value = currentValue;
@@ -124,10 +148,10 @@ class _FakeResolver implements NoteEvidenceResolver {
       value: value,
       errPlus: '0.06',
       errMinus: '0.06',
-      unit: 'MeV',
+      unit: unit,
       edition: '2026',
       limitType: null,
-      valueText: '$value ± 0.06 MeV',
+      valueText: '$value ± 0.06 $unit',
     );
   }
 }

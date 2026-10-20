@@ -46,6 +46,7 @@ class NoteEditor extends StatefulWidget {
     this.onSaved,
     this.onDeleted,
     this.onCancel,
+    this.draft = false,
     this.autofocusTitle = false,
     this.debounce = const Duration(milliseconds: 500),
   });
@@ -59,6 +60,7 @@ class NoteEditor extends StatefulWidget {
   final ValueChanged<NoteRecord>? onSaved;
   final VoidCallback? onDeleted;
   final VoidCallback? onCancel;
+  final bool draft;
   final bool autofocusTitle;
   final Duration debounce;
 
@@ -98,6 +100,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   List<String> _knownTags = const <String>[];
   late Set<String> _collectionIds;
   late Set<String> _savedCollectionIds;
+  bool _collectionsDirty = false;
   final List<NoteAnchorInput> _quickAnchors = <NoteAnchorInput>[];
   final Set<String> _removedAnchorIds = <String>{};
   late String _savedAnchorSignature;
@@ -221,6 +224,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     if (result == null || !mounted) return;
     setState(() {
       _collectionIds = result;
+      _collectionsDirty = true;
       _lastSignature = _dirtySignature;
       _stage = _SaveStage.pending;
     });
@@ -336,7 +340,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     return title != _savedTitle ||
         body != _savedBody ||
         !_sameTags(tags, _savedTags) ||
-        !_sameStringSets(_collectionIds, _savedCollectionIds) ||
+        (_collectionsDirty &&
+            !_sameStringSets(_collectionIds, _savedCollectionIds)) ||
         _anchorSignature() != _savedAnchorSignature;
   }
 
@@ -449,14 +454,16 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
           tags: tags,
           expectedRevision: force ? null : _record?.revision,
         );
-        final before = {
-          for (final collection in existing.collections) collection.id,
-        };
-        for (final id in _collectionIds.difference(before)) {
-          await widget.store.addNoteToCollection(existing.id, id);
-        }
-        for (final id in before.difference(_collectionIds)) {
-          await widget.store.removeNoteFromCollection(existing.id, id);
+        if (_collectionsDirty) {
+          final before = {
+            for (final collection in existing.collections) collection.id,
+          };
+          for (final id in _collectionIds.difference(before)) {
+            await widget.store.addNoteToCollection(existing.id, id);
+          }
+          for (final id in before.difference(_collectionIds)) {
+            await widget.store.removeNoteFromCollection(existing.id, id);
+          }
         }
         saved = (await widget.store.noteById(existing.id))!;
       }
@@ -465,11 +472,13 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       _savedTitle = saved.title;
       _savedBody = saved.bodyMarkdown;
       _savedTags = saved.tagNames;
-      _savedCollectionIds = {
+      _collectionIds = {
         for (final collection in saved.collections) collection.id,
       };
+      _savedCollectionIds = Set<String>.of(_collectionIds);
       _quickAnchors.clear();
       _savedAnchorSignature = _anchorSignature();
+      _collectionsDirty = false;
       changeSignal?.value++;
       if (_disposed || !mounted) return saved;
       final stillDirty = _hasChanges;
@@ -482,6 +491,25 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       return saved;
     } catch (error) {
       _saving = false;
+      // A content update may have committed before a membership edge failed.
+      // Reload the durable row so the next autosave does not reuse a stale
+      // revision and turn a recoverable failure into a conflict loop.
+      if (existing != null) {
+        try {
+          final latest = await widget.store.noteById(existing.id);
+          if (latest != null && mounted) {
+            _record = latest;
+            _savedTitle = latest.title;
+            _savedBody = latest.bodyMarkdown;
+            _savedTags = latest.tagNames;
+            _savedCollectionIds = {
+              for (final collection in latest.collections) collection.id,
+            };
+          }
+        } catch (_) {
+          // Keep the original error; the user can still retry or copy text.
+        }
+      }
       if (_disposed || !mounted) return null;
       setState(() {
         _stage = _SaveStage.failed;
@@ -530,8 +558,9 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
             _anchorSignature() == _savedAnchorSignature) {
           return;
         }
+        NoteRecord? saved;
         if (existing == null) {
-          await store.create(
+          saved = await store.create(
             title: title,
             bodyMarkdown: body,
             anchors: anchors,
@@ -547,16 +576,20 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
             tags: tags,
             expectedRevision: existing.revision,
           );
-          final before = {
-            for (final collection in existing.collections) collection.id,
-          };
-          for (final id in collectionIds.toSet().difference(before)) {
-            await store.addNoteToCollection(existing.id, id);
+          if (_collectionsDirty) {
+            final before = {
+              for (final collection in existing.collections) collection.id,
+            };
+            for (final id in collectionIds.toSet().difference(before)) {
+              await store.addNoteToCollection(existing.id, id);
+            }
+            for (final id in before.difference(collectionIds.toSet())) {
+              await store.removeNoteFromCollection(existing.id, id);
+            }
           }
-          for (final id in before.difference(collectionIds.toSet())) {
-            await store.removeNoteFromCollection(existing.id, id);
-          }
+          saved = await store.noteById(existing.id);
         }
+        if (saved != null) widget.onSaved?.call(saved);
         changeSignal?.value++;
       } catch (error) {
         // The editor is gone, so there is no place for a dialog. Keep the
@@ -567,18 +600,16 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   }
 
   Future<void> _cancelDraft() async {
-    if (widget.note != null) return;
+    if (!widget.draft) return;
     final title = _committedText(_titleController).trim();
     final body = _committedText(_bodyController).trim();
     final tags = parseNoteTags(_committedText(_tagController));
     final hasAnchors = _allAnchors().isNotEmpty;
-    final hasCollections = _collectionIds.isNotEmpty;
     final hasContent =
         title.isNotEmpty ||
         body.isNotEmpty ||
         tags.isNotEmpty ||
         hasAnchors ||
-        hasCollections ||
         _record != null;
     if (hasContent) {
       final confirmed = await showDialog<bool>(
@@ -1109,7 +1140,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                     child: Text(
                       _record == null
                           ? strings.notesNew
-                          : widget.note == null
+                          : widget.draft
                           ? strings.notesDraft
                           : strings.notesEdit,
                       style: Theme.of(context).textTheme.labelLarge
@@ -1213,7 +1244,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                       onPressed: _confirmDelete,
                       icon: const Icon(Icons.delete_outline, size: 18),
                     ),
-                  if (widget.note == null && widget.onCancel != null)
+                  if (widget.draft && widget.onCancel != null)
                     IconButton(
                       tooltip: strings.notesDiscardDraft,
                       onPressed: _cancelDraft,
@@ -1423,7 +1454,10 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                     visualDensity: VisualDensity.compact,
                     label: Text(collection.name),
                     onDeleted: () async {
-                      setState(() => _collectionIds.remove(collection.id));
+                      setState(() {
+                        _collectionIds.remove(collection.id);
+                        _collectionsDirty = true;
+                      });
                       await _saveNow();
                     },
                   ),
@@ -1677,8 +1711,10 @@ class NoteEditorPage extends StatelessWidget implements ImmersivePage {
       strings: strings,
       note: note,
       initialAnchors: initialAnchors,
+      initialCollectionIds: initialCollectionIds,
       changeSignal: scope.notesChanges,
       autofocusTitle: note == null,
+      draft: note == null,
       onDeleted: () => Navigator.of(context).maybePop(),
       onCancel: () => Navigator.of(context).maybePop(),
     );

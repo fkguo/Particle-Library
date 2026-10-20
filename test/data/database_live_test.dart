@@ -61,6 +61,32 @@ void main() {
     );
   });
 
+  test('captured summary resolves its current-edition counterpart', () async {
+    final entry = await db.requireEntryByPdgid('S032M');
+    final all = await db.summariesForEntry(entry.id);
+    final current = all.where((row) => row.edition == '2026').toList();
+    final old = all.where((row) => row.edition != '2026').toList();
+    expect(current, isNotEmpty);
+    expect(old, isNotEmpty);
+    Summary? resolved;
+    for (final candidate in old) {
+      final peers = current
+          .where((row) => row.valueType == candidate.valueType)
+          .toList();
+      if (peers.length != 1) continue;
+      resolved = await db.currentSummaryForCapture(
+        pdgid: candidate.pdgid,
+        valueType: candidate.valueType,
+        capturedRowId: candidate.id,
+      );
+      expect(resolved, isNotNull, reason: 'valueType ${candidate.valueType}');
+      expect(resolved!.edition, '2026');
+      expect(resolved.id, peers.single.id);
+      break;
+    }
+    expect(resolved, isNotNull, reason: 'no historical summary candidate');
+  });
+
   test('D0 mass has two candidates with a unique summary-table fit', () async {
     final entry = await db.requireEntryByPdgid('S032M');
     final summaries = await db.summariesForEntry(entry.id, edition: '2026');

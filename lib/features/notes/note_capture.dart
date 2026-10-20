@@ -243,25 +243,30 @@ Future<void> captureTextToNote(
       final body = note.bodyMarkdown.trim().isEmpty
           ? quote
           : '${note.bodyMarkdown.trim()}\n\n$quote';
-      final merged = <NoteAnchorInput>[
-        for (final anchor in note.anchors)
-          NoteAnchorInput(
-            targetKind: anchor.targetKind,
-            targetKey: anchor.targetKey,
-            snapshotHash: anchor.snapshotHash.isEmpty
-                ? null
-                : anchor.snapshotHash,
-            targetLabel: anchor.targetLabel,
-            status: anchor.status,
-            context: anchor.context,
-          ),
-        ...anchors,
-      ];
-      final seen = <String>{};
-      merged.retainWhere(
-        (anchor) =>
-            seen.add('${anchor.targetId}\u0000${anchor.snapshotHash ?? ''}'),
-      );
+      final mergedByKey = <String, NoteAnchorInput>{};
+      for (final anchor in note.anchors) {
+        mergedByKey['${anchor.targetId}\u0000${anchor.snapshotHash}'] =
+            NoteAnchorInput(
+              targetKind: anchor.targetKind,
+              targetKey: anchor.targetKey,
+              snapshotHash: anchor.snapshotHash.isEmpty
+                  ? null
+                  : anchor.snapshotHash,
+              targetLabel: anchor.targetLabel,
+              status: anchor.status,
+              context: anchor.context,
+            );
+      }
+      for (final anchor in anchors) {
+        final key = '${anchor.targetId}\u0000${anchor.snapshotHash ?? ''}';
+        final existing = mergedByKey[key];
+        if (existing != null && anchor.context == null) {
+          // Keep an existing context when appending a plain source link.
+          continue;
+        }
+        mergedByKey[key] = anchor;
+      }
+      final merged = mergedByKey.values.toList(growable: false);
       record = await store.update(
         note.id,
         bodyMarkdown: body,

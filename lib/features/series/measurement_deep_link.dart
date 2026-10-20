@@ -28,16 +28,25 @@ class MeasurementDeepLinkPage extends StatefulWidget {
 }
 
 class _MeasurementDeepLinkPageState extends State<MeasurementDeepLinkPage> {
-  late Future<MeasurementBundle?> _future;
+  Future<MeasurementBundle?>? _future;
+  bool _initialized = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
     _future = _load();
   }
 
-  Future<MeasurementBundle?> _load() =>
-      AppScope.of(context).database.measurementById(widget.measurementId);
+  Future<MeasurementBundle?> _load() async {
+    final bundle = await AppScope.of(context).database
+        .measurementById(widget.measurementId);
+    if (bundle == null || bundle.measurement.pdgid != widget.pdgid) {
+      return null;
+    }
+    return bundle;
+  }
 
   void _retry() {
     setState(() => _future = _load());
@@ -53,7 +62,7 @@ class _MeasurementDeepLinkPageState extends State<MeasurementDeepLinkPage> {
         style: Theme.of(context).textTheme.titleLarge
             ?.copyWith(fontWeight: FontWeight.w600),
       ),
-      subtitle: 'Measurement #${widget.measurementId}',
+      subtitle: strings.measurementNumber(widget.measurementId),
       actions: [
         IconButton(
           tooltip: strings.commonBack,

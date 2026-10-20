@@ -24,7 +24,7 @@ class FullBackup {
         : Map<String, Object?>.from(
             jsonDecode(
               notesExportJson(
-                await notes.allForExport(),
+                await notes.allForExport(includeDeleted: true),
                 collections: await notes.collections(),
               ),
             ) as Map,

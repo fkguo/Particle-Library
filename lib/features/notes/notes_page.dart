@@ -81,6 +81,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
   bool _showEvidence = false;
   List<NoteEvidenceRow> _evidenceRows = const <NoteEvidenceRow>[];
   bool _evidenceLoading = false;
+  Object? _evidenceError;
+  int _evidenceGeneration = 0;
   bool _loading = true;
   Object? _error;
   int _generation = 0;
@@ -91,6 +93,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
   Map<String, int> _tagCounts = const <String, int>{};
   NoteRecord? _selected;
   bool _draftActive = false;
+  NoteRecord? _draftRecord;
   int _editorSession = 0;
 
   @override
@@ -236,7 +239,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     final store = widget.store;
     if (store == null) return;
     if (!mounted) return;
-    setState(() => _evidenceLoading = true);
+    final generation = ++_evidenceGeneration;
+    setState(() {
+      _evidenceLoading = true;
+      _evidenceError = null;
+    });
     try {
       final notes = _searchController.text.trim().isEmpty && _tagFilters.isEmpty
           ? (_unfiledScope
@@ -250,16 +257,18 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
         resolver: widget.evidenceResolver,
         currentEdition: widget.currentEdition,
       );
-      if (!mounted) return;
+      if (!mounted || generation != _evidenceGeneration) return;
       setState(() {
         _evidenceRows = rows;
         _evidenceLoading = false;
+        _evidenceError = null;
       });
-    } catch (_) {
-      if (!mounted) return;
+    } catch (error) {
+      if (!mounted || generation != _evidenceGeneration) return;
       setState(() {
         _evidenceRows = const <NoteEvidenceRow>[];
         _evidenceLoading = false;
+        _evidenceError = error;
       });
     }
   }
@@ -320,6 +329,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     }
     setState(() {
       _draftActive = true;
+      _draftRecord = null;
       _selected = null;
       _editorSession++;
     });
@@ -333,14 +343,17 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     setState(() {
       _selected = note;
       _draftActive = false;
+      _draftRecord = null;
       _editorSession++;
     });
   }
 
   void _onDraftSaved(NoteRecord saved) {
-    if (!mounted) return;
-    // Keep the draft session active after autosave so the Discard action is
-    // still available. Selecting a list row switches to the saved note.
+    if (!mounted || !_draftActive) return;
+    // Keep the draft session active after autosave so Discard remains
+    // available, but remember the durable row. This lets the editor survive a
+    // breakpoint/Evidence unmount without rebuilding an empty draft.
+    setState(() => _draftRecord = saved);
   }
 
   void _onDeleted() {
@@ -348,6 +361,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     setState(() {
       _selected = null;
       _draftActive = false;
+      _draftRecord = null;
       _editorSession++;
     });
   }
@@ -674,7 +688,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     final strings = widget.strings;
     try {
       final notes = await store.allForExport();
-      if (notes.isEmpty) {
+      final collections = await store.collections();
+      if (notes.isEmpty && collections.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context)
               .showSnackBar(SnackBar(content: Text(strings.notesExportEmpty)));
@@ -684,9 +699,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       final exported = await saveOrShareBytes(
         suggestedName:
             'ParticleLibrary-notes-${DateTime.now().toIso8601String().substring(0, 10)}.json',
-        bytes: utf8.encode(
-          notesExportJson(notes, collections: await store.collections()),
-        ),
+        bytes: utf8.encode(notesExportJson(notes, collections: collections)),
         type: await _jsonType(),
         mimeType: 'application/json',
       );
@@ -1000,13 +1013,17 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                             children: [
                               _viewBar(context),
                               Expanded(
-                                child: _showEvidence
-                                    ? _evidencePane(context)
-                                    : _wideContent(
-                                        context,
-                                        constraints,
-                                        hasRail: false,
-                                      ),
+                                child: IndexedStack(
+                                  index: _showEvidence ? 1 : 0,
+                                  children: [
+                                    _wideContent(
+                                      context,
+                                      constraints,
+                                      hasRail: false,
+                                    ),
+                                    _evidencePane(context),
+                                  ],
+                                ),
                               ),
                             ],
                           ))
@@ -1015,9 +1032,13 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                       children: [
                         _viewBar(context),
                         Expanded(
-                          child: _showEvidence
-                              ? _evidencePane(context)
-                              : _listPane(context, wide: false),
+                          child: IndexedStack(
+                            index: _showEvidence ? 1 : 0,
+                            children: [
+                              _listPane(context, wide: false),
+                              _evidencePane(context),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -1043,7 +1064,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
         CollapsibleSidebar(
           expanded: _listVisible,
           width: width,
-          tooltip: '拖动调整笔记列表宽度；拉到最窄可隐藏，双击恢复默认',
+          tooltip: widget.strings.notesResizeListTooltip,
           railIcon: Icons.sticky_note_2_outlined,
           railTooltip: widget.strings.sidebarShow,
           onExpand: () => setState(() => _listVisible = true),
@@ -1304,6 +1325,16 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
   Widget _evidencePane(BuildContext context) {
     if (_evidenceLoading) {
       return const Center(child: LoadingPanel(compact: true));
+    }
+    if (_evidenceError != null) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(Insets.l),
+        child: ErrorPanel(
+          error: _evidenceError!,
+          compact: true,
+          onRetry: () => _reloadEvidence(),
+        ),
+      );
     }
     return NotesEvidenceView(
       rows: _evidenceRows,
@@ -1741,8 +1772,10 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
         key: ValueKey<String>('notes-editor-$_editorSession'),
         store: store,
         strings: strings,
+        note: _draftRecord,
+        draft: true,
         changeSignal: widget.changes,
-        initialCollectionIds: _collectionFilter == null
+        initialCollectionIds: _collectionFilter == null || _draftRecord != null
             ? const <String>[]
             : <String>[_collectionFilter!],
         autofocusTitle: true,
@@ -1751,6 +1784,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
           if (!mounted) return;
           setState(() {
             _draftActive = false;
+            _draftRecord = null;
             _selected = null;
             _editorSession++;
           });
