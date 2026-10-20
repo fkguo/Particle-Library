@@ -847,6 +847,11 @@ class AppStrings {
   String get notesRemoveAnchor => _t('移除关联', 'Remove link');
   String get notesAnchorRemoved => _t('已移除关联', 'Link removed');
   String get notesAnchorsLabel => _t('关联条目', 'Anchors');
+  String get notesAnchorKindNote => _t('笔记', 'Note');
+  String get notesAnchorKindPdgid => 'PDG';
+  String get notesAnchorKindMeasurement => _t('测量', 'Measurement');
+  String get notesAnchorKindReference => _t('文献', 'Reference');
+  String get notesAnchorKindReview => _t('评述', 'Review');
   String get notesAnchorUnresolved => _t('锚点尚未解析', 'Anchor not resolved');
   String get notesDraft => _t('草稿', 'Draft');
   String get notesSavePending => _t('待保存', 'Unsaved changes');

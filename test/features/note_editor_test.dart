@@ -188,7 +188,7 @@ void main() {
         ),
       ],
     );
-    expect(find.text('D0 (S032M)'), findsOneWidget);
+    expect(find.textContaining('D0 (S032M)'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).at(1), 'about D0');
     await tester.pump(const Duration(milliseconds: 600));

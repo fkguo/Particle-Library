@@ -1301,6 +1301,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                         for (final anchor in anchors)
                           _anchorChip(
                             context,
+                            kind: anchor.targetKind,
                             label: anchorDisplayLabel(anchor),
                             targetId: anchor.targetId,
                             resolved: anchor.isResolved,
@@ -1311,6 +1312,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                           for (final input in _draftAnchors)
                             _anchorChip(
                               context,
+                              kind: input.targetKind,
                               label: input.targetLabel.trim().isEmpty
                                   ? input.targetId
                                   : input.targetLabel,
@@ -1321,6 +1323,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                         for (final input in _quickAnchors)
                           _anchorChip(
                             context,
+                            kind: input.targetKind,
                             label: input.targetLabel.trim().isEmpty
                                 ? input.targetId
                                 : input.targetLabel,
@@ -1524,6 +1527,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
 
   Widget _anchorChip(
     BuildContext context, {
+    required String kind,
     required String label,
     required String targetId,
     required bool resolved,
@@ -1532,15 +1536,46 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   }) {
     final palette = context.palette;
     final strings = widget.strings;
+    final (IconData icon, String kindLabel, Color kindColor) = switch (kind) {
+      NoteTargetKinds.note => (
+        Icons.sticky_note_2_outlined,
+        strings.notesAnchorKindNote,
+        palette.primary,
+      ),
+      NoteTargetKinds.measurement => (
+        Icons.straighten_outlined,
+        strings.notesAnchorKindMeasurement,
+        palette.accent,
+      ),
+      NoteTargetKinds.reference => (
+        Icons.menu_book_outlined,
+        strings.notesAnchorKindReference,
+        palette.accent,
+      ),
+      NoteTargetKinds.review => (
+        Icons.picture_as_pdf_outlined,
+        strings.notesAnchorKindReview,
+        palette.warning,
+      ),
+      _ => (
+        Icons.science_outlined,
+        strings.notesAnchorKindPdgid,
+        palette.textSecondary,
+      ),
+    };
     final chip = Chip(
       avatar: Icon(
-        resolved ? Icons.link : Icons.link_off,
+        resolved ? icon : Icons.link_off,
         size: 14,
-        color: resolved ? palette.textSecondary : palette.warning,
+        color: resolved ? kindColor : palette.warning,
       ),
       label: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 260),
-        child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        constraints: const BoxConstraints(maxWidth: 280),
+        child: Text(
+          kind == NoteTargetKinds.pdgid ? label : '$kindLabel · $label',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
       backgroundColor: resolved
           ? null
@@ -1556,8 +1591,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     );
     final wrapped = Tooltip(
       message: resolved
-          ? targetId
-          : '${strings.notesAnchorUnresolved}\n$targetId',
+          ? '$kindLabel\n$targetId'
+          : '${strings.notesAnchorUnresolved}\n$kindLabel · $targetId',
       child: chip,
     );
     if (onTap == null) return wrapped;
