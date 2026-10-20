@@ -103,6 +103,24 @@ void main() {
   );
 
   test(
+    'same-name different-id collections are imported with a suffix',
+    () async {
+      await store.createCollection('Paper');
+      await store.importJson({
+        'schema': 'particle-library.notes.v2',
+        'collections': [
+          {'id': 'other-id', 'name': 'Paper'},
+        ],
+        'notes': <Object?>[],
+      });
+      final names = (await store.collections())
+          .map((collection) => collection.name)
+          .toList();
+      expect(names, containsAll(['Paper', 'Paper (imported)']));
+    },
+  );
+
+  test(
     'bare v1 fragment reuses a local collection by id, not by old name',
     () async {
       final local = await store.createCollection('Paper new');

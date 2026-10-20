@@ -298,14 +298,22 @@ class SearchService {
     this.db, {
     this.notes,
     this.notesChanges,
-    this.lang = TextLang.zh,
+    this.language = TextLang.zh,
   }) : names = NameIndex(db);
 
   final NotesStore? notes;
   final ValueListenable<int>? notesChanges;
-  final TextLang lang;
+  TextLang language;
 
-  AppStrings get _strings => AppStrings(lang);
+  TextLang get lang => language;
+
+  set lang(TextLang value) {
+    if (language == value) return;
+    language = value;
+    _cache.clear();
+  }
+
+  AppStrings get _strings => AppStrings(language);
 
   final PdgDatabase db;
   final NameIndex names;

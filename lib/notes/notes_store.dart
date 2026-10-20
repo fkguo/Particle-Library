@@ -1041,6 +1041,11 @@ class NotesStore {
   /// import must not silently overwrite newer local edits. Missing collections
   /// are created by name. Malformed records are counted in [failed] while the
   /// rest of the file continues to import.
+  /// Imports notes and collections from a notes.v1/v2 payload.
+  ///
+  /// The payload is validated completely before anything is written. All
+  /// collections and notes are then inserted in one transaction; a database
+  /// failure rolls the whole import back. Duplicate note UUIDs are skipped.
   Future<NotesImportResult> importJson(Object? decoded) async {
     _ensureOpen();
     final root = decoded is Map ? decoded['notes'] : decoded;
@@ -1052,160 +1057,216 @@ class NotesStore {
     }
     _validateImportPayload(decoded, root);
     final localCollections = await collections();
-    final knownCollections = <String, String>{
+    final localById = <String, String>{
+      for (final collection in localCollections) collection.id: collection.id,
+    };
+    final knownByName = <String, String>{
       for (final collection in localCollections)
         collection.name.toLowerCase(): collection.id,
     };
-    final localCollectionIds = <String, String>{
-      for (final collection in localCollections) collection.id: collection.id,
+    final knownByImportedId = <String, String>{};
+    final plannedCollections = <_ImportCollectionPlan>[];
+    final plannedNames = <String>{
+      for (final collection in localCollections) collection.name.toLowerCase(),
     };
-    final knownCollectionIds = <String, String>{};
-    final rawRegistry = decoded is Map ? decoded['collections'] : null;
-    if (rawRegistry is List) {
-      final existing = <String, String>{...localCollectionIds};
-      for (final value in rawRegistry) {
+
+    String uniqueCollectionName(String base) {
+      var candidate = '$base (imported)';
+      var index = 2;
+      while (plannedNames.contains(candidate.toLowerCase())) {
+        candidate = '$base (imported $index)';
+        index++;
+      }
+      return candidate;
+    }
+
+    String resolveCollection({
+      required String rawId,
+      required String name,
+      DateTime? createdAt,
+      DateTime? updatedAt,
+    }) {
+      final trimmedName = name.trim();
+      final trimmedId = rawId.trim();
+      if (trimmedId.isNotEmpty) {
+        final local = localById[trimmedId] ?? knownByImportedId[trimmedId];
+        if (local != null) return local;
+      }
+      final lookup = trimmedName.toLowerCase();
+      if (trimmedId.isEmpty) {
+        final existing = knownByName[lookup];
+        if (existing != null) return existing;
+      }
+      var targetName = trimmedName;
+      if (trimmedId.isNotEmpty && knownByName.containsKey(lookup)) {
+        targetName = uniqueCollectionName(trimmedName);
+      }
+      final id = trimmedId.isEmpty ? _newUuid() : trimmedId;
+      final plan = _ImportCollectionPlan(
+        id: id,
+        name: targetName,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+      );
+      plannedCollections.add(plan);
+      plannedNames.add(targetName.toLowerCase());
+      knownByName[targetName.toLowerCase()] = id;
+      knownByName[lookup] = id;
+      if (trimmedId.isNotEmpty) {
+        knownByImportedId[trimmedId] = id;
+        localById[trimmedId] = id;
+      }
+      return id;
+    }
+
+    final registry = decoded is Map ? decoded['collections'] : null;
+    if (registry is List) {
+      for (final value in registry) {
         if (value is! Map) continue;
-        final name = value['name']?.toString().trim() ?? '';
-        if (name.isEmpty) continue;
-        final rawId = value['id']?.toString().trim() ?? '';
-        final lookup = name.toLowerCase();
-        var id = rawId.isNotEmpty ? existing[rawId] : null;
-        if (id == null && rawId.isEmpty) id = knownCollections[lookup];
-        if (id == null) {
-          // A supplied id that is absent locally must not silently collapse
-          // into a same-name local collection with a different identity.
-          final nameTaken =
-              rawId.isNotEmpty && knownCollections.containsKey(lookup);
-          id = (await createCollection(
-            nameTaken ? '$name (imported)' : name,
-            id: rawId.isEmpty ? null : rawId,
-            createdAt: DateTime.tryParse(value['createdAt']?.toString() ?? ''),
-            updatedAt: DateTime.tryParse(value['updatedAt']?.toString() ?? ''),
-          )).id;
-          if (rawId.isNotEmpty) {
-            existing[rawId] = id;
-            localCollectionIds[rawId] = id;
-          }
-          knownCollections[lookup] = id;
-        }
-        if (rawId.isNotEmpty) knownCollectionIds[rawId] = id;
+        resolveCollection(
+          rawId: value['id']?.toString() ?? '',
+          name: value['name']?.toString() ?? '',
+          createdAt: DateTime.tryParse(value['createdAt']?.toString() ?? ''),
+          updatedAt: DateTime.tryParse(value['updatedAt']?.toString() ?? ''),
+        );
       }
     }
-    var added = 0;
+
+    final existingUuids = _readSync('读取导入去重键', () {
+      return {
+        for (final row in _db.select('SELECT uuid FROM notes'))
+          row['uuid']?.toString() ?? '',
+      };
+    });
+    final seenUuids = <String>{};
+    final notes = <_ImportNotePlan>[];
     var skipped = 0;
-    var failed = 0;
     for (final raw in root) {
-      if (raw is! Map) {
-        failed++;
-        continue;
-      }
-      final map = Map<String, Object?>.from(raw);
-      final uuid = map['uuid']?.toString().trim() ?? '';
-      if (uuid.isEmpty) {
-        failed++;
-        continue;
-      }
-      final duplicate = _readSync('检查导入笔记', () {
-        return _db.select('SELECT id FROM notes WHERE uuid = ? LIMIT 1', [
-          uuid,
-        ]).isNotEmpty;
-      });
-      if (duplicate) {
+      if (raw is! Map) continue;
+      final uuid = raw['uuid']?.toString().trim() ?? '';
+      if (existingUuids.contains(uuid) || !seenUuids.add(uuid)) {
         skipped++;
         continue;
       }
-      try {
-        final anchors = <NoteAnchorInput>[];
-        final rawAnchors = map['anchors'];
-        if (rawAnchors is List) {
-          for (final value in rawAnchors) {
-            if (value is! Map) continue;
-            final anchor = Map<String, Object?>.from(value);
-            final kind = anchor['targetKind']?.toString().trim() ?? '';
-            final key = anchor['targetKey']?.toString().trim() ?? '';
-            if (kind.isEmpty || key.isEmpty) continue;
-            final statusName = anchor['status']?.toString();
-            final status = NoteAnchorStatus.values.firstWhere(
-              (candidate) => candidate.wireName == statusName,
-              orElse: () => NoteAnchorStatus.exact,
-            );
-            final rawContext = anchor['context'];
-            final context = rawContext is Map
-                ? Map<String, Object?>.from(rawContext)
-                : null;
-            anchors.add(
-              NoteAnchorInput(
-                targetKind: kind,
-                targetKey: key,
-                snapshotHash: anchor['snapshotHash']?.toString(),
-                targetLabel: anchor['targetLabel']?.toString() ?? '',
-                status: status,
-                context: context,
-              ),
-            );
-          }
-        }
-        final tags = <String>[];
-        final rawTags = map['tags'];
-        if (rawTags is List) {
-          for (final value in rawTags) {
-            final tag = value?.toString().trim() ?? '';
-            if (tag.isNotEmpty) tags.add(tag);
-          }
-        }
-        final collectionIds = <String>[];
-        final rawCollections = map['collections'];
-        if (rawCollections is List) {
-          for (final value in rawCollections) {
-            if (value is! Map) continue;
-            final rawId = value['id']?.toString().trim() ?? '';
-            var id = rawId.isEmpty
-                ? null
-                : (knownCollectionIds[rawId] ?? localCollectionIds[rawId]);
-            final name = value['name']?.toString().trim() ?? '';
-            if (id == null) {
-              if (name.isEmpty) continue;
-              final lookup = name.toLowerCase();
-              if (rawId.isEmpty) id = knownCollections[lookup];
-              if (id == null) {
-                final created = await createCollection(
-                  knownCollections.containsKey(lookup) && rawId.isNotEmpty
-                      ? '$name (imported)'
-                      : name,
+      final anchors = <NoteAnchorInput>[];
+      final rawAnchors = raw['anchors'];
+      if (rawAnchors is List) {
+        for (final value in rawAnchors) {
+          if (value is! Map) continue;
+          final anchor = Map<String, Object?>.from(value);
+          final kind = anchor['targetKind']?.toString().trim() ?? '';
+          final key = anchor['targetKey']?.toString().trim() ?? '';
+          if (kind.isEmpty || key.isEmpty) continue;
+          final statusName = anchor['status']?.toString();
+          final status = statusName == 'resolved'
+              ? NoteAnchorStatus.exact
+              : NoteAnchorStatus.values.firstWhere(
+                  (candidate) => candidate.wireName == statusName,
+                  orElse: () => NoteAnchorStatus.exact,
                 );
-                id = created.id;
-                localCollectionIds[id] = id;
-                knownCollections[lookup] = id;
-              }
-            }
-            if (!collectionIds.contains(id)) collectionIds.add(id);
-          }
+          final rawContext = anchor['context'];
+          anchors.add(
+            NoteAnchorInput(
+              targetKind: kind,
+              targetKey: key,
+              snapshotHash: anchor['snapshotHash']?.toString(),
+              targetLabel: anchor['targetLabel']?.toString() ?? '',
+              status: status,
+              context: rawContext is Map
+                  ? Map<String, Object?>.from(rawContext)
+                  : null,
+            ),
+          );
         }
-        final createdAt = DateTime.tryParse(map['createdAt']?.toString() ?? '');
-        final updatedAt = DateTime.tryParse(map['updatedAt']?.toString() ?? '');
-        final deletedAt = DateTime.tryParse(map['deletedAt']?.toString() ?? '');
-        await create(
+      }
+      final tags = <String>[];
+      final rawTags = raw['tags'];
+      if (rawTags is List) {
+        for (final value in rawTags) {
+          final tag = value?.toString().trim() ?? '';
+          if (tag.isNotEmpty) tags.add(tag);
+        }
+      }
+      final collectionIds = <String>[];
+      final rawCollections = raw['collections'];
+      if (rawCollections is List) {
+        for (final value in rawCollections) {
+          if (value is! Map) continue;
+          final id = resolveCollection(
+            rawId: value['id']?.toString() ?? '',
+            name: value['name']?.toString() ?? '',
+          );
+          if (!collectionIds.contains(id)) collectionIds.add(id);
+        }
+      }
+      final createdAt = DateTime.tryParse(raw['createdAt']?.toString() ?? '');
+      final updatedAt = DateTime.tryParse(raw['updatedAt']?.toString() ?? '');
+      final deletedAt = DateTime.tryParse(raw['deletedAt']?.toString() ?? '');
+      notes.add(
+        _ImportNotePlan(
           uuid: uuid,
-          title: map['title']?.toString() ?? '',
-          bodyMarkdown: map['bodyMarkdown']?.toString() ?? '',
-          anchors: anchors,
-          tags: tags,
+          title: raw['title']?.toString() ?? '',
+          bodyMarkdown: raw['bodyMarkdown']?.toString() ?? '',
+          anchors: _normalizeAnchors(anchors),
+          tags: _normalizeTags(tags),
           collectionIds: collectionIds,
           createdAt: createdAt,
           updatedAt: updatedAt,
           deletedAt: deletedAt,
-        );
-        added++;
-      } catch (_) {
-        failed++;
-      }
+        ),
+      );
     }
-    return NotesImportResult(added: added, skipped: skipped, failed: failed);
+
+    _writeSync('导入笔记', () {
+      for (final collection in plannedCollections) {
+        _db.execute(
+          'INSERT INTO collections(id, name, created_at, updated_at) '
+          'VALUES (?, ?, ?, ?)',
+          [
+            collection.id,
+            collection.name,
+            (collection.createdAt ?? DateTime.now().toUtc())
+                .toUtc()
+                .toIso8601String(),
+            (collection.updatedAt ??
+                    collection.createdAt ??
+                    DateTime.now().toUtc())
+                .toUtc()
+                .toIso8601String(),
+          ],
+        );
+      }
+      for (final note in notes) {
+        final id = _newUuid();
+        final createdAt = note.createdAt ?? DateTime.now().toUtc();
+        final updatedAt = note.updatedAt ?? createdAt;
+        final created = _formatTimestamp(createdAt);
+        _db.execute(
+          'INSERT INTO notes('
+          'id, uuid, title, body_md, body_plain, created_at, updated_at, '
+          'deleted_at, revision'
+          ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)',
+          [
+            id,
+            note.uuid,
+            note.title,
+            note.bodyMarkdown,
+            plainTextFromMarkdown(note.bodyMarkdown),
+            created,
+            _formatTimestamp(updatedAt),
+            note.deletedAt == null ? null : _formatTimestamp(note.deletedAt!),
+          ],
+        );
+        _insertAnchors(id, note.anchors, created);
+        _insertTags(id, note.tags);
+        _insertCollections(id, note.collectionIds);
+      }
+    });
+    return NotesImportResult(added: notes.length, skipped: skipped, failed: 0);
   }
 
   void _validateImportPayload(Object? decoded, List<Object?> root) {
     final collectionIds = <String>{};
-    final collectionNames = <String>{};
     final registry = decoded is Map ? decoded['collections'] : null;
     if (registry != null && registry is! List) {
       throw const NotesException(
@@ -1233,13 +1294,6 @@ class NotesStore {
           throw NotesException(
             NotesErrorCode.invalidInput,
             '导入文件包含重复集合 id：$id',
-          );
-        }
-        final lookup = name.toLowerCase();
-        if (!collectionNames.add(lookup)) {
-          throw NotesException(
-            NotesErrorCode.invalidInput,
-            '导入文件包含重复集合名称：$name',
           );
         }
       }
@@ -2363,4 +2417,42 @@ CREATE INDEX idx_note_collections_collection
         'T${pad(utc.hour, 2)}:${pad(utc.minute, 2)}:${pad(utc.second, 2)}'
         '.${fraction}Z';
   }
+}
+
+class _ImportCollectionPlan {
+  const _ImportCollectionPlan({
+    required this.id,
+    required this.name,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  final String id;
+  final String name;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+}
+
+class _ImportNotePlan {
+  const _ImportNotePlan({
+    required this.uuid,
+    required this.title,
+    required this.bodyMarkdown,
+    required this.anchors,
+    required this.tags,
+    required this.collectionIds,
+    this.createdAt,
+    this.updatedAt,
+    this.deletedAt,
+  });
+
+  final String uuid;
+  final String title;
+  final String bodyMarkdown;
+  final List<NoteAnchorInput> anchors;
+  final List<String> tags;
+  final List<String> collectionIds;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final DateTime? deletedAt;
 }

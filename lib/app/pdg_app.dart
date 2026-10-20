@@ -101,6 +101,7 @@ class _PdgAppState extends State<PdgApp> with WidgetsBindingObserver {
     return AnimatedBuilder(
       animation: settings,
       builder: (context, _) {
+        services.search.lang = settings.language;
         return AppScope(
           services: services,
           child: MaterialApp(

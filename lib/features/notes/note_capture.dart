@@ -206,11 +206,17 @@ Future<void> captureTextToNote(
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: Text(strings.commonCancel),
             ),
-            FilledButton.icon(
+            TextButton(
               onPressed: () =>
                   Navigator.of(dialogContext).pop(const _CaptureChoice()),
-              icon: const Icon(Icons.add, size: 18),
-              label: Text(strings.notesCaptureNew),
+              child: Text(strings.notesCaptureSave),
+            ),
+            FilledButton.icon(
+              onPressed: () =>
+                  Navigator.of(dialogContext)
+                      .pop(const _CaptureChoice(openAfterSave: true)),
+              icon: const Icon(Icons.open_in_new, size: 18),
+              label: Text(strings.notesCaptureSaveAndOpen),
             ),
           ],
         );
@@ -300,7 +306,12 @@ Future<void> captureTextToNote(
     return;
   }
   if (!context.mounted) return;
-  await AppNav.push<void>(context, NoteEditorPage(note: record));
+  if (choice.openAfterSave) {
+    await AppNav.push<void>(context, NoteEditorPage(note: record));
+  } else {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(strings.notesCaptured)));
+  }
 }
 
 /// Adds an entity link to a note, letting the user append to an existing note
@@ -320,7 +331,8 @@ Future<void> addEntityToNote(
 );
 
 class _CaptureChoice {
-  const _CaptureChoice({this.existing});
+  const _CaptureChoice({this.existing, this.openAfterSave = false});
 
   final NoteRecord? existing;
+  final bool openAfterSave;
 }

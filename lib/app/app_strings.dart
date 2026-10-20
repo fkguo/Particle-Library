@@ -880,6 +880,9 @@ class AppStrings {
   String get notesCopyMarkdown => _t('复制为 Markdown', 'Copy as Markdown');
   String get notesCaptureTitle => _t('添加到笔记', 'Add to note');
   String get notesCaptureNew => _t('新建笔记', 'New note');
+  String get notesCaptureSave => _t('保存', 'Save');
+  String get notesCaptureSaveAndOpen => _t('保存并打开', 'Save & open');
+  String get notesCaptured => _t('已保存到笔记', 'Saved to notes');
   String get notesCaptureSearchHint => _t('搜索已有笔记', 'Search existing notes');
   String get notesCaptureAppendHint => _t(
     '选择已有笔记追加选中的内容，或新建一条：',
