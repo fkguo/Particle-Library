@@ -122,6 +122,29 @@ void main() {
     expect((await store.noteById(note.id))!.revision, revision);
   });
 
+  testWidgets('a conflict cannot be overwritten by the next autosave', (
+    tester,
+  ) async {
+    final note = await store.create(title: 'Shared', bodyMarkdown: 'mine');
+    await pumpEditor(tester, note: note);
+    await store.update(
+      note.id,
+      bodyMarkdown: 'theirs',
+      expectedRevision: note.revision,
+    );
+
+    await tester.enterText(find.byType(TextField).at(1), 'my newer edit');
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+    expect(find.text('Save failed'), findsWidgets);
+
+    await tester.enterText(find.byType(TextField).at(1), 'my newer edit 2');
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+    final saved = (await store.noteById(note.id))!;
+    expect(saved.bodyMarkdown, 'theirs');
+  });
+
   testWidgets('postpones autosave while a CJK IME composition is open', (
     tester,
   ) async {

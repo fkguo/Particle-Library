@@ -148,6 +148,32 @@ void main() {
     });
   });
 
+  testWidgets(
+    'existing note reloads the saved revision after Evidence remount',
+    (tester) async {
+      final note = await store.create(title: 'Existing', bodyMarkdown: 'v1');
+      await pumpWorkspace(tester);
+      await tester.tap(find.text('Existing').first);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(2), 'v2');
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Evidence'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Notes'));
+      await tester.pumpAndSettle();
+
+      final body = tester.widget<TextField>(find.byType(TextField).at(2));
+      expect(body.controller!.text, 'v2');
+      await tester.enterText(find.byType(TextField).at(2), 'v3');
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pumpAndSettle();
+      final saved = (await store.noteById(note.id))!;
+      expect(saved.bodyMarkdown, 'v3');
+    },
+  );
+
   testWidgets('draft survives switching to Evidence and back', (tester) async {
     await pumpWorkspace(tester);
     await tester.tap(find.widgetWithText(FilledButton, 'New note').first);

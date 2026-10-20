@@ -1111,7 +1111,7 @@ class NotesStore {
       plannedCollections.add(plan);
       plannedNames.add(targetName.toLowerCase());
       knownByName[targetName.toLowerCase()] = id;
-      knownByName[lookup] = id;
+      if (targetName == trimmedName) knownByName[lookup] = id;
       if (trimmedId.isNotEmpty) {
         knownByImportedId[trimmedId] = id;
         localById[trimmedId] = id;

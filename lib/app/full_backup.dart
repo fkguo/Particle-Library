@@ -115,15 +115,17 @@ class FullBackup {
         payload['formatVersion'] != 2) {
       throw const FormatException('不支持的完整备份版本');
     }
-    final rawUser = payload['user'];
-    if (isFull && rawUser is Map) {
-      await user.importData(Map<String, Object?>.from(rawUser));
-    }
     final rawNotes = payload['notes'];
     var importedNotes = 0;
     if (rawNotes != null && notes != null) {
       final result = await notes.importJson(rawNotes);
       importedNotes = result.added;
+    }
+    // Import notes first: a malformed notes payload must not overwrite the
+    // user's settings before it is rejected.
+    final rawUser = payload['user'];
+    if (isFull && rawUser is Map) {
+      await user.importData(Map<String, Object?>.from(rawUser));
     }
     var restoredPdfs = 0;
     if (entries.isNotEmpty) {

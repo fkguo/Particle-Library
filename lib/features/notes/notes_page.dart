@@ -1810,6 +1810,10 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       note: selected,
       changeSignal: widget.changes,
       onDeleted: _onDeleted,
+      onSaved: (saved) {
+        if (!mounted) return;
+        setState(() => _selected = saved);
+      },
     );
   }
 

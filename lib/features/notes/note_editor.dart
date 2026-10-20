@@ -480,21 +480,27 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       _savedAnchorSignature = _anchorSignature();
       _collectionsDirty = false;
       changeSignal?.value++;
+      // Notify the owner even when this widget is being disposed: a draft
+      // remount needs the durable row so it does not create a second note.
+      widget.onSaved?.call(saved);
       if (_disposed || !mounted) return saved;
       final stillDirty = _hasChanges;
       setState(() {
         _stage = stillDirty ? _SaveStage.pending : _SaveStage.saved;
         _saveError = null;
       });
-      widget.onSaved?.call(saved);
       if (stillDirty) _scheduleAutosave();
       return saved;
     } catch (error) {
       _saving = false;
       // A content update may have committed before a membership edge failed.
       // Reload the durable row so the next autosave does not reuse a stale
-      // revision and turn a recoverable failure into a conflict loop.
-      if (existing != null) {
+      // revision. A real conflict, however, must keep the stale revision so
+      // the next save cannot silently overwrite the other writer's content;
+      // the Reload/Keep-mine banner is the only resolution path.
+      final conflict =
+          error is NotesException && error.code == NotesErrorCode.conflict;
+      if (!conflict && existing != null) {
         try {
           final latest = await widget.store.noteById(existing.id);
           if (latest != null && mounted) {
@@ -502,9 +508,11 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
             _savedTitle = latest.title;
             _savedBody = latest.bodyMarkdown;
             _savedTags = latest.tagNames;
-            _savedCollectionIds = {
+            _collectionIds = {
               for (final collection in latest.collections) collection.id,
             };
+            _savedCollectionIds = Set<String>.of(_collectionIds);
+            _collectionsDirty = false;
           }
         } catch (_) {
           // Keep the original error; the user can still retry or copy text.
