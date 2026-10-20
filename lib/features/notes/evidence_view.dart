@@ -128,7 +128,7 @@ class NotesEvidenceView extends StatelessWidget {
                 ),
                 _cell(context, _captured(row), muted: true),
                 _cell(context, _current(row)),
-                _status(context, row.status),
+                _status(context, row.status, row.type),
                 _cell(context, '${row.noteCount}'),
               ],
             ),
@@ -164,7 +164,7 @@ class NotesEvidenceView extends StatelessWidget {
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                       ),
-                      _statusChip(context, row.status),
+                      _statusChip(context, row.status, row.type),
                     ],
                   ),
                   const SizedBox(height: 1),
@@ -291,15 +291,23 @@ class NotesEvidenceView extends StatelessWidget {
           );
   }
 
-  Widget _status(BuildContext context, NoteEvidenceStatus status) => Padding(
+  Widget _status(
+    BuildContext context,
+    NoteEvidenceStatus status,
+    NoteEvidenceType type,
+  ) => Padding(
     padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
     child: Align(
       alignment: Alignment.centerLeft,
-      child: _statusChip(context, status),
+      child: _statusChip(context, status, type),
     ),
   );
 
-  Widget _statusChip(BuildContext context, NoteEvidenceStatus status) {
+  Widget _statusChip(
+    BuildContext context,
+    NoteEvidenceStatus status,
+    NoteEvidenceType type,
+  ) {
     final color = switch (status) {
       NoteEvidenceStatus.current => context.palette.primary,
       NoteEvidenceStatus.changed => context.palette.warning,
@@ -316,6 +324,17 @@ class NotesEvidenceView extends StatelessWidget {
       NoteEvidenceStatus.unresolved => strings.notesEvidenceStatusUnresolved,
       NoteEvidenceStatus.uncompared => strings.notesEvidenceStatusUncompared,
     };
+    if (type == NoteEvidenceType.measurement &&
+        (status == NoteEvidenceStatus.current ||
+            status == NoteEvidenceStatus.changed)) {
+      // A paper measurement is not expected to equal the PDG average/fit.
+      // Keep the numeric comparison, but do not call it current/changed.
+      return Text(
+        '—',
+        style: Theme.of(context).textTheme.bodySmall
+            ?.copyWith(color: context.palette.textSecondary),
+      );
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(

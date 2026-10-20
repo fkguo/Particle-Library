@@ -6,6 +6,7 @@ import 'package:pdgapp/core/errors.dart';
 import 'package:pdgapp/data/pdg_database.dart';
 import 'package:pdgapp/data/pdg_repository.dart';
 import 'package:pdgapp/data/sql_executor.dart';
+import 'package:pdgapp/features/notes/note_evidence_resolver.dart';
 import 'package:pdgapp/domain/display.dart';
 import 'package:pdgapp/domain/filters.dart';
 import 'package:pdgapp/domain/labels.dart';
@@ -65,6 +66,23 @@ void main() {
     expect(await db.descriptionForPdgid('S032M'), 'D0 MASS');
     expect(await db.descriptionForPdgid('not-a-pdgid'), isNull);
   });
+
+  test(
+    'measurement Evidence compares against the current PDG summary',
+    () async {
+      final rows = await executor.select(
+        'SELECT id FROM pdgmeasurement WHERE pdgid = ? LIMIT 1',
+        ['S032M'],
+      );
+      expect(rows, isNotEmpty);
+      final current = await PdgEvidenceResolver(db)
+          .resolveMeasurement('S032M', rows.first['id']! as int);
+      expect(current, isNotNull);
+      expect(current!.edition, '2026');
+      expect(current.quantityLabel, 'D0 MASS');
+      expect(current.value, isNotNull);
+    },
+  );
 
   test('captured summary resolves its current-edition counterpart', () async {
     final entry = await db.requireEntryByPdgid('S032M');

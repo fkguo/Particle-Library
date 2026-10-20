@@ -1,5 +1,6 @@
 import '../../data/pdg_database.dart';
 import '../../domain/display.dart';
+import '../../domain/models.dart';
 import '../../notes/note_evidence.dart';
 
 /// Resolves Evidence current values from the read-only PDG snapshot.
@@ -13,22 +14,20 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
     String pdgid,
     int measurementId,
   ) async {
-    final bundle = await _database.measurementById(measurementId);
-    if (bundle == null || bundle.measurement.pdgid != pdgid) return null;
-    final value = bundle.primaryValue;
-    if (value == null) return null;
-    final display = DisplayQuantity.fromValue(value);
-    final quantityLabel = await _database.descriptionForPdgid(pdgid);
-    return CurrentEvidence(
-      value: value.value?.toString(),
-      errPlus: value.errorPositive?.toString(),
-      errMinus: value.errorNegative?.toString(),
-      unit: value.unitText,
+    // A measurement is a paper-level object; the useful "current" comparison
+    // is the current PDG summary (average/fit) for the same quantity. Keeping
+    // the measurement row itself would compare it with an identical frozen
+    // value and would never reveal a change in the PDG consensus.
+    final entry = await _database.entryByPdgid(pdgid);
+    if (entry == null) return null;
+    final summaries = await _database.summariesForEntry(
+      entry.id,
       edition: _database.currentEdition,
-      limitType: _limitType(value.limitType),
-      valueText: display.text,
-      quantityLabel: quantityLabel,
     );
+    final selection = selectBestSummary(summaries);
+    final preferred = selection.preferred;
+    if (preferred == null) return null;
+    return _fromSummary(preferred);
   }
 
   @override
@@ -43,8 +42,12 @@ class PdgEvidenceResolver implements NoteEvidenceResolver {
       capturedRowId: rowId,
     );
     if (summary == null) return null;
+    return _fromSummary(summary);
+  }
+
+  Future<CurrentEvidence> _fromSummary(Summary summary) async {
     final display = DisplayQuantity.fromSummary(summary);
-    final quantityLabel = await _database.descriptionForPdgid(pdgid);
+    final quantityLabel = await _database.descriptionForPdgid(summary.pdgid);
     return CurrentEvidence(
       value: summary.value?.toString(),
       errPlus: summary.errorPositive?.toString(),
