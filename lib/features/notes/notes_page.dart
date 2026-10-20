@@ -746,6 +746,55 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     }
   }
 
+  Future<void> _exportScopeMarkdown() async {
+    final store = widget.store;
+    if (store == null) return;
+    final strings = widget.strings;
+    try {
+      final notes = _collectionFilter != null
+          ? await store.notesInCollection(_collectionFilter!, limit: 1000)
+          : _unfiledScope
+          ? await store.unfiled(limit: 1000)
+          : await store.allForExport();
+      if (!mounted) return;
+      if (notes.isEmpty) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(strings.notesExportEmpty)));
+        return;
+      }
+      final buffer = StringBuffer()
+        ..writeln('# $_scopeLabel')
+        ..writeln()
+        ..writeln('Exported: ${DateTime.now().toUtc().toIso8601String()}')
+        ..writeln();
+      for (final note in notes) {
+        buffer
+          ..writeln('---')
+          ..writeln()
+          ..writeln(noteAsMarkdown(note, untitled: strings.notesUntitled))
+          ..writeln();
+      }
+      final safeScope = _scopeLabel
+          .replaceAll(RegExp(r'[^A-Za-z0-9_\-]+'), '-')
+          .replaceAll(RegExp(r'-+'), '-');
+      final exported = await saveOrShareBytes(
+        suggestedName:
+            'ParticleLibrary-$safeScope-${DateTime.now().toIso8601String().substring(0, 10)}.md',
+        bytes: utf8.encode(buffer.toString()),
+        type: const XTypeGroup(label: 'Markdown', extensions: ['md']),
+        mimeType: 'text/markdown',
+      );
+      if (!exported || !mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(strings.notesExportFileDone)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${strings.notesExportFileFailed}: $error')),
+      );
+    }
+  }
+
   Future<void> _importJsonFile() async {
     final store = widget.store;
     if (store == null) return;
@@ -886,6 +935,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                               _exportJsonFile();
                             case 'markdown':
                               _exportMarkdownFile();
+                            case 'scope-markdown':
+                              _exportScopeMarkdown();
                             case 'import':
                               _importJsonFile();
                             case 'copy':
@@ -900,6 +951,10 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                           PopupMenuItem(
                             value: 'markdown',
                             child: Text(strings.notesExportMarkdownFile),
+                          ),
+                          PopupMenuItem(
+                            value: 'scope-markdown',
+                            child: Text(strings.notesExportScopeMarkdown),
                           ),
                           const PopupMenuDivider(),
                           PopupMenuItem(

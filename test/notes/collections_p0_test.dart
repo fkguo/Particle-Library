@@ -89,9 +89,12 @@ void main() {
       overridePath: '${otherDir.path}/user.db',
     );
     try {
+      final source = (await store.collections()).single;
       final result = await other.importJson(decoded);
       expect(result.added, 0);
-      expect((await other.collections()).single.name, 'Empty project');
+      final imported = (await other.collections()).single;
+      expect(imported.name, 'Empty project');
+      expect(imported.id, source.id);
     } finally {
       await other.close();
       await otherDir.delete(recursive: true);

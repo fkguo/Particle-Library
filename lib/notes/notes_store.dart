@@ -552,11 +552,17 @@ class NotesStore {
     });
   }
 
-  Future<NoteCollection> createCollection(String name) async {
+  Future<NoteCollection> createCollection(
+    String name, {
+    String? id,
+    DateTime? createdAt,
+  }) async {
     _ensureOpen();
     final normalized = _normalizeCollectionName(name);
     final now = _nowIso();
-    final id = _newUuid();
+    final requestedId = id?.trim() ?? '';
+    final collectionId = requestedId.isEmpty ? _newUuid() : requestedId;
+    final created = (createdAt ?? DateTime.now().toUtc()).toUtc();
     _writeSync('创建 collection', () {
       if (_collectionNameExists(normalized)) {
         throw NotesException(
@@ -564,13 +570,22 @@ class NotesStore {
           'collection 名称已存在：$normalized',
         );
       }
+      final existing = _db.select('SELECT 1 FROM collections WHERE id = ?', [
+        collectionId,
+      ]);
+      if (existing.isNotEmpty) {
+        throw NotesException(
+          NotesErrorCode.invalidInput,
+          'collection id 已存在：$collectionId',
+        );
+      }
       _db.execute(
         'INSERT INTO collections(id, name, created_at, updated_at) '
         'VALUES (?, ?, ?, ?)',
-        [id, normalized, now, now],
+        [collectionId, normalized, created.toIso8601String(), now],
       );
     });
-    return _requireCollection(id);
+    return _requireCollection(collectionId);
   }
 
   Future<NoteCollection> renameCollection(String id, String name) async {
@@ -1024,17 +1039,26 @@ class NotesStore {
     final knownCollectionIds = <String, String>{};
     final rawRegistry = decoded is Map ? decoded['collections'] : null;
     if (rawRegistry is List) {
+      final existing = <String, String>{
+        for (final collection in await collections())
+          collection.id: collection.id,
+      };
       for (final value in rawRegistry) {
         if (value is! Map) continue;
         final name = value['name']?.toString().trim() ?? '';
         if (name.isEmpty) continue;
+        final rawId = value['id']?.toString().trim() ?? '';
         final lookup = name.toLowerCase();
-        var id = knownCollections[lookup];
+        var id = rawId.isNotEmpty ? existing[rawId] : null;
+        id ??= knownCollections[lookup];
         if (id == null) {
-          id = (await createCollection(name)).id;
+          id = (await createCollection(
+            name,
+            id: rawId.isEmpty ? null : rawId,
+          )).id;
+          if (rawId.isNotEmpty) existing[rawId] = id;
           knownCollections[lookup] = id;
         }
-        final rawId = value['id']?.toString().trim() ?? '';
         if (rawId.isNotEmpty) knownCollectionIds[rawId] = id;
       }
     }

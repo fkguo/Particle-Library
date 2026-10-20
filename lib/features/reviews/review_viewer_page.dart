@@ -12,6 +12,8 @@ import '../../app/navigation.dart';
 import '../../data/review_annotation_notes.dart';
 import '../../data/review_annotations.dart';
 import '../../notes/notes_store.dart';
+import '../../notes/notes_models.dart';
+import '../common/snack_bars.dart';
 import '../notes/note_editor.dart';
 
 class ReviewViewerPage extends StatefulWidget implements ImmersivePage {
@@ -117,6 +119,96 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   void _notifyNotesChanged() {
     if (!mounted) return;
     AppScope.of(context).notesChanges.value++;
+  }
+
+  void _offerAddToCollection(List<ReviewAnnotation> additions) {
+    if (!mounted || additions.isEmpty) return;
+    final strings = AppScope.of(context).strings;
+    showActionSnackBar(
+      ScaffoldMessenger.of(context),
+      message: strings.reviewHighlightAdded,
+      actionLabel: strings.notesAddToCollection,
+      onAction: () => unawaited(_addAnnotationsToCollection(additions)),
+    );
+  }
+
+  Future<void> _addAnnotationsToCollection(
+    List<ReviewAnnotation> additions,
+  ) async {
+    final store = _notes;
+    if (store == null || !mounted) return;
+    final strings = AppScope.of(context).strings;
+    final collections = await store.collections();
+    if (!mounted) return;
+    if (collections.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(strings.notesNoCollections)));
+      return;
+    }
+    final selected = <String>{};
+    final result = await showDialog<Set<String>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(strings.notesAddToCollection),
+          content: SizedBox(
+            width: 360,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 360),
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final NoteCollection collection in collections)
+                    CheckboxListTile(
+                      dense: true,
+                      value: selected.contains(collection.id),
+                      title: Text(collection.name),
+                      onChanged: (checked) => setDialogState(() {
+                        if (checked ?? false) {
+                          selected.add(collection.id);
+                        } else {
+                          selected.remove(collection.id);
+                        }
+                      }),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(strings.commonCancel),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(Set.of(selected)),
+              child: Text(strings.commonSave),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null || result.isEmpty || !mounted) return;
+    try {
+      for (final annotation in additions) {
+        final noteId = annotation.noteId;
+        if (noteId == null) continue;
+        for (final collectionId in result) {
+          await store.addNoteToCollection(noteId, collectionId);
+        }
+      }
+      if (!mounted) return;
+      _notifyNotesChanged();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(strings.reviewHighlightAddedToCollection)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${strings.notesCollectionFailed}: $error')),
+      );
+    }
   }
 
   Future<void> _openExternally() async {
@@ -248,6 +340,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       if (!mounted) return;
       setState(() => _annotations = [...additions, ..._annotations]);
       _notifyNotesChanged();
+      _offerAddToCollection(additions);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

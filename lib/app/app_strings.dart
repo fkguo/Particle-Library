@@ -753,6 +753,12 @@ class AppStrings {
   String get notesPdgLookupAdded => _t('来源已添加到笔记', 'Source added to note');
   String notesSourceLine(String source) => _t('来源：$source', 'Source: $source');
   String get notesAddToCollection => _t('添加到 Collection', 'Add to collection');
+  String get reviewHighlightAdded => _t(
+    '高亮已保存为笔记，可加入集合。',
+    'Highlight saved as a note; add it to a collection.',
+  );
+  String get reviewHighlightAddedToCollection =>
+      _t('高亮笔记已加入集合。', 'Highlight notes added to the collection.');
   String get notesAlreadyInCollection => _t('已在其中', 'Already added');
   String get notesNoCollections =>
       _t('还没有 Collection；先新建一个。', 'No collections yet; create one first.');
@@ -870,6 +876,8 @@ class AppStrings {
       _t('从 JSON 文件导入…', 'Import from JSON file…');
   String get notesExportFileDone => _t('笔记已导出', 'Notes exported');
   String get notesExportFileFailed => _t('导出失败', 'Export failed');
+  String get notesExportScopeMarkdown =>
+      _t('导出当前范围 Markdown', 'Export current scope as Markdown');
   String get notesImportDone => _t('导入完成', 'Import complete');
   String notesImportSummary(int added, int skipped, int failed) => _t(
     '新增 $added 条，跳过 $skipped 条，失败 $failed 条',
