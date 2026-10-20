@@ -1376,6 +1376,28 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                         icon: const Icon(Icons.delete_outline, size: 20),
                       ),
                       PopupMenuButton<String>(
+                        tooltip: strings.notesCopyCiteKeys,
+                        icon: const Icon(Icons.format_quote, size: 20),
+                        onSelected: (value) {
+                          switch (value) {
+                            case 'citekeys':
+                              _copyCiteKeys();
+                            case 'bibtex':
+                              _copyBibtex();
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: 'citekeys',
+                            child: Text(strings.notesCopyCiteKeys),
+                          ),
+                          PopupMenuItem(
+                            value: 'bibtex',
+                            child: Text(strings.notesCopyBibtex),
+                          ),
+                        ],
+                      ),
+                      PopupMenuButton<String>(
                         tooltip: strings.notesExportAll,
                         icon: const Icon(Icons.import_export, size: 20),
                         onSelected: (value) {
