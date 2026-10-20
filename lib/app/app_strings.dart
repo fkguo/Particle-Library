@@ -738,9 +738,12 @@ class AppStrings {
       _t('此范围内还没有可显示数值的证据。', 'No numeric evidence in this scope yet.');
   String get notesEvidenceQuantity => _t('测量量', 'Quantity');
   String get notesEvidenceHint => _t(
-    '捕获值是写入笔记时冻结的值；当前值来自当前 PDG 版本，状态列比较两者。',
-    'Captured is frozen when the note is written; Current comes from the latest PDG edition. Status compares them.',
+    '捕获值是写入笔记时冻结的值。当前值表示同一对象在当前 PDG 版本中的状态：实验测量是同一行是否仍在且未变；PDG 汇总才是当前平均值/拟合值。',
+    'Captured is frozen when written. Current is the same object in the latest PDG edition: for a measurement it checks that the same row still exists and is unchanged; for a PDG summary it is the current average/fit.',
   );
+  String get notesEvidenceTypeMeasurement => _t('实验测量', 'Measurement');
+  String get notesEvidenceTypeSummary => _t('PDG 汇总', 'PDG summary');
+  String get notesEvidenceTypeReference => _t('文献', 'Reference');
   String get notesEvidenceCaptured => _t('捕获值', 'Captured');
   String get notesEvidenceCurrent => _t('当前值', 'Current');
   String get notesEvidenceStatusCurrent => _t('一致', 'Current');

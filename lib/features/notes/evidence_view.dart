@@ -121,9 +121,9 @@ class NotesEvidenceView extends StatelessWidget {
           for (final row in rows)
             TableRow(
               children: [
-                _cell(
+                _quantityCell(
                   context,
-                  row.title,
+                  row,
                   onTap: onOpenRow == null ? null : () => onOpenRow!(row),
                 ),
                 _cell(context, _captured(row), muted: true),
@@ -167,6 +167,12 @@ class NotesEvidenceView extends StatelessWidget {
                       _statusChip(context, row.status),
                     ],
                   ),
+                  const SizedBox(height: 1),
+                  Text(
+                    _typeLabel(row),
+                    style: Theme.of(context).textTheme.labelSmall
+                        ?.copyWith(color: palette.textSecondary),
+                  ),
                   const SizedBox(height: Insets.xs),
                   Text(
                     '${strings.notesEvidenceCaptured}: ${_captured(row)}',
@@ -208,6 +214,46 @@ class NotesEvidenceView extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _typeLabel(NoteEvidenceRow row) => switch (row.type) {
+    NoteEvidenceType.measurement => strings.notesEvidenceTypeMeasurement,
+    NoteEvidenceType.pdgSummary => strings.notesEvidenceTypeSummary,
+    NoteEvidenceType.reference => strings.notesEvidenceTypeReference,
+  };
+
+  Widget _quantityCell(
+    BuildContext context,
+    NoteEvidenceRow row, {
+    VoidCallback? onTap,
+  }) {
+    final child = Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            row.title,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 1),
+          Text(
+            _typeLabel(row),
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: context.palette.textSecondary),
+          ),
+        ],
+      ),
+    );
+    return onTap == null
+        ? child
+        : Material(
+            color: Colors.transparent,
+            child: InkWell(onTap: onTap, child: child),
+          );
   }
 
   Widget _header(BuildContext context, String text) => Padding(
