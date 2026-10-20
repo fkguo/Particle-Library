@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:file_selector/file_selector.dart';
 
 import '../../app/app_scope.dart';
@@ -15,6 +16,7 @@ import '../common/resize_handle.dart';
 import '../common/snack_bars.dart';
 import '../common/ui.dart';
 import '../../app/navigation.dart';
+import '../../data/inspire_bibtex.dart';
 import 'evidence_view.dart';
 import 'note_editor.dart';
 import 'notes_entity.dart';
@@ -1065,6 +1067,58 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     }
   }
 
+  Future<void> _copyCiteKeys() async {
+    final notes = _notes;
+    final scope = AppScope.maybeOf(context);
+    final database = scope?.database;
+    final strings = widget.strings;
+    final targets = referenceTargetsForCiteKeys(notes);
+    if (targets.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(strings.notesNoCiteKeys)));
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(content: Text(strings.notesCiteKeysFetching)),
+    );
+    final service = const InspireBibtexService();
+    final keys = <String>[];
+    for (final target in targets) {
+      var inspireId = '';
+      var doi = target.doi ?? '';
+      final documentId = target.documentId;
+      if (database != null && documentId != null) {
+        var reference = await database.referenceByDocumentId(documentId);
+        final referenceId = int.tryParse(documentId);
+        if (reference == null && referenceId != null) {
+          reference = await database.referenceById(referenceId);
+        }
+        if (reference != null) {
+          inspireId = reference.inspireId;
+          if (doi.isEmpty) doi = reference.doi;
+        }
+      }
+      if (!InspireBibtexService.canFetch(inspireId: inspireId, doi: doi)) {
+        continue;
+      }
+      final key = await service.fetchCiteKey(inspireId: inspireId, doi: doi);
+      if (key != null && key.isNotEmpty && !keys.contains(key)) {
+        keys.add(key);
+      }
+    }
+    if (!mounted) return;
+    if (keys.isEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text(strings.notesNoCiteKeys)));
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: '\\cite{${keys.join(',')}}'));
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(content: Text(strings.notesCiteKeysCopied(keys.length))),
+    );
+  }
+
   Future<void> _exportScopeMarkdown() async {
     final store = widget.store;
     if (store == null) return;
@@ -1280,6 +1334,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                               _importJsonFile();
                             case 'copy':
                               _exportAll();
+                            case 'citekeys':
+                              _copyCiteKeys();
                           }
                         },
                         itemBuilder: (context) => [
@@ -1303,6 +1359,10 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                           PopupMenuItem(
                             value: 'copy',
                             child: Text(strings.notesExportAll),
+                          ),
+                          PopupMenuItem(
+                            value: 'citekeys',
+                            child: Text(strings.notesCopyCiteKeys),
                           ),
                         ],
                       ),

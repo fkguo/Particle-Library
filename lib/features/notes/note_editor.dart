@@ -1328,10 +1328,24 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                   if (anchors.isNotEmpty ||
                       _draftAnchors.isNotEmpty ||
                       _quickAnchors.isNotEmpty) ...[
-                    Text(
-                      strings.notesAnchorsLabel,
-                      style: Theme.of(context).textTheme.labelSmall
-                          ?.copyWith(color: palette.textSecondary),
+                    Row(
+                      children: [
+                        Text(
+                          strings.notesAnchorsLabel,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: palette.textSecondary),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _anchorSummary(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: palette.textSecondary),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Wrap(
@@ -1563,6 +1577,31 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         ],
       ),
     );
+  }
+
+  String _anchorSummary() {
+    final counts = <String, int>{};
+    var unresolved = 0;
+    for (final anchor in _allAnchors()) {
+      counts.update(anchor.targetKind, (value) => value + 1, ifAbsent: () => 1);
+      if (!anchor.status.isResolved) unresolved++;
+    }
+    final parts = <String>[];
+    for (final entry in counts.entries) {
+      final label = switch (entry.key) {
+        NoteTargetKinds.note => widget.strings.notesAnchorKindNote,
+        NoteTargetKinds.measurement =>
+          widget.strings.notesAnchorKindMeasurement,
+        NoteTargetKinds.reference => widget.strings.notesAnchorKindReference,
+        NoteTargetKinds.review => widget.strings.notesAnchorKindReview,
+        _ => widget.strings.notesAnchorKindPdgid,
+      };
+      parts.add('$label ${entry.value}');
+    }
+    if (unresolved > 0) {
+      parts.add('${widget.strings.notesAnchorUnresolved} $unresolved');
+    }
+    return parts.join(' · ');
   }
 
   Widget _anchorChip(

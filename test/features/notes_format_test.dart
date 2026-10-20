@@ -200,6 +200,27 @@ void main() {
     expect(markdown, contains('| D0 MASS \\| selected | Measurement |'));
   });
 
+  test('reference anchors deduplicate into citation-key targets', () {
+    final note = _note(
+      anchors: [
+        _anchor(
+          targetKind: NoteTargetKinds.reference,
+          targetKey: 'doi:10.1000/ABC',
+          label: 'Paper',
+        ),
+        _anchor(
+          targetKind: NoteTargetKinds.reference,
+          targetKey: 'doc:42',
+          label: 'Paper',
+        ),
+      ],
+    );
+    final targets = referenceTargetsForCiteKeys([note, note]);
+    expect(targets, hasLength(2));
+    expect(targets.first.doi, '10.1000/ABC');
+    expect(targets.last.documentId, '42');
+  });
+
   test('JSON export is versioned and includes anchors and tags', () {
     final json = notesExportJson([
       _note(anchors: [_anchor()], tags: ['lifetime']),

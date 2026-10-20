@@ -940,6 +940,13 @@ class AppStrings {
       _t('从 JSON 文件导入…', 'Import from JSON file…');
   String get notesExportFileDone => _t('笔记已导出', 'Notes exported');
   String get notesExportFileFailed => _t('导出失败', 'Export failed');
+  String get notesCopyCiteKeys => _t('复制引用 key…', 'Copy citation keys…');
+  String notesCiteKeysCopied(int count) =>
+      _t('已复制 $count 个 citation key。', 'Copied $count citation keys.');
+  String get notesNoCiteKeys =>
+      _t('没有可解析的 citation key。', 'No citation keys could be resolved.');
+  String get notesCiteKeysFetching =>
+      _t('正在获取 INSPIRE citation key…', 'Fetching INSPIRE citation keys…');
   String get notesExportScopeMarkdown =>
       _t('导出当前范围 Markdown', 'Export current scope as Markdown');
   String get notesImportDone => _t('导入完成', 'Import complete');

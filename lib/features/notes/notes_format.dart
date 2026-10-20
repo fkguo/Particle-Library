@@ -127,6 +127,49 @@ bool noteMatchesQuery(NoteRecord note, String query) {
   return note.collections.any((c) => matches(c.name));
 }
 
+/// A reference anchor resolved enough to ask INSPIRE for a citation key.
+class ReferenceAnchorTarget {
+  const ReferenceAnchorTarget({this.doi, this.documentId});
+
+  final String? doi;
+  final String? documentId;
+}
+
+/// Unique reference targets in [notes], DOI first.
+List<ReferenceAnchorTarget> referenceTargetsForCiteKeys(
+  Iterable<NoteRecord> notes,
+) {
+  final seen = <String>{};
+  final result = <ReferenceAnchorTarget>[];
+  for (final note in notes) {
+    for (final anchor in note.anchors) {
+      if (anchor.targetKind != NoteTargetKinds.reference) continue;
+      final key = anchor.targetKey.trim();
+      String? doi;
+      String? documentId;
+      if (key.toLowerCase().startsWith('doi:')) {
+        doi = key.substring(4).trim();
+      } else if (key.toLowerCase().startsWith('doc:')) {
+        documentId = key.substring(4).trim();
+      }
+      if ((doi == null || doi.isEmpty) &&
+          (documentId == null || documentId.isEmpty)) {
+        continue;
+      }
+      final identity = 'doi:${doi ?? ''}|doc:${documentId ?? ''}';
+      if (seen.add(identity)) {
+        result.add(
+          ReferenceAnchorTarget(
+            doi: doi?.isEmpty ?? true ? null : doi,
+            documentId: documentId?.isEmpty ?? true ? null : documentId,
+          ),
+        );
+      }
+    }
+  }
+  return result;
+}
+
 /// Markdown archive for one Notes scope: front matter, notes and Evidence.
 String scopeMarkdown({
   required String scope,
