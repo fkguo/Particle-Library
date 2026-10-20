@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pdgapp/app/app_strings.dart';
 import 'package:pdgapp/domain/labels.dart';
 import 'package:pdgapp/features/notes/notes_format.dart';
+import 'package:pdgapp/notes/note_evidence.dart';
 import 'package:pdgapp/notes/notes.dart';
 
 NoteAnchor _anchor({
@@ -174,6 +175,29 @@ void main() {
     expect(markdown, contains('- D0 (S032M) — `pdgid:S032M`'));
     expect(markdown, contains('- A paper (42) — `reference:doc:42`'));
     expect(markdown, contains('Updated: 2026-10-18T09:00:00.000Z'));
+  });
+
+  test('scope Markdown has front matter and an Evidence table', () {
+    final markdown = scopeMarkdown(
+      scope: 'Project',
+      notes: [_note()],
+      evidence: [
+        NoteEvidenceRow(
+          type: NoteEvidenceType.measurement,
+          key: 'm1',
+          title: 'D0 MASS | selected',
+          sourceTargetId: 'measurement:S032M:42',
+          noteIds: {'note-1'},
+          status: NoteEvidenceStatus.uncompared,
+        ),
+      ],
+      untitled: 'Untitled note',
+      exportedAt: DateTime.utc(2026, 10, 21, 1),
+    );
+    expect(markdown, startsWith('---\nscope: "Project"'));
+    expect(markdown, contains('exported_at: 2026-10-21T01:00:00.000Z'));
+    expect(markdown, contains('## Evidence'));
+    expect(markdown, contains('| D0 MASS \\| selected | Measurement |'));
   });
 
   test('JSON export is versioned and includes anchors and tags', () {

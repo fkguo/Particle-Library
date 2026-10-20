@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../app/app_strings.dart';
+import '../../notes/note_evidence.dart';
 import '../../notes/notes.dart';
 
 /// Visible title for a note: the title, else the first body line, else a
@@ -125,6 +126,63 @@ bool noteMatchesQuery(NoteRecord note, String query) {
   if (note.tagNames.any(matches)) return true;
   return note.collections.any((c) => matches(c.name));
 }
+
+/// Markdown archive for one Notes scope: front matter, notes and Evidence.
+String scopeMarkdown({
+  required String scope,
+  required List<NoteRecord> notes,
+  required List<NoteEvidenceRow> evidence,
+  required String untitled,
+  DateTime? exportedAt,
+}) {
+  final stamp = (exportedAt ?? DateTime.now().toUtc())
+      .toUtc()
+      .toIso8601String();
+  final buffer = StringBuffer()
+    ..writeln('---')
+    ..writeln('scope: ${_yaml(scope)}')
+    ..writeln('exported_at: $stamp')
+    ..writeln('notes: ${notes.length}')
+    ..writeln('evidence_rows: ${evidence.length}')
+    ..writeln('---')
+    ..writeln()
+    ..writeln('# $scope')
+    ..writeln();
+  for (final note in notes) {
+    buffer
+      ..writeln('---')
+      ..writeln()
+      ..writeln(noteAsMarkdown(note, untitled: untitled))
+      ..writeln();
+  }
+  if (evidence.isNotEmpty) {
+    buffer
+      ..writeln('## Evidence')
+      ..writeln()
+      ..writeln('| Quantity | Type | Captured | PDG current | Status | Notes |')
+      ..writeln('| --- | --- | --- | --- | --- | --- |');
+    for (final row in evidence) {
+      buffer.writeln(
+        '| ${_mdCell(row.title)} | ${_typeLabel(row.type)} | '
+        '${_mdCell(row.capturedValue)} | ${_mdCell(row.currentValue)} | '
+        '${row.status.name} | ${row.noteCount} |',
+      );
+    }
+    buffer.writeln();
+  }
+  return buffer.toString();
+}
+
+String _mdCell(String value) =>
+    value.replaceAll('\r', ' ').replaceAll('\n', ' ').replaceAll('|', '\\|');
+
+String _yaml(String value) => '"${value.replaceAll('"', '\\"')}"';
+
+String _typeLabel(NoteEvidenceType type) => switch (type) {
+  NoteEvidenceType.measurement => 'Measurement',
+  NoteEvidenceType.pdgSummary => 'PDG summary',
+  NoteEvidenceType.reference => 'Reference',
+};
 
 /// Markdown representation used by the editor's copy action.
 String noteAsMarkdown(NoteRecord note, {String untitled = 'Untitled note'}) {

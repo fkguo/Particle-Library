@@ -1081,18 +1081,21 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
             .showSnackBar(SnackBar(content: Text(strings.notesExportEmpty)));
         return;
       }
-      final buffer = StringBuffer()
-        ..writeln('# $_scopeLabel')
-        ..writeln()
-        ..writeln('Exported: ${DateTime.now().toUtc().toIso8601String()}')
-        ..writeln();
-      for (final note in notes) {
-        buffer
-          ..writeln('---')
-          ..writeln()
-          ..writeln(noteAsMarkdown(note, untitled: strings.notesUntitled))
-          ..writeln();
-      }
+      final evidence = await buildNoteEvidence(
+        notes,
+        resolver: widget.evidenceResolver,
+        currentEdition:
+            AppScope.maybeOf(context)?.database.currentEdition ?? '',
+      );
+      if (!mounted) return;
+      final buffer = StringBuffer(
+        scopeMarkdown(
+          scope: _scopeLabel,
+          notes: notes,
+          evidence: evidence,
+          untitled: strings.notesUntitled,
+        ),
+      );
       final safeScope = _scopeLabel
           .replaceAll(RegExp(r'[^A-Za-z0-9_\-]+'), '-')
           .replaceAll(RegExp(r'-+'), '-');
