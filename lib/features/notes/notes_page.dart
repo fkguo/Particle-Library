@@ -1205,7 +1205,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                     '${widget.storeError}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: palette.textSecondary,
-                      fontFamily: 'Menlo',
+                      fontFamily: AppFonts.monospaceFamily,
                       fontSize: 11.5,
                     ),
                   ),

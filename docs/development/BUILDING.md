@@ -10,7 +10,7 @@ a GitHub **Release** when one is available; they do not need Flutter or Xcode.
 | macOS 12+, universal | **Verified** | Release `.app` built and used for UI testing on macOS 15.6 arm64. |
 | iPhone/iPad | **Simulator and development-signed Release install verified** | A free Personal Team signed and launched both Debug and Release builds on an iPhone; TestFlight/App Store still needs a paid team. |
 | Android | **Scaffolded; signed preview APK** | arm64 smoke-tested on Android 15/API 35; API 24 and 32-bit APKs are built but not device-tested. |
-| Windows | **Not generated** | Needs a Windows host/MSVC and a `windows/` scaffold. |
+| Windows 10/11 x64 | **Release bundle and packaging available** | Requires native smoke-test sign-off before publication. |
 | Linux | **Not generated** | Needs a Linux host/GTK and a `linux/` scaffold. |
 
 Do not present an unverified target as a supported release. The code is
@@ -88,16 +88,20 @@ developer account is needed for longer distribution or TestFlight. An unsigned
 check (`flutter build ios --release --no-codesign`) only validates compilation;
 it cannot be installed on a physical phone.
 
-## Android, Windows and Linux
+## Windows
 
-Android is a preview target; Windows/Linux are **not yet supported by this checkout**, even though most of
-the Dart code is platform-neutral. To add one, do it on a branch and validate
-the full stack (SQLite asset, PDFium, file picker, network, local Zotero API):
+Windows build and packaging instructions are maintained in
+[README-windows.md](../../README-windows.md). The detailed native QA record is
+in [PORTING_CHECKLIST.md](../windows-adaptation/PORTING_CHECKLIST.md).
+
+## Android and Linux
+
+Android is a preview target; Linux is **not yet supported by this checkout**,
+even though most Dart code is platform-neutral. To add Linux, do it on a branch
+and validate the full stack (SQLite asset, PDFium, file picker and network):
 
 ```bash
-# Choose one; this generates the missing platform directory.
-flutter create --platforms=android .
-flutter create --platforms=windows .
+# This generates the missing Linux platform directory.
 flutter create --platforms=linux .
 ```
 
@@ -106,8 +110,6 @@ Before claiming support:
 - **Android:** add `android.permission.INTERNET`; decide whether the local
   Zotero API needs a cleartext/localhost exception; test the 64 MB asset and
   Play Store size; verify `sqlite3_flutter_libs`, `pdfrx` and `file_selector`.
-- **Windows:** build on a Windows machine with MSVC/CMake; verify SQLite,
-  PDFium and file dialogs; provide a proper installer.
 - **Linux:** build on a Linux host with GTK/CMake; verify SQLite, PDFium,
   file dialogs and packaging.
 - Add CI for the new target; a macOS-only build is not enough.

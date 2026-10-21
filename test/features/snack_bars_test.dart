@@ -11,7 +11,10 @@ void main() {
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
       final source = entity.readAsStringSync();
-      final isHelper = entity.path.endsWith('features/common/snack_bars.dart');
+      final normalizedPath = entity.path.replaceAll('\\', '/');
+      final isHelper = normalizedPath.endsWith(
+        'features/common/snack_bars.dart',
+      );
       if (!isHelper && source.contains('SnackBarAction(')) {
         offenders.add('${entity.path}: raw SnackBarAction');
       }

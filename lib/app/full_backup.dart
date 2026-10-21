@@ -80,7 +80,7 @@ class FullBackup {
     Map<String, Object?> payload;
     final entries = <String, Uint8List>{};
     if (bytes.length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4b) {
-      final archive = ZipDecoder().decodeStream(InputFileStream(file.path));
+      final archive = ZipDecoder().decodeBytes(bytes);
       ArchiveFile? backup;
       for (final entry in archive.files) {
         if (!entry.isFile) continue;

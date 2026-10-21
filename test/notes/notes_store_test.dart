@@ -248,6 +248,7 @@ void main() {
     final target = await NotesStore.open(
       overridePath: '${dir.path}/target.db',
     );
+    stores.add(target);
     final first = await target.importJson([original.toJson()]);
     expect(first.added, 1);
     expect(first.skipped, 0);
@@ -259,6 +260,8 @@ void main() {
     expect(imported.anchors.single.targetId, 'pdgid:S008');
     final again = await target.importJson([original.toJson()]);
     expect(again.skipped, 1);
+    await target.close();
+    stores.remove(target);
     await dir.delete(recursive: true);
   });
 

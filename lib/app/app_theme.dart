@@ -1,6 +1,19 @@
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
+abstract final class AppFonts {
+  static const List<String> windowsChineseFallback = <String>[
+    'Microsoft YaHei UI',
+    'Microsoft YaHei',
+  ];
+
+  static String monospaceFamilyFor(TargetPlatform platform) =>
+      platform == TargetPlatform.windows ? 'Consolas' : 'Menlo';
+
+  static String get monospaceFamily =>
+      monospaceFamilyFor(defaultTargetPlatform);
+}
+
 /// Quiet academic palette from the design (§7). Colour is never the sole
 /// carrier of meaning: summaries, limits and inclusion states always have a
 /// text label.
@@ -197,6 +210,9 @@ class AppTheme {
       canvasColor: palette.surface,
       dividerColor: palette.divider,
       fontFamily: null,
+      fontFamilyFallback: defaultTargetPlatform == TargetPlatform.windows
+          ? AppFonts.windowsChineseFallback
+          : null,
       textTheme: textTheme,
       extensions: [palette],
       splashFactory: InkSparkle.splashFactory,

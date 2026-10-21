@@ -141,19 +141,21 @@ void registerDebugBridge(GlobalKey<NavigatorState> navigatorKey) {
     return developer.ServiceExtensionResponse.result('{"ok":true}');
   });
 
-  developer.registerExtension('ext.pdg.resize', (method, parameters) async {
-    final width = double.tryParse(parameters['width'] ?? '');
-    final height = double.tryParse(parameters['height'] ?? '');
-    if (width == null || height == null) {
-      return developer.ServiceExtensionResponse.error(
-        developer.ServiceExtensionResponse.invalidParams,
-        'width/height missing',
-      );
-    }
-    await const MethodChannel('pdg.debug')
-        .invokeMethod<void>('resize', {'width': width, 'height': height});
-    return developer.ServiceExtensionResponse.result('{"ok":true}');
-  });
+  if (defaultTargetPlatform != TargetPlatform.windows) {
+    developer.registerExtension('ext.pdg.resize', (method, parameters) async {
+      final width = double.tryParse(parameters['width'] ?? '');
+      final height = double.tryParse(parameters['height'] ?? '');
+      if (width == null || height == null) {
+        return developer.ServiceExtensionResponse.error(
+          developer.ServiceExtensionResponse.invalidParams,
+          'width/height missing',
+        );
+      }
+      await const MethodChannel('pdg.debug')
+          .invokeMethod<void>('resize', {'width': width, 'height': height});
+      return developer.ServiceExtensionResponse.result('{"ok":true}');
+    });
+  }
 
   developer.registerExtension('ext.pdg.state', (method, parameters) async {
     final state = debugStateHook?.call() ?? '{"error":"no state hook"}';

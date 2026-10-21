@@ -40,10 +40,31 @@ Prepare local release assets with:
 tool/release_assets.sh
 ```
 
-The script builds/checks all four assets (DMG, ZIP, arm64 APK, armeabi-v7a
-APK) and writes `SHA256SUMS.txt`. It does not publish or notarize. Android
-builds need `JAVA_HOME` and the Android SDK configured as in
+The script builds/checks all four existing assets (DMG, ZIP, arm64 APK,
+armeabi-v7a APK) and writes `SHA256SUMS.txt`. It does not publish or notarize.
+Android builds need `JAVA_HOME` and the Android SDK configured as in
 [ANDROID.md](ANDROID.md).
+
+## Windows artifacts
+
+Windows releases are distributed in two forms because `ParticleLibrary.exe`
+cannot run by itself. The complete Flutter bundle includes native DLLs and the
+`data/` directory.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tool\windows_release.ps1
+```
+
+The script requires the verified PDG snapshot, passing `flutter analyze` and
+`flutter test`, a successful Windows release build, and Inno Setup 6. It writes
+these files to `dist/release/`:
+
+- `Particle-Library-<version>-Windows-x64-Setup.exe`
+- `Particle-Library-<version>-Windows-x64-Portable.zip`
+- `SHA256SUMS.txt`
+
+See [README-windows.md](../../README-windows.md) for build and installation
+details. Never publish only the EXE.
 
 ## Signing and notarization
 
@@ -80,3 +101,5 @@ announcing.
 - [ ] iOS physical install and trust checked; TestFlight only with a paid team
 - [ ] README/requirements and update channel consistent
 - [ ] release notes and four-entry checksums attached
+- [ ] Windows installer and portable ZIP built from the verified snapshot
+- [ ] Windows smoke test completed; installer and ZIP checksums verified

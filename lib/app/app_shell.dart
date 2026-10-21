@@ -25,7 +25,7 @@ import '../features/help/help_page.dart';
 import '../features/reference/inspire_search_page.dart';
 import '../features/reviews/reviews_page.dart';
 
-/// Primary destinations plus Settings, which is opened from the macOS app menu.
+/// Primary destinations plus Settings, available from app navigation UI.
 ///
 /// Keeping the enum order authoritative means the IndexedStack, tabs and
 /// shortcuts stay aligned. Settings deliberately has no tab of its own.

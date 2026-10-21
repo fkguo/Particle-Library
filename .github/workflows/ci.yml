@@ -19,16 +19,15 @@ jobs:
       - run: flutter pub get
       - name: Analyze (snapshot intentionally absent)
         run: |
-          # pubspec declares the runtime snapshot as an asset. The analyzer
-          # only needs the path to exist; the test job fetches the real data.
+          # The analyzer needs the declared asset path to exist.
+          # This empty file is never used for a runtime build.
           mkdir -p assets
           : > assets/pdgall-2026.0.sqlite
           flutter analyze
 
   test:
     runs-on: macos-latest
-    # The PDG snapshot is not committed (CC BY data, 64 MB). Configure the
-    # repository variable PDG_SNAPSHOT_URL to the official PDG API URL.
+    # The real CC BY snapshot is supplied through the repository variable.
     if: ${{ vars.PDG_SNAPSHOT_URL != '' }}
     steps:
       - uses: actions/checkout@v4
@@ -43,8 +42,71 @@ jobs:
           PDG_SNAPSHOT_URL: ${{ vars.PDG_SNAPSHOT_URL }}
         run: |
           mkdir -p assets
-          curl --fail --location --retry 3 \
-            "$PDG_SNAPSHOT_URL" -o assets/pdgall-2026.0.sqlite
-          echo "c82dab0c0a7c5264f23508066cabb8df9eacc1dbfc83c8d20fade6053394ba8a  assets/pdgall-2026.0.sqlite" \
-            | shasum -a 256 -c -
+          curl --fail --location --retry 3 $PDG_SNAPSHOT_URL -o assets/pdgall-2026.0.sqlite
+          expected='c82dab0c0a7c5264f23508066cabb8df9eacc1dbfc83c8d20fade6053394ba8a'
+          printf '%s  %s\n' $expected assets/pdgall-2026.0.sqlite | shasum -a 256 -c -
       - run: flutter test
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Fetch and verify the PDG snapshot
+        if: ${{ vars.PDG_SNAPSHOT_URL != '' }}
+        shell: pwsh
+        env:
+          PDG_SNAPSHOT_URL: ${{ vars.PDG_SNAPSHOT_URL }}
+        run: |
+          New-Item -ItemType Directory -Force assets | Out-Null
+          Invoke-WebRequest -Uri $env:PDG_SNAPSHOT_URL -OutFile assets/pdgall-2026.0.sqlite
+          $actual = (Get-FileHash assets/pdgall-2026.0.sqlite -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne 'c82dab0c0a7c5264f23508066cabb8df9eacc1dbfc83c8d20fade6053394ba8a') { throw 'PDG snapshot SHA-256 mismatch.' }
+      - name: Create compile-only placeholder asset
+        if: ${{ vars.PDG_SNAPSHOT_URL == '' }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force assets | Out-Null
+          New-Item -ItemType File -Force assets/pdgall-2026.0.sqlite | Out-Null
+      - run: flutter analyze
+      - name: Run tests with verified snapshot
+        if: ${{ vars.PDG_SNAPSHOT_URL != '' }}
+        run: flutter test
+      - run: flutter build windows --release
+
+  windows-package:
+    if: ${{ vars.PDG_SNAPSHOT_URL != '' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
+      - name: Fetch and verify the PDG snapshot
+        shell: pwsh
+        env:
+          PDG_SNAPSHOT_URL: ${{ vars.PDG_SNAPSHOT_URL }}
+        run: |
+          New-Item -ItemType Directory -Force assets | Out-Null
+          Invoke-WebRequest -Uri $env:PDG_SNAPSHOT_URL -OutFile assets/pdgall-2026.0.sqlite
+          $actual = (Get-FileHash assets/pdgall-2026.0.sqlite -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne 'c82dab0c0a7c5264f23508066cabb8df9eacc1dbfc83c8d20fade6053394ba8a') { throw 'PDG snapshot SHA-256 mismatch.' }
+      - name: Build and package Windows release
+        shell: pwsh
+        run: ./tool/windows_release.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Particle-Library-Windows-${{ github.sha }}
+          path: |
+            dist/release/Particle-Library-*-Windows-x64-Setup.exe
+            dist/release/Particle-Library-*-Windows-x64-Portable.zip
+            dist/release/SHA256SUMS.txt
+          if-no-files-found: error

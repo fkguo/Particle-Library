@@ -7,7 +7,9 @@ user manual lives in the app under **Help**.
 
 ## Build and release
 
+- [Windows setup and build guide](../README-windows.md)
 - [Build instructions](development/BUILDING.md)
+- [Windows porting checklist](windows-adaptation/PORTING_CHECKLIST.md)
 - [Android notes](development/ANDROID.md)
 - [Platform support](development/PLATFORMS.md)
 - [Licensing notes](development/LICENSING.md)
