@@ -142,6 +142,17 @@ class FullBackup {
       throw const FormatException('不支持的完整备份版本');
     }
     final rawNotes = payload['notes'];
+    final regionPaths = <String, String>{};
+    if (entries.keys.any((name) => name.startsWith('regions/'))) {
+      final regionsDirectory = await _regionsDirectory(reviewRegionsDirectory);
+      for (final name in entries.keys.where(
+        (name) => name.startsWith('regions/'),
+      )) {
+        regionPaths[name.split('/').last] =
+            '${regionsDirectory.path}/${name.split('/').last}';
+      }
+      _rewriteRegionPaths(rawNotes, regionPaths);
+    }
     var importedNotes = 0;
     var renamedCollections = const <String>[];
     if (rawNotes != null && notes != null) {
@@ -157,7 +168,6 @@ class FullBackup {
     }
     var restoredPdfs = 0;
     var restoredRegions = 0;
-    final regionPaths = <String, String>{};
     if (entries.isNotEmpty) {
       final hasPdfs = entries.keys.any((name) => name.startsWith('reviews/'));
       final hasRegions = entries.keys.any(
@@ -191,9 +201,6 @@ class FullBackup {
         }
       }
     }
-    if (notes != null && regionPaths.isNotEmpty) {
-      await _relinkRegionPaths(notes, regionPaths);
-    }
     return FullBackupImport(
       full: isFull,
       notes: importedNotes,
@@ -221,58 +228,20 @@ class FullBackup {
     }
   }
 
-  static Future<void> _relinkRegionPaths(
-    NotesStore notes,
-    Map<String, String> paths,
-  ) async {
-    final records = await notes.allForExport();
-    for (final note in records) {
-      var changed = false;
-      final anchors = <NoteAnchorInput>[];
-      for (final anchor in note.anchors) {
-        final context = anchor.context;
-        final oldPath = context?['imagePath']?.toString() ?? '';
-        final base = oldPath.split(RegExp(r'[\\/]')).last;
-        final replacement = paths[base];
-        if (replacement == null || replacement == oldPath) {
-          anchors.add(
-            NoteAnchorInput(
-              targetKind: anchor.targetKind,
-              targetKey: anchor.targetKey,
-              snapshotHash: anchor.snapshotHash.isEmpty
-                  ? null
-                  : anchor.snapshotHash,
-              targetLabel: anchor.targetLabel,
-              status: anchor.status,
-              context: context,
-            ),
-          );
-          continue;
-        }
-        changed = true;
-        anchors.add(
-          NoteAnchorInput(
-            targetKind: anchor.targetKind,
-            targetKey: anchor.targetKey,
-            snapshotHash: anchor.snapshotHash.isEmpty
-                ? null
-                : anchor.snapshotHash,
-            targetLabel: anchor.targetLabel,
-            status: anchor.status,
-            context: {...?context, 'imagePath': replacement},
-          ),
-        );
+  static void _rewriteRegionPaths(Object? value, Map<String, String> paths) {
+    if (value is Map) {
+      final imagePath = value['imagePath']?.toString() ?? '';
+      final base = imagePath.split(RegExp(r'[\\/]')).last;
+      final replacement = paths[base];
+      if (replacement != null && value['imagePath'] != replacement) {
+        value['imagePath'] = replacement;
       }
-      if (changed) {
-        try {
-          await notes.update(
-            note.id,
-            anchors: anchors,
-            expectedRevision: note.revision,
-          );
-        } catch (_) {
-          // A concurrent edit wins; the backup report remains honest.
-        }
+      for (final item in value.values) {
+        if (item is Map || item is List) _rewriteRegionPaths(item, paths);
+      }
+    } else if (value is List) {
+      for (final item in value) {
+        if (item is Map || item is List) _rewriteRegionPaths(item, paths);
       }
     }
   }
