@@ -1666,6 +1666,12 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     ReviewAnnotation annotation,
     Offset globalPosition,
   ) async {
+    // pdfrx also owns a text-selection context menu. Clear its selection
+    // before opening the annotation menu so the user does not get two menus.
+    if (_controller.isReady) {
+      await _controller.textSelectionDelegate.clearTextSelection();
+    }
+    if (!mounted) return;
     final overlay = Overlay.of(context).context.findRenderObject();
     if (overlay is! RenderBox) return;
     final strings = AppScope.of(context).strings;
