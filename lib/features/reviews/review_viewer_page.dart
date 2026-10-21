@@ -3304,6 +3304,18 @@ class _PdfRegionSelectorState extends State<_PdfRegionSelector> {
 
 /// Direct manipulation for a region annotation: drag inside to move, or drag
 /// the bottom-right handle to resize.
+enum _RegionHandle {
+  move,
+  topLeft,
+  top,
+  topRight,
+  right,
+  bottomRight,
+  bottom,
+  bottomLeft,
+  left,
+}
+
 class _PdfRegionAdjustOverlay extends StatefulWidget {
   const _PdfRegionAdjustOverlay({
     required this.rect,
@@ -3327,47 +3339,108 @@ class _PdfRegionAdjustOverlay extends StatefulWidget {
 }
 
 class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
+  static const double _minSize = 0.008;
   Rect? _start;
   Offset? _startLocal;
   Rect? _latest;
-  bool _resizing = false;
+  _RegionHandle _handle = _RegionHandle.move;
+  MouseCursor _cursor = SystemMouseCursors.move;
+
+  _RegionHandle _hitTest(Offset point, Size size) {
+    final edge = size.width < 32 || size.height < 32 ? 10.0 : 16.0;
+    final nearLeft = point.dx <= edge;
+    final nearRight = point.dx >= size.width - edge;
+    final nearTop = point.dy <= edge;
+    final nearBottom = point.dy >= size.height - edge;
+    if (nearTop && nearLeft) return _RegionHandle.topLeft;
+    if (nearTop && nearRight) return _RegionHandle.topRight;
+    if (nearBottom && nearLeft) return _RegionHandle.bottomLeft;
+    if (nearBottom && nearRight) return _RegionHandle.bottomRight;
+    if (nearTop) return _RegionHandle.top;
+    if (nearBottom) return _RegionHandle.bottom;
+    if (nearLeft) return _RegionHandle.left;
+    if (nearRight) return _RegionHandle.right;
+    return _RegionHandle.move;
+  }
+
+  MouseCursor _cursorFor(_RegionHandle handle) => switch (handle) {
+    _RegionHandle.topLeft ||
+    _RegionHandle.bottomRight => SystemMouseCursors.resizeUpLeftDownRight,
+    _RegionHandle.topRight ||
+    _RegionHandle.bottomLeft => SystemMouseCursors.resizeUpRightDownLeft,
+    _RegionHandle.top ||
+    _RegionHandle.bottom => SystemMouseCursors.resizeUpDown,
+    _RegionHandle.left ||
+    _RegionHandle.right => SystemMouseCursors.resizeLeftRight,
+    _RegionHandle.move => SystemMouseCursors.move,
+  };
+
+  Rect _updatedRect(Offset delta) {
+    final start = _start ?? widget.rect;
+    final dx = delta.dx / widget.pageSize.width;
+    final dy = delta.dy / widget.pageSize.height;
+    if (_handle == _RegionHandle.move) {
+      final left = (start.left + dx).clamp(0.0, 1.0 - start.width);
+      final top = (start.top + dy).clamp(0.0, 1.0 - start.height);
+      return Rect.fromLTWH(left, top, start.width, start.height);
+    }
+    var left = start.left;
+    var top = start.top;
+    var right = start.right;
+    var bottom = start.bottom;
+    if (_handle == _RegionHandle.topLeft ||
+        _handle == _RegionHandle.left ||
+        _handle == _RegionHandle.bottomLeft) {
+      left = (start.left + dx).clamp(0.0, start.right - _minSize);
+    }
+    if (_handle == _RegionHandle.topRight ||
+        _handle == _RegionHandle.right ||
+        _handle == _RegionHandle.bottomRight) {
+      right = (start.right + dx).clamp(start.left + _minSize, 1.0);
+    }
+    if (_handle == _RegionHandle.topLeft ||
+        _handle == _RegionHandle.top ||
+        _handle == _RegionHandle.topRight) {
+      top = (start.top + dy).clamp(0.0, start.bottom - _minSize);
+    }
+    if (_handle == _RegionHandle.bottomLeft ||
+        _handle == _RegionHandle.bottom ||
+        _handle == _RegionHandle.bottomRight) {
+      bottom = (start.bottom + dy).clamp(start.top + _minSize, 1.0);
+    }
+    return Rect.fromLTRB(left, top, right, bottom);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final size = context.size ?? Size.zero;
     return MouseRegion(
-      cursor: SystemMouseCursors.move,
+      cursor: _cursor,
+      onHover: (event) {
+        final next = _cursorFor(_hitTest(event.localPosition, size));
+        if (next != _cursor) setState(() => _cursor = next);
+      },
+      onExit: (_) {
+        if (_cursor != SystemMouseCursors.move) {
+          setState(() => _cursor = SystemMouseCursors.move);
+        }
+      },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
         onPanStart: (details) {
+          final box = context.findRenderObject();
+          if (box is! RenderBox) return;
           _start = widget.rect;
           _startLocal = details.localPosition;
           _latest = widget.rect;
-          final size = widget.pageSize;
-          final local = details.localPosition;
-          final width = widget.rect.width * size.width;
-          final height = widget.rect.height * size.height;
-          _resizing = local.dx >= width - 18 && local.dy >= height - 18;
+          _handle = _hitTest(details.localPosition, box.size);
+          _cursor = _cursorFor(_handle);
         },
         onPanUpdate: (details) {
-          final start = _start;
           final origin = _startLocal;
-          if (start == null || origin == null) return;
-          final delta = details.localPosition - origin;
-          final dx = delta.dx / widget.pageSize.width;
-          final dy = delta.dy / widget.pageSize.height;
-          late final Rect next;
-          if (_resizing) {
-            final minRight = (start.left + 0.01).clamp(0.0, 1.0);
-            final minBottom = (start.top + 0.01).clamp(0.0, 1.0);
-            final right = (start.right + dx).clamp(minRight, 1.0);
-            final bottom = (start.bottom + dy).clamp(minBottom, 1.0);
-            next = Rect.fromLTRB(start.left, start.top, right, bottom);
-          } else {
-            final left = (start.left + dx).clamp(0.0, 1.0 - start.width);
-            final top = (start.top + dy).clamp(0.0, 1.0 - start.height);
-            next = Rect.fromLTWH(left, top, start.width, start.height);
-          }
+          if (origin == null) return;
+          final next = _updatedRect(details.localPosition - origin);
           _latest = next;
           widget.onChanged(next);
         },
@@ -3376,14 +3449,16 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
           _start = null;
           _startLocal = null;
           _latest = null;
-          _resizing = false;
+          _handle = _RegionHandle.move;
+          _cursor = SystemMouseCursors.move;
           if (latest != null) widget.onEnd(latest);
         },
         onPanCancel: () {
           _start = null;
           _startLocal = null;
           _latest = null;
-          _resizing = false;
+          _handle = _RegionHandle.move;
+          _cursor = SystemMouseCursors.move;
         },
         child: Stack(
           clipBehavior: Clip.none,
@@ -3399,21 +3474,30 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
                 ),
               ),
             ),
-            Positioned(
-              right: -6,
-              bottom: -6,
-              child: IgnorePointer(
-                child: Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: widget.color,
-                    border: Border.all(color: Colors.white, width: 1),
-                    borderRadius: BorderRadius.circular(3),
+            for (final alignment in const [
+              Alignment.topLeft,
+              Alignment.topCenter,
+              Alignment.topRight,
+              Alignment.centerLeft,
+              Alignment.centerRight,
+              Alignment.bottomLeft,
+              Alignment.bottomCenter,
+              Alignment.bottomRight,
+            ])
+              Align(
+                alignment: alignment,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(
+                      color: widget.color,
+                      border: Border.all(color: Colors.white, width: 1),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
