@@ -67,6 +67,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   bool _annotationSelectionMode = false;
   bool _zenMode = false;
   bool _pdfDarkMode = false;
+  bool _mobileTextSelection = false;
   bool _regionMode = false;
   bool _searchOpen = false;
   final TextEditingController _searchController = TextEditingController();
@@ -86,10 +87,16 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   String _highlightColor = 'yellow';
   bool _started = false;
   ReviewAnnotation? _editingRange;
+  Timer? _rangeTapTimer;
+  bool _annotationEditorOpen = false;
+  int _rangeRequest = 0;
+  DateTime? _lastContextMenuAt;
   bool _pdfReady = false;
   int _pdfEpoch = 0;
   Timer? _pdfRetryTimer;
+  PdfDocumentRef? _pdfDocumentRef;
   late final Future<void> _ready;
+  final Stopwatch _openWatch = Stopwatch()..start();
 
   String get _fileName {
     final segments = Uri.file(widget.path).pathSegments;
@@ -106,6 +113,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     _searchController.dispose();
     _searchFocus.dispose();
     _autoHighlightTimer?.cancel();
+    _rangeTapTimer?.cancel();
     _pdfRetryTimer?.cancel();
     super.dispose();
   }
@@ -115,6 +123,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
+    _openWatch.start();
+    debugPrint('REVIEW open: didChangeDependencies');
     final scope = AppScope.of(context);
     _userStore = scope.store;
     final state = scope.store.reviewState(_fileName);
@@ -128,14 +138,21 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       if (page is num) _restoredPage = page.toInt();
       _showAnnotations = state['showAnnotations'] != false;
       _pdfDarkMode = state['dark'] == true;
-      _zenMode = state['zen'] == true;
     }
-    _ready = _loadAnnotations(scope.notes);
-    // Some Android devices paint the first PDF frame before the viewer has
-    // laid out its page. Recreate once if readiness is still false shortly
-    // after the first open; reopening used to be the only workaround.
-    _pdfRetryTimer = Timer(const Duration(milliseconds: 1200), () {
-      if (mounted && !_pdfReady) setState(() => _pdfEpoch++);
+    _ready = _loadAnnotations(scope.notes).then((_) {
+      debugPrint(
+        'REVIEW open: annotations ${_openWatch.elapsedMilliseconds}ms',
+      );
+    });
+    // PdfViewer initialization has a rare race where the widget is laid out
+    // but never starts loading its document. A delayed one-shot rebuild is a
+    // safe recovery on every platform; 3 seconds is longer than normal first
+    // frame rendering, so healthy loads never trigger it.
+    _pdfRetryTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted && !_pdfReady) {
+        debugPrint('REVIEW open: retrying stuck PDF viewer');
+        setState(() => _pdfEpoch++);
+      }
     });
   }
 
@@ -314,6 +331,12 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
 
   void _onTextSelectionChanged(PdfTextSelection selection) {
     _autoHighlightTimer?.cancel();
+    final mobile =
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android;
+    if (mobile && _mobileTextSelection != selection.hasSelectedText) {
+      setState(() => _mobileTextSelection = selection.hasSelectedText);
+    }
     if (_editingRange != null ||
         !_highlightMode ||
         !selection.hasSelectedText) {
@@ -484,6 +507,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   }
 
   Future<void> _beginAdjustRange(ReviewAnnotation annotation) async {
+    final request = ++_rangeRequest;
     await _ready;
     if (!mounted) return;
     if (!_controller.isReady) {
@@ -633,16 +657,13 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           PdfTextSelectionPoint(pageText, end),
         ),
       );
-      if (!mounted) return;
+      if (!mounted || request != _rangeRequest || _annotationEditorOpen) {
+        return;
+      }
       setState(() {
         _editingRange = annotation;
         _highlightMode = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppScope.of(context).strings.reviewAdjustRangeHint),
-        ),
-      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -816,121 +837,40 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       knownTags = (await notes.tagCounts(limit: 100)).keys.toList();
     } catch (_) {}
     if (!mounted) return;
-    final comment = TextEditingController(text: annotation.note);
-    final tags = TextEditingController(text: annotation.tags.join(', '));
-    final result =
-        await showModalBottomSheet<({String comment, List<String> tags})>(
-          context: context,
-          isScrollControlled: true,
-          useSafeArea: true,
-          builder: (sheetContext) => Theme(
-            data: _pdfDarkMode ? AppTheme.dark() : Theme.of(context),
-            child: Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
-              ),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            strings.reviewAnnotationEdit,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: strings.commonClose,
-                          onPressed: () => Navigator.of(sheetContext).pop(),
-                          icon: const Icon(Icons.close, size: 19),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    if (annotation.imagePath != null) ...[
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.file(
-                          File(annotation.imagePath!),
-                          height: 130,
-                          cacheWidth: 520,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                    ] else
-                      SelectableText(
-                        annotation.text.trim().isEmpty
-                            ? strings.reviewAnnotationRegion
-                            : annotation.text,
-                        maxLines: 3,
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: context.palette.textSecondary),
-                      ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: comment,
-                      autofocus: true,
-                      minLines: 3,
-                      maxLines: 6,
-                      decoration: InputDecoration(
-                        labelText: strings.reviewAnnotationNote,
-                        hintText: strings.reviewAnnotationNoteHint,
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      strings.reviewTags,
-                      style: Theme.of(context).textTheme.labelMedium,
-                    ),
-                    const SizedBox(height: 6),
-                    NoteTagField(
-                      controller: tags,
-                      knownTags: knownTags,
-                      strings: strings,
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () => Navigator.of(sheetContext).pop(),
-                          child: Text(strings.commonCancel),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: () {
-                            Navigator.of(sheetContext).pop((
-                              comment: comment.text.trim(),
-                              tags: (parseNoteTags(tags.text)..sort()),
-                            ));
-                          },
-                          child: Text(strings.commonSave),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+    _rangeTapTimer?.cancel();
+    _rangeRequest++;
+    _annotationEditorOpen = true;
+    final ({String comment, List<String> tags})? result;
+    try {
+      result =
+          await showModalBottomSheet<({String comment, List<String> tags})>(
+            context: context,
+            isScrollControlled: true,
+            useSafeArea: true,
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.95,
+            ),
+            builder: (sheetContext) => Theme(
+              data: _pdfDarkMode ? AppTheme.dark() : Theme.of(context),
+              child: _AnnotationEditorSheet(
+                annotation: annotation,
+                knownTags: knownTags,
+                strings: strings,
               ),
             ),
-          ),
-        );
-    comment.dispose();
-    tags.dispose();
+          );
+    } finally {
+      _annotationEditorOpen = false;
+    }
     if (result == null || !mounted) return;
+    final saved = result;
     setState(() => _saving = true);
     try {
       await ReviewAnnotationNotes.updateComment(
         notes,
         annotation,
-        result.comment,
-        tags: result.tags,
+        saved.comment,
+        tags: saved.tags,
       );
       if (!mounted) return;
       await _loadAnnotations(notes);
@@ -939,11 +879,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       final oldTags = annotation.tags;
       _pushHistory(
         () => _updateDetailsForHistory(annotation.id, oldComment, oldTags),
-        () => _updateDetailsForHistory(
-          annotation.id,
-          result.comment,
-          result.tags,
-        ),
+        () =>
+            _updateDetailsForHistory(annotation.id, saved.comment, saved.tags),
       );
     } catch (error) {
       if (mounted) {
@@ -1153,6 +1090,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   }
 
   Future<void> _showTextSelectionMenu(Offset globalPosition) async {
+    final now = DateTime.now();
+    final last = _lastContextMenuAt;
+    if (last != null && now.difference(last).inMilliseconds < 300) return;
+    _lastContextMenuAt = now;
     final overlay = Overlay.of(context).context.findRenderObject();
     if (overlay is! RenderBox) return;
     final strings = AppScope.of(context).strings;
@@ -1420,10 +1361,16 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     PdfTextSelectionAnchor anchor,
     PdfViewerTextSelectionAnchorHandleState state,
   ) {
-    final color = Theme.of(context).colorScheme.primary;
+    final color = _pdfDarkMode
+        ? Colors.black
+        : Theme.of(context).colorScheme.primary;
     return CustomPaint(
       size: const Size(30, 30),
-      painter: _SelectionHandlePainter(color, state),
+      painter: _SelectionHandlePainter(
+        color,
+        state,
+        outlineColor: Colors.white,
+      ),
     );
   }
 
@@ -1557,9 +1504,14 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
               key: ValueKey('text-hit-${annotation.id}-${fragmentIndex++}'),
               onTap: (_) {
                 _selectAnnotation(annotation);
+                _rangeTapTimer?.cancel();
+                _rangeTapTimer = Timer(const Duration(milliseconds: 60), () {
+                  if (mounted) unawaited(_beginAdjustRange(annotation));
+                });
                 return true;
               },
               onDoubleTap: (_) {
+                _rangeTapTimer?.cancel();
                 unawaited(_editAnnotation(annotation));
                 return true;
               },
@@ -1856,6 +1808,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     ReviewAnnotation annotation,
     Offset globalPosition,
   ) async {
+    final now = DateTime.now();
+    final last = _lastContextMenuAt;
+    if (last != null && now.difference(last).inMilliseconds < 300) return;
+    _lastContextMenuAt = now;
     setState(() => _selectedAnnotationId = annotation.id);
     final overlay = Overlay.of(context).context.findRenderObject();
     if (overlay is! RenderBox) return;
@@ -1878,17 +1834,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
             ],
           ),
         ),
-        if (annotation.text.trim().isNotEmpty)
-          PopupMenuItem(
-            value: 'range',
-            child: Row(
-              children: [
-                const Icon(Icons.open_with_outlined, size: 17),
-                const SizedBox(width: 8),
-                Text(strings.reviewAdjustRange),
-              ],
-            ),
-          ),
         PopupMenuItem(
           value: 'note',
           child: Row(
@@ -1973,8 +1918,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     switch (action) {
       case 'edit':
         await _editAnnotation(annotation);
-      case 'range':
-        await _beginAdjustRange(annotation);
       case 'note':
         await _openAnnotationNote(annotation);
       case 'page':
@@ -1997,113 +1940,112 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     await showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
+      isScrollControlled: true,
       builder: (sheetContext) => Theme(
         data: _pdfDarkMode ? AppTheme.dark() : Theme.of(context),
         child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                title: Text(
-                  annotation.text.trim().isEmpty
-                      ? strings.reviewAnnotationRegion
-                      : annotation.text,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Text(
-                  strings.reviewAnnotationPage(annotation.pageNumber),
-                ),
-              ),
-              if (annotation.imagePath != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Image.file(
-                      File(annotation.imagePath!),
-                      height: 120,
-                      cacheWidth: 480,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.85,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    title: Text(
+                      annotation.text.trim().isEmpty
+                          ? strings.reviewAnnotationRegion
+                          : annotation.text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      strings.reviewAnnotationPage(annotation.pageNumber),
                     ),
                   ),
-                ),
-              if (annotation.imageStale)
-                ListTile(
-                  leading: const Icon(Icons.refresh, color: Colors.orange),
-                  title: Text(strings.reviewRegionRetryImage),
-                  subtitle: Text(strings.reviewRegionImageStale),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    unawaited(_refreshRegionImage(annotation));
-                  },
-                ),
-              if (annotation.imagePath != null && !annotation.imageStale)
-                ListTile(
-                  leading: const Icon(Icons.save_alt_outlined),
-                  title: Text(strings.reviewSaveImage),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    unawaited(_saveRegionImage(annotation));
-                  },
-                ),
-              if (defaultTargetPlatform == TargetPlatform.macOS &&
-                  annotation.imagePath != null &&
-                  !annotation.imageStale)
-                ListTile(
-                  leading: const Icon(Icons.copy_all_outlined),
-                  title: Text(strings.reviewCopyImage),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    unawaited(_copyRegionImage(annotation));
-                  },
-                ),
-              if (annotation.imagePath != null && !annotation.imageStale)
-                ListTile(
-                  leading: const Icon(Icons.description_outlined),
-                  title: Text(strings.reviewExportRegionMarkdown),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    unawaited(_exportRegionMarkdown(annotation));
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.note_alt_outlined),
-                title: Text(strings.reviewOpenNote),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  unawaited(_openAnnotationNote(annotation));
-                },
+                  if (annotation.imagePath != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.file(
+                          File(annotation.imagePath!),
+                          height: 120,
+                          cacheWidth: 480,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                        ),
+                      ),
+                    ),
+                  if (annotation.imageStale)
+                    ListTile(
+                      leading: const Icon(Icons.refresh, color: Colors.orange),
+                      title: Text(strings.reviewRegionRetryImage),
+                      subtitle: Text(strings.reviewRegionImageStale),
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        unawaited(_refreshRegionImage(annotation));
+                      },
+                    ),
+                  if (annotation.imagePath != null && !annotation.imageStale)
+                    ListTile(
+                      leading: const Icon(Icons.save_alt_outlined),
+                      title: Text(strings.reviewSaveImage),
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        unawaited(_saveRegionImage(annotation));
+                      },
+                    ),
+                  if (defaultTargetPlatform == TargetPlatform.macOS &&
+                      annotation.imagePath != null &&
+                      !annotation.imageStale)
+                    ListTile(
+                      leading: const Icon(Icons.copy_all_outlined),
+                      title: Text(strings.reviewCopyImage),
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        unawaited(_copyRegionImage(annotation));
+                      },
+                    ),
+                  if (annotation.imagePath != null && !annotation.imageStale)
+                    ListTile(
+                      leading: const Icon(Icons.description_outlined),
+                      title: Text(strings.reviewExportRegionMarkdown),
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        unawaited(_exportRegionMarkdown(annotation));
+                      },
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.note_alt_outlined),
+                    title: Text(strings.reviewOpenNote),
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      unawaited(_openAnnotationNote(annotation));
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.edit_outlined),
+                    title: Text(strings.reviewAnnotationEdit),
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      unawaited(_editAnnotation(annotation));
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.delete_outline),
+                    title: Text(strings.commonDelete),
+                    textColor: Theme.of(context).colorScheme.error,
+                    iconColor: Theme.of(context).colorScheme.error,
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      unawaited(_deleteAnnotation(annotation));
+                    },
+                  ),
+                ],
               ),
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: Text(strings.reviewAnnotationEdit),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  unawaited(_editAnnotation(annotation));
-                },
-              ),
-              if (annotation.text.trim().isNotEmpty)
-                ListTile(
-                  leading: const Icon(Icons.open_with_outlined),
-                  title: Text(strings.reviewAdjustRange),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    unawaited(_beginAdjustRange(annotation));
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: Text(strings.commonDelete),
-                textColor: Theme.of(context).colorScheme.error,
-                iconColor: Theme.of(context).colorScheme.error,
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  unawaited(_deleteAnnotation(annotation));
-                },
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -2273,6 +2215,16 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     await _controller.goToPage(pageNumber: page);
   }
 
+  Future<void> _fitInitialPageWidth(int pageNumber) async {
+    if (pageNumber > 1) {
+      await _controller.goToPage(pageNumber: pageNumber);
+    }
+    if (!mounted) return;
+    final page = _controller.pageNumber ?? pageNumber;
+    final matrix = _controller.calcMatrixFitWidthForPage(pageNumber: page);
+    if (matrix != null) _controller.value = matrix;
+  }
+
   void _fitPage(String mode) {
     if (!_controller.isReady) return;
     final page = _controller.pageNumber ?? _currentPage ?? 1;
@@ -2352,8 +2304,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                   unawaited(_showAnnotationContextMenu(annotation, position)),
               selectedId: _selectedAnnotationId,
               onSelect: _selectAnnotation,
-              onAdjustRange: (annotation) =>
-                  unawaited(_beginAdjustRange(annotation)),
               onShowActions: (annotation) =>
                   unawaited(_showAnnotationActions(annotation)),
             ),
@@ -2386,20 +2336,22 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                       .clamp(maxScaleFactor: 1.3),
                 ),
                 actions: [
-                  IconButton(
-                    tooltip: strings.commonUndo,
-                    onPressed: _undoStack.isEmpty
-                        ? null
-                        : () => unawaited(_undo()),
-                    icon: const Icon(Icons.undo, size: 19),
-                  ),
-                  IconButton(
-                    tooltip: strings.commonRedo,
-                    onPressed: _redoStack.isEmpty
-                        ? null
-                        : () => unawaited(_redo()),
-                    icon: const Icon(Icons.redo, size: 19),
-                  ),
+                  if (!narrow) ...[
+                    IconButton(
+                      tooltip: strings.commonUndo,
+                      onPressed: _undoStack.isEmpty
+                          ? null
+                          : () => unawaited(_undo()),
+                      icon: const Icon(Icons.undo, size: 19),
+                    ),
+                    IconButton(
+                      tooltip: strings.commonRedo,
+                      onPressed: _redoStack.isEmpty
+                          ? null
+                          : () => unawaited(_redo()),
+                      icon: const Icon(Icons.redo, size: 19),
+                    ),
+                  ],
                   IconButton(
                     tooltip: strings.reviewSearch,
                     onPressed: _toggleSearch,
@@ -2412,71 +2364,98 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                       style: Theme.of(context).textTheme.labelMedium,
                     ),
                   ),
-                  PopupMenuButton<String>(
-                    tooltip: strings.reviewFitWidth,
-                    icon: const Icon(Icons.fit_screen, size: 19),
-                    onSelected: _fitPage,
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'width',
-                        child: Text(strings.reviewFitWidth),
-                      ),
-                      PopupMenuItem(
-                        value: 'page',
-                        child: Text(strings.reviewFitPage),
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    tooltip: _pdfDarkMode
-                        ? strings.reviewPdfLightMode
-                        : strings.reviewPdfDarkMode,
-                    onPressed: () =>
-                        setState(() => _pdfDarkMode = !_pdfDarkMode),
-                    icon: Icon(
-                      _pdfDarkMode
-                          ? Icons.light_mode_outlined
-                          : Icons.dark_mode_outlined,
-                      size: 19,
+                  if (!narrow) ...[
+                    PopupMenuButton<String>(
+                      tooltip: strings.reviewFitWidth,
+                      icon: const Icon(Icons.fit_screen, size: 19),
+                      onSelected: _fitPage,
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'width',
+                          child: Text(strings.reviewFitWidth),
+                        ),
+                        PopupMenuItem(
+                          value: 'page',
+                          child: Text(strings.reviewFitPage),
+                        ),
+                      ],
                     ),
-                  ),
-                  IconButton(
-                    tooltip: strings.reviewFullScreen,
-                    onPressed: () => setState(() => _zenMode = true),
-                    icon: const Icon(Icons.fullscreen, size: 20),
-                  ),
-                  IconButton(
-                    tooltip: strings.reviewOutlineTab,
-                    onPressed: () {
-                      if (sheetOnly) {
-                        _openAnnotationsSheet(tab: 1);
-                      } else {
+                    IconButton(
+                      tooltip: _pdfDarkMode
+                          ? strings.reviewPdfLightMode
+                          : strings.reviewPdfDarkMode,
+                      onPressed: () =>
+                          setState(() => _pdfDarkMode = !_pdfDarkMode),
+                      icon: Icon(
+                        _pdfDarkMode
+                            ? Icons.light_mode_outlined
+                            : Icons.dark_mode_outlined,
+                        size: 19,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: strings.reviewFullScreen,
+                      onPressed: () => setState(() => _zenMode = true),
+                      icon: const Icon(Icons.open_in_full, size: 20),
+                    ),
+                    IconButton(
+                      tooltip: strings.reviewOutlineTab,
+                      onPressed: () {
+                        if (sheetOnly) {
+                          _openAnnotationsSheet(tab: 1);
+                        } else {
+                          setState(() {
+                            _showAnnotations = true;
+                            _sidebarTab = 1;
+                          });
+                        }
+                      },
+                      icon: const Icon(Icons.list_alt, size: 19),
+                    ),
+                    IconButton(
+                      tooltip: _regionMode
+                          ? strings.commonCancel
+                          : strings.reviewRegionSelect,
+                      onPressed: () {
                         setState(() {
-                          _showAnnotations = true;
-                          _sidebarTab = 1;
+                          _regionMode = !_regionMode;
+                          if (_regionMode) _highlightMode = false;
                         });
-                      }
-                    },
-                    icon: const Icon(Icons.list_alt, size: 19),
-                  ),
-                  IconButton(
-                    tooltip: _regionMode
-                        ? strings.commonCancel
-                        : strings.reviewRegionSelect,
-                    onPressed: () {
-                      setState(() {
-                        _regionMode = !_regionMode;
-                        if (_regionMode) _highlightMode = false;
-                      });
-                    },
-                    icon: Icon(
-                      _regionMode ? Icons.close : Icons.crop_free,
-                      size: 19,
-                      color: _regionMode
-                          ? Theme.of(context).colorScheme.primary
-                          : null,
+                      },
+                      icon: Icon(
+                        _regionMode ? Icons.close : Icons.crop_free,
+                        size: 19,
+                        color: _regionMode
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
+                      ),
                     ),
-                  ),
+                  ],
+                  if (narrow) ...[
+                    IconButton(
+                      tooltip: _regionMode
+                          ? strings.commonCancel
+                          : strings.reviewRegionSelect,
+                      onPressed: () {
+                        setState(() {
+                          _regionMode = !_regionMode;
+                          if (_regionMode) _highlightMode = false;
+                        });
+                      },
+                      icon: Icon(
+                        _regionMode ? Icons.close : Icons.crop_free,
+                        size: 19,
+                        color: _regionMode
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: strings.reviewFullScreen,
+                      onPressed: () => setState(() => _zenMode = true),
+                      icon: const Icon(Icons.open_in_full, size: 20),
+                    ),
+                  ],
                   IconButton(
                     tooltip: _highlightMode
                         ? strings.reviewHighlightModeOn
@@ -2560,9 +2539,52 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                           _openAnnotationsSheet();
                         } else if (value == 'official') {
                           _openExternally();
+                        } else if (value == 'undo') {
+                          unawaited(_undo());
+                        } else if (value == 'redo') {
+                          unawaited(_redo());
+                        } else if (value == 'fit-width' ||
+                            value == 'fit-page') {
+                          _fitPage(value == 'fit-width' ? 'width' : 'page');
+                        } else if (value == 'dark') {
+                          setState(() => _pdfDarkMode = !_pdfDarkMode);
+                        } else if (value == 'outline') {
+                          _openAnnotationsSheet(tab: 1);
                         }
                       },
                       itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'undo',
+                          enabled: _undoStack.isNotEmpty,
+                          child: Text(strings.commonUndo),
+                        ),
+                        PopupMenuItem(
+                          value: 'redo',
+                          enabled: _redoStack.isNotEmpty,
+                          child: Text(strings.commonRedo),
+                        ),
+                        PopupMenuItem(
+                          value: 'fit-width',
+                          child: Text(strings.reviewFitWidth),
+                        ),
+                        PopupMenuItem(
+                          value: 'fit-page',
+                          child: Text(strings.reviewFitPage),
+                        ),
+                        PopupMenuItem(
+                          value: 'dark',
+                          child: Icon(
+                            _pdfDarkMode
+                                ? Icons.light_mode_outlined
+                                : Icons.dark_mode_outlined,
+                            size: 20,
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'outline',
+                          child: Text(strings.reviewOutlineTab),
+                        ),
+                        const PopupMenuDivider(),
                         for (final color in const [
                           'yellow',
                           'green',
@@ -2636,8 +2658,26 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Expanded(
-                              child: RepaintBoundary(
-                                child: _pdfSurfaceWithOverlay(context),
+                              child: Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: RepaintBoundary(
+                                      child: _pdfSurfaceWithOverlay(context),
+                                    ),
+                                  ),
+                                  if ((defaultTargetPlatform ==
+                                              TargetPlatform.iOS ||
+                                          defaultTargetPlatform ==
+                                              TargetPlatform.android) &&
+                                      _mobileTextSelection &&
+                                      _editingRange == null)
+                                    Positioned(
+                                      left: 12,
+                                      right: 12,
+                                      bottom: 12,
+                                      child: _mobileSelectionBar(context),
+                                    ),
+                                ],
                               ),
                             ),
                             if (_showAnnotations &&
@@ -2708,9 +2748,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                                         ),
                                     selectedId: _selectedAnnotationId,
                                     onSelect: _selectAnnotation,
-                                    onAdjustRange: (annotation) => unawaited(
-                                      _beginAdjustRange(annotation),
-                                    ),
                                     onShowActions: (annotation) => unawaited(
                                       _showAnnotationActions(annotation),
                                     ),
@@ -2725,39 +2762,51 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                   ),
                   if (_zenMode)
                     Positioned(
-                      top: 10,
-                      right: 10,
-                      child: Material(
-                        color: palette.surface.withValues(alpha: 0.94),
-                        elevation: 3,
-                        borderRadius: BorderRadius.circular(22),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: strings.commonBack,
-                              onPressed: () => Navigator.of(context).maybePop(),
-                              icon: const Icon(Icons.arrow_back, size: 19),
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: SafeArea(
+                        minimum: const EdgeInsets.only(bottom: 12),
+                        child: Center(
+                          child: Material(
+                            color: palette.surface.withValues(alpha: 0.94),
+                            elevation: 3,
+                            borderRadius: BorderRadius.circular(22),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: strings.commonBack,
+                                  onPressed: () =>
+                                      Navigator.of(context).maybePop(),
+                                  icon: const Icon(Icons.arrow_back, size: 19),
+                                ),
+                                IconButton(
+                                  tooltip: _pdfDarkMode
+                                      ? strings.reviewPdfLightMode
+                                      : strings.reviewPdfDarkMode,
+                                  onPressed: () => setState(
+                                    () => _pdfDarkMode = !_pdfDarkMode,
+                                  ),
+                                  icon: Icon(
+                                    _pdfDarkMode
+                                        ? Icons.light_mode_outlined
+                                        : Icons.dark_mode_outlined,
+                                    size: 19,
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: strings.reviewExitFullScreen,
+                                  onPressed: () =>
+                                      setState(() => _zenMode = false),
+                                  icon: const Icon(
+                                    Icons.close_fullscreen,
+                                    size: 20,
+                                  ),
+                                ),
+                              ],
                             ),
-                            IconButton(
-                              tooltip: _pdfDarkMode
-                                  ? strings.reviewPdfLightMode
-                                  : strings.reviewPdfDarkMode,
-                              onPressed: () =>
-                                  setState(() => _pdfDarkMode = !_pdfDarkMode),
-                              icon: Icon(
-                                _pdfDarkMode
-                                    ? Icons.light_mode_outlined
-                                    : Icons.dark_mode_outlined,
-                                size: 19,
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: strings.reviewExitFullScreen,
-                              onPressed: () => setState(() => _zenMode = false),
-                              icon: const Icon(Icons.fullscreen_exit, size: 20),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -2780,9 +2829,53 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         'sidebarTab': _sidebarTab,
         'showAnnotations': _showAnnotations,
         'dark': _pdfDarkMode,
-        'zen': _zenMode,
       }),
     );
+  }
+
+  ReviewAnnotation? _annotationAtGlobal(Offset global) {
+    if (!_controller.isReady) return null;
+    final document = _controller.globalToDocument(global);
+    if (document == null) return null;
+    for (final annotation in _annotations) {
+      final index = annotation.pageNumber - 1;
+      if (index < 0 || index >= _controller.layout.pageLayouts.length) {
+        continue;
+      }
+      final page = _controller.layout.pageLayouts[index];
+      if (!page.contains(document)) continue;
+      final point = Offset(
+        (document.dx - page.left) / page.width,
+        (document.dy - page.top) / page.height,
+      );
+      for (final rect in annotation.rects) {
+        if (rect.inflate(0.008).contains(point)) return annotation;
+      }
+    }
+    return null;
+  }
+
+  void _handleMacControlClick(PointerDownEvent event) {
+    if (defaultTargetPlatform != TargetPlatform.macOS) return;
+    final controlClick =
+        event.buttons == kPrimaryButton &&
+        HardwareKeyboard.instance.isControlPressed;
+    final secondaryClick = event.buttons == kSecondaryMouseButton;
+    if (!controlClick && !secondaryClick) return;
+    debugPrint(
+      'REVIEW menu: pointer buttons=${event.buttons} '
+      'control=${HardwareKeyboard.instance.isControlPressed} '
+      'secondary=$secondaryClick',
+    );
+    final annotation = _annotationAtGlobal(event.position);
+    if (annotation != null) {
+      unawaited(_showAnnotationContextMenu(annotation, event.position));
+      return;
+    }
+    if (_controller.isReady &&
+        _controller.textSelectionDelegate.hasSelectedText) {
+      unawaited(_showTextSelectionMenu(event.position));
+    }
   }
 
   Widget _pdfSurfaceWithOverlay(BuildContext context) {
@@ -2809,59 +2902,141 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     );
   }
 
-  Widget _pdfSurface(BuildContext context) {
-    Widget viewer = PdfViewer.file(
-      widget.path,
-      key: ValueKey<String>('pdf-${widget.path}-$_pdfEpoch'),
-      controller: _controller,
-      params: PdfViewerParams(
-        backgroundColor: _pdfDarkMode
-            ? Colors.white
-            : context.palette.background,
-        onViewerReady: (document, controller) {
-          _pdfRetryTimer?.cancel();
-          _pdfReady = true;
-          _searcher ??= PdfTextSearcher(_controller);
-          _currentPage = _controller.pageNumber;
-          unawaited(_loadOutline(document));
-          final targetPage = _restoredPage ?? widget.initialPage;
-          if (targetPage > 1) {
-            unawaited(controller.goToPage(pageNumber: targetPage));
-          }
-        },
-        pagePaintCallbacks: [
-          _paintAnnotations,
-          (canvas, pageRect, page) =>
-              _searcher?.pageTextMatchPaintCallback(canvas, pageRect, page),
-        ],
-        pageOverlaysBuilder: _annotationOverlays,
-        textSelectionParams: PdfTextSelectionParams(
-          enabled: !_regionMode,
-          showContextMenuAutomatically: false,
-          buildSelectionHandle: _buildSelectionHandle,
-          onTextSelectionChange: _onTextSelectionChanged,
-          enableSelectionHandles:
-              defaultTargetPlatform == TargetPlatform.iOS ||
-              defaultTargetPlatform == TargetPlatform.android ||
-              _editingRange != null,
-          onSelectionHandlePanStart: (_) => _autoHighlightTimer?.cancel(),
-          onSelectionHandlePanEnd: (_) {
-            if (_editingRange != null) unawaited(_saveAdjustedRange());
-          },
+  Widget _mobileSelectionBar(BuildContext context) {
+    final strings = AppScope.of(context).strings;
+    return Material(
+      elevation: 6,
+      borderRadius: BorderRadius.circular(10),
+      color: context.palette.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton.icon(
+              onPressed: () => unawaited(_copyPdfSelection()),
+              icon: const Icon(Icons.copy, size: 17),
+              label: Text(strings.commonCopy),
+            ),
+            TextButton.icon(
+              onPressed: () => unawaited(_highlightSelection()),
+              icon: const Icon(Icons.highlight_alt, size: 17),
+              label: Text(strings.reviewHighlight),
+            ),
+            IconButton(
+              tooltip: strings.commonClose,
+              onPressed: () {
+                setState(() => _mobileTextSelection = false);
+                unawaited(
+                  _controller.textSelectionDelegate.clearTextSelection(),
+                );
+              },
+              icon: const Icon(Icons.close, size: 18),
+            ),
+          ],
         ),
-        buildContextMenu: (context, params) => null,
-        onGeneralTap: _onPdfGeneralTap,
-        onPageChanged: (page) {
-          if (!mounted || page == null) return;
-          final changed = _currentPage != page;
-          setState(() {
-            _currentPage = page;
-            if (changed) _selectedAnnotationId = null;
-          });
-        },
       ),
     );
+  }
+
+  Future<void> _copyPdfSelection() async {
+    final strings = AppScope.of(context).strings;
+    try {
+      final text = await _controller.textSelectionDelegate.getSelectedText();
+      if (text.trim().isEmpty) return;
+      await Clipboard.setData(ClipboardData(text: text));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(strings.commonCopied)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(strings.commonCopyFailed)));
+    }
+  }
+
+  Widget _pdfSurface(BuildContext context) {
+    debugPrint(
+      'REVIEW open: build path=${widget.path} exists=${File(widget.path).existsSync()}',
+    );
+    final documentRef = _pdfDocumentRef ??= PdfDocumentRefFile(widget.path);
+    Widget viewer = Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handleMacControlClick,
+      child: PdfViewer(
+        documentRef,
+        key: ValueKey<String>('pdf-${widget.path}-$_pdfEpoch'),
+        controller: _controller,
+        params: PdfViewerParams(
+          backgroundColor: _pdfDarkMode
+              ? Colors.white
+              : context.palette.background,
+          errorBannerBuilder: (context, error, stack, ref) {
+            debugPrint('REVIEW open: PDF error $error');
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text('PDF error: $error'),
+              ),
+            );
+          },
+          onViewerReady: (document, controller) {
+            _pdfRetryTimer?.cancel();
+            _pdfReady = true;
+            debugPrint(
+              'REVIEW open: viewer ready ${_openWatch.elapsedMilliseconds}ms',
+            );
+            _searcher ??= PdfTextSearcher(_controller);
+            _currentPage = _controller.pageNumber;
+            unawaited(_loadOutline(document));
+            final targetPage = _restoredPage ?? widget.initialPage;
+            unawaited(_fitInitialPageWidth(targetPage));
+          },
+          pagePaintCallbacks: [
+            _paintAnnotations,
+            (canvas, pageRect, page) =>
+                _searcher?.pageTextMatchPaintCallback(canvas, pageRect, page),
+          ],
+          pageOverlaysBuilder: _annotationOverlays,
+          textSelectionParams: PdfTextSelectionParams(
+            enabled: !_regionMode,
+            showContextMenuAutomatically: false,
+            buildSelectionHandle: _buildSelectionHandle,
+            onTextSelectionChange: _onTextSelectionChanged,
+            enableSelectionHandles:
+                defaultTargetPlatform == TargetPlatform.iOS ||
+                defaultTargetPlatform == TargetPlatform.android ||
+                _editingRange != null,
+            onSelectionHandlePanStart: (_) => _autoHighlightTimer?.cancel(),
+            onSelectionHandlePanEnd: (_) {
+              if (_editingRange != null) unawaited(_saveAdjustedRange());
+            },
+          ),
+          buildContextMenu: (context, params) => null,
+          onGeneralTap: _onPdfGeneralTap,
+          onPageChanged: (page) {
+            if (!mounted || page == null) return;
+            final changed = _currentPage != page;
+            setState(() {
+              _currentPage = page;
+              if (changed) _selectedAnnotationId = null;
+            });
+          },
+        ),
+      ),
+    );
+
     if (_pdfDarkMode) {
+      final selectionColor = Colors.black.withValues(alpha: 0.55);
+      viewer = Theme(
+        data: Theme.of(context).copyWith(
+          textSelectionTheme: Theme.of(context).textSelectionTheme.copyWith(
+            selectionColor: selectionColor,
+            selectionHandleColor: Colors.black,
+          ),
+        ),
+        child: viewer,
+      );
       // Luminance inversion: paper becomes AppPalette.dark.background, ink
       // becomes textPrimary, but chroma is kept so a yellow highlight stays
       // yellow instead of turning blue. Each channel is solved independently
@@ -2893,9 +3068,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         child: viewer,
       );
     }
-    // The app-level SelectionArea must not own drag gestures inside the PDF;
-    // pdfrx implements its own text selection.
-    return SelectionContainer.disabled(child: viewer);
+    // AppShell disables its global SelectionArea for this page; pdfrx owns
+    // text selection inside the viewer.
+    return viewer;
   }
 }
 
@@ -2922,7 +3097,6 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
     required this.onContextMenu,
     required this.selectedId,
     required this.onSelect,
-    required this.onAdjustRange,
     required this.onShowActions,
   });
 
@@ -2948,7 +3122,6 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
   onContextMenu;
   final String? selectedId;
   final ValueChanged<ReviewAnnotation> onSelect;
-  final ValueChanged<ReviewAnnotation> onAdjustRange;
   final ValueChanged<ReviewAnnotation> onShowActions;
 
   @override
@@ -2983,7 +3156,6 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
       widget.onContextMenu;
   String? get selectedId => widget.selectedId;
   ValueChanged<ReviewAnnotation> get onSelect => widget.onSelect;
-  ValueChanged<ReviewAnnotation> get onAdjustRange => widget.onAdjustRange;
   ValueChanged<ReviewAnnotation> get onShowActions => widget.onShowActions;
 
   @override
@@ -3564,9 +3736,14 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
 }
 
 class _SelectionHandlePainter extends CustomPainter {
-  _SelectionHandlePainter(this.color, this.state);
+  _SelectionHandlePainter(
+    this.color,
+    this.state, {
+    this.outlineColor = Colors.white,
+  });
 
   final Color color;
+  final Color outlineColor;
   final PdfViewerTextSelectionAnchorHandleState state;
 
   @override
@@ -3593,7 +3770,7 @@ class _SelectionHandlePainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4
-        ..color = Colors.white.withValues(alpha: 0.9),
+        ..color = outlineColor.withValues(alpha: 0.9),
     );
   }
 
@@ -3602,7 +3779,9 @@ class _SelectionHandlePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SelectionHandlePainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.state != state;
+      oldDelegate.color != color ||
+      oldDelegate.outlineColor != outlineColor ||
+      oldDelegate.state != state;
 }
 
 /// Drag-to-select overlay used for image/formula/region annotations.
@@ -3716,6 +3895,159 @@ enum _RegionHandle {
   bottom,
   bottomLeft,
   left,
+}
+
+class _AnnotationEditorSheet extends StatefulWidget {
+  const _AnnotationEditorSheet({
+    required this.annotation,
+    required this.knownTags,
+    required this.strings,
+  });
+
+  final ReviewAnnotation annotation;
+  final List<String> knownTags;
+  final AppStrings strings;
+
+  @override
+  State<_AnnotationEditorSheet> createState() => _AnnotationEditorSheetState();
+}
+
+class _AnnotationEditorSheetState extends State<_AnnotationEditorSheet> {
+  late final TextEditingController _comment;
+  late final TextEditingController _tags;
+
+  @override
+  void initState() {
+    super.initState();
+    _comment = TextEditingController(text: widget.annotation.note);
+    _tags = TextEditingController(text: widget.annotation.tags.join(', '));
+  }
+
+  @override
+  void dispose() {
+    _comment.dispose();
+    _tags.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = widget.strings;
+    final annotation = widget.annotation;
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final height = (screenHeight * 0.92 - bottomInset).clamp(
+      320.0,
+      screenHeight,
+    );
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: SizedBox(
+        height: height,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 10, 8, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      strings.reviewAnnotationEdit,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: strings.commonClose,
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close, size: 19),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (annotation.imagePath != null) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.file(
+                          File(annotation.imagePath!),
+                          height: 130,
+                          cacheWidth: 520,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ] else
+                      SelectableText(
+                        annotation.text.trim().isEmpty
+                            ? strings.reviewAnnotationRegion
+                            : annotation.text,
+                        maxLines: 3,
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: context.palette.textSecondary),
+                      ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _comment,
+                      autofocus: true,
+                      minLines: 3,
+                      maxLines: 6,
+                      decoration: InputDecoration(
+                        labelText: strings.reviewAnnotationNote,
+                        hintText: strings.reviewAnnotationNoteHint,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      strings.reviewTags,
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    NoteTagField(
+                      controller: _tags,
+                      knownTags: widget.knownTags,
+                      strings: strings,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SafeArea(
+              top: false,
+              minimum: const EdgeInsets.fromLTRB(18, 8, 18, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Text(strings.commonCancel),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () {
+                      Navigator.of(context).pop((
+                        comment: _comment.text.trim(),
+                        tags: (parseNoteTags(_tags.text)..sort()),
+                      ));
+                    },
+                    child: Text(strings.commonSave),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PdfRegionAdjustOverlay extends StatefulWidget {

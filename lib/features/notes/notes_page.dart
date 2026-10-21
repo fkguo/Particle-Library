@@ -1099,13 +1099,18 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     }
   }
 
-  Future<void> _copyCiteKeys() async {
-    final notes = await _scopeNotesForExport();
+  Future<void> _copyCiteKeys({List<NoteRecord>? notes}) async {
+    final current = _draftActive ? _draftRecord : _selected;
+    final source =
+        notes ??
+        (current != null
+            ? <NoteRecord>[current]
+            : await _scopeNotesForExport());
     if (!mounted) return;
     final scope = AppScope.maybeOf(context);
     final database = scope?.database;
     final strings = widget.strings;
-    final targets = referenceTargetsForCiteKeys(notes);
+    final targets = referenceTargetsForCiteKeys(source);
     if (targets.isEmpty) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(strings.notesNoCiteKeys)));
@@ -1164,13 +1169,18 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     );
   }
 
-  Future<void> _copyBibtex() async {
-    final notes = await _scopeNotesForExport();
+  Future<void> _copyBibtex({List<NoteRecord>? notes}) async {
+    final current = _draftActive ? _draftRecord : _selected;
+    final source =
+        notes ??
+        (current != null
+            ? <NoteRecord>[current]
+            : await _scopeNotesForExport());
     if (!mounted) return;
     final scope = AppScope.maybeOf(context);
     final database = scope?.database;
     final strings = widget.strings;
-    final targets = referenceTargetsForCiteKeys(notes);
+    final targets = referenceTargetsForCiteKeys(source);
     if (targets.isEmpty) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(strings.notesNoBibtex)));
@@ -1362,171 +1372,204 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     if (widget.store == null) return _unavailable(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= widget.wideBreakpoint;
+        final short = constraints.maxHeight < 560;
+        final landscapeBar = short && constraints.maxWidth >= 640;
+        final wide = constraints.maxWidth >= widget.wideBreakpoint && !short;
         final showRail = constraints.maxWidth >= 1280;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Insets.l,
-                Insets.l,
-                Insets.l,
-                Insets.s,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          strings.notesTitle,
-                          style: Theme.of(context).textTheme.headlineMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: -0.3,
-                              ),
-                        ),
+        final header = Padding(
+          padding: EdgeInsets.fromLTRB(
+            Insets.l,
+            short ? Insets.xs : Insets.l,
+            Insets.l,
+            short ? 0 : Insets.s,
+          ),
+          child: Flex(
+            direction: wide ? Axis.horizontal : Axis.vertical,
+            crossAxisAlignment: wide
+                ? CrossAxisAlignment.center
+                : CrossAxisAlignment.start,
+            children: [
+              if (!short)
+                Flexible(
+                  flex: wide ? 1 : 0,
+                  fit: wide ? FlexFit.tight : FlexFit.loose,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        strings.notesTitle,
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.3,
+                            ),
+                      ),
+                      if (wide && !short)
                         Text(
                           strings.notesLocalOnly,
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: palette.textSecondary),
                         ),
-                      ],
+                    ],
+                  ),
+                ),
+              SizedBox(width: wide ? Insets.s : 0, height: wide ? 0 : Insets.s),
+              Wrap(
+                spacing: Insets.s,
+                runSpacing: Insets.s,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (wide)
+                    IconButton(
+                      tooltip: _listVisible
+                          ? strings.sidebarHide
+                          : strings.sidebarShow,
+                      onPressed: () =>
+                          setState(() => _listVisible = !_listVisible),
+                      icon: Icon(
+                        _listVisible
+                            ? Icons.vertical_split
+                            : Icons.vertical_split_outlined,
+                        size: 20,
+                      ),
+                    ),
+                  IconButton(
+                    tooltip: _multiSelect
+                        ? strings.notesClearSelection
+                        : strings.notesSelectNotes,
+                    onPressed: _toggleMultiSelect,
+                    icon: Icon(
+                      _multiSelect ? Icons.close : Icons.checklist,
+                      size: 20,
                     ),
                   ),
-                  const SizedBox(width: Insets.s),
-                  Wrap(
-                    spacing: Insets.s,
-                    runSpacing: Insets.s,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      if (wide)
-                        IconButton(
-                          tooltip: _listVisible
-                              ? strings.sidebarHide
-                              : strings.sidebarShow,
-                          onPressed: () =>
-                              setState(() => _listVisible = !_listVisible),
-                          icon: Icon(
-                            _listVisible
-                                ? Icons.vertical_split
-                                : Icons.vertical_split_outlined,
-                            size: 20,
-                          ),
-                        ),
-                      IconButton(
-                        tooltip: _multiSelect
-                            ? strings.notesClearSelection
-                            : strings.notesSelectNotes,
-                        onPressed: _toggleMultiSelect,
-                        icon: Icon(
-                          _multiSelect ? Icons.close : Icons.checklist,
-                          size: 20,
-                        ),
+                  FilledButton.icon(
+                    onPressed: () => _newNote(wide: wide),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 40),
+                      padding: const EdgeInsets.symmetric(horizontal: Insets.m),
+                    ),
+                    icon: const Icon(Icons.add_rounded, size: 20),
+                    label: Text(strings.notesNew),
+                  ),
+                  IconButton(
+                    tooltip: strings.notesTagsManage,
+                    onPressed: _openTagManager,
+                    icon: const Icon(Icons.sell_outlined, size: 20),
+                  ),
+                  IconButton(
+                    tooltip: strings.notesTrash,
+                    onPressed: _openTrash,
+                    icon: const Icon(Icons.delete_outline, size: 20),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: strings.notesCopyCiteKeys,
+                    icon: const Icon(Icons.format_quote, size: 20),
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'citekeys':
+                          _copyCiteKeys();
+                        case 'bibtex':
+                          _copyBibtex();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'citekeys',
+                        child: Text(strings.notesCopyCiteKeys),
                       ),
-                      FilledButton.icon(
-                        onPressed: () => _newNote(wide: wide),
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 40),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: Insets.m,
-                          ),
-                        ),
-                        icon: const Icon(Icons.add_rounded, size: 20),
-                        label: Text(strings.notesNew),
+                      PopupMenuItem(
+                        value: 'bibtex',
+                        child: Text(strings.notesCopyBibtex),
                       ),
-                      IconButton(
-                        tooltip: strings.notesTagsManage,
-                        onPressed: _openTagManager,
-                        icon: const Icon(Icons.sell_outlined, size: 20),
+                    ],
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: strings.notesExportAll,
+                    icon: const Icon(Icons.import_export, size: 20),
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'json':
+                          _exportJsonFile();
+                        case 'markdown':
+                          _exportMarkdownFile();
+                        case 'scope-markdown':
+                          _exportScopeMarkdown();
+                        case 'import':
+                          _importJsonFile();
+                        case 'copy':
+                          _exportAll();
+                        case 'citekeys':
+                          _copyCiteKeys();
+                        case 'bibtex':
+                          _copyBibtex();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'json',
+                        child: Text(strings.notesExportJsonFile),
                       ),
-                      IconButton(
-                        tooltip: strings.notesTrash,
-                        onPressed: _openTrash,
-                        icon: const Icon(Icons.delete_outline, size: 20),
+                      PopupMenuItem(
+                        value: 'markdown',
+                        child: Text(strings.notesExportMarkdownFile),
                       ),
-                      PopupMenuButton<String>(
-                        tooltip: strings.notesCopyCiteKeys,
-                        icon: const Icon(Icons.format_quote, size: 20),
-                        onSelected: (value) {
-                          switch (value) {
-                            case 'citekeys':
-                              _copyCiteKeys();
-                            case 'bibtex':
-                              _copyBibtex();
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            value: 'citekeys',
-                            child: Text(strings.notesCopyCiteKeys),
-                          ),
-                          PopupMenuItem(
-                            value: 'bibtex',
-                            child: Text(strings.notesCopyBibtex),
-                          ),
-                        ],
+                      PopupMenuItem(
+                        value: 'scope-markdown',
+                        child: Text(strings.notesExportScopeMarkdown),
                       ),
-                      PopupMenuButton<String>(
-                        tooltip: strings.notesExportAll,
-                        icon: const Icon(Icons.import_export, size: 20),
-                        onSelected: (value) {
-                          switch (value) {
-                            case 'json':
-                              _exportJsonFile();
-                            case 'markdown':
-                              _exportMarkdownFile();
-                            case 'scope-markdown':
-                              _exportScopeMarkdown();
-                            case 'import':
-                              _importJsonFile();
-                            case 'copy':
-                              _exportAll();
-                            case 'citekeys':
-                              _copyCiteKeys();
-                            case 'bibtex':
-                              _copyBibtex();
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            value: 'json',
-                            child: Text(strings.notesExportJsonFile),
-                          ),
-                          PopupMenuItem(
-                            value: 'markdown',
-                            child: Text(strings.notesExportMarkdownFile),
-                          ),
-                          PopupMenuItem(
-                            value: 'scope-markdown',
-                            child: Text(strings.notesExportScopeMarkdown),
-                          ),
-                          const PopupMenuDivider(),
-                          PopupMenuItem(
-                            value: 'import',
-                            child: Text(strings.notesImportJsonFile),
-                          ),
-                          PopupMenuItem(
-                            value: 'copy',
-                            child: Text(strings.notesExportAll),
-                          ),
-                          PopupMenuItem(
-                            value: 'citekeys',
-                            child: Text(strings.notesCopyCiteKeys),
-                          ),
-                          PopupMenuItem(
-                            value: 'bibtex',
-                            child: Text(strings.notesCopyBibtex),
-                          ),
-                        ],
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'import',
+                        child: Text(strings.notesImportJsonFile),
+                      ),
+                      PopupMenuItem(
+                        value: 'copy',
+                        child: Text(strings.notesExportAll),
+                      ),
+                      PopupMenuItem(
+                        value: 'citekeys',
+                        child: Text(strings.notesCopyCiteKeys),
+                      ),
+                      PopupMenuItem(
+                        value: 'bibtex',
+                        child: Text(strings.notesCopyBibtex),
                       ),
                     ],
                   ),
                 ],
               ),
-            ),
+            ],
+          ),
+        );
+        if (landscapeBar) {
+          if (_showEvidence) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _landscapeToolbar(context),
+                Expanded(child: _evidencePane(context)),
+              ],
+            );
+          }
+          return ListView(
+            key: const PageStorageKey<String>('notes-phone-scroll'),
+            padding: EdgeInsets.zero,
+            children: [
+              _landscapeToolbar(context),
+              _listPane(
+                context,
+                wide: false,
+                showSearch: false,
+                embedded: true,
+              ),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (wide) header,
             Expanded(
               child: wide
                   ? (showRail
@@ -1571,18 +1614,28 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                               ),
                             ],
                           ))
-                  : Column(
+                  : _showEvidence
+                  ? Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        header,
                         _viewBar(context),
-                        Expanded(
-                          child: IndexedStack(
-                            index: _showEvidence ? 1 : 0,
-                            children: [
-                              _listPane(context, wide: false),
-                              _evidencePane(context),
-                            ],
-                          ),
+                        _searchField(context),
+                        Expanded(child: _evidencePane(context)),
+                      ],
+                    )
+                  : ListView(
+                      key: const PageStorageKey<String>('notes-phone-scroll'),
+                      padding: EdgeInsets.zero,
+                      children: [
+                        header,
+                        _viewBar(context),
+                        _searchField(context),
+                        _listPane(
+                          context,
+                          wide: false,
+                          showSearch: false,
+                          embedded: true,
                         ),
                       ],
                     ),
@@ -1590,6 +1643,209 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
           ],
         );
       },
+    );
+  }
+
+  Widget _landscapeToolbar(BuildContext context) {
+    final strings = widget.strings;
+    final palette = context.palette;
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border(bottom: BorderSide(color: palette.divider)),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: strings.notesNew,
+              onPressed: () => _newNote(wide: false),
+              icon: const Icon(Icons.add_rounded, size: 20),
+            ),
+            IconButton(
+              tooltip: _multiSelect
+                  ? strings.notesClearSelection
+                  : strings.notesSelectNotes,
+              onPressed: _toggleMultiSelect,
+              icon: Icon(
+                _multiSelect ? Icons.close : Icons.checklist,
+                size: 20,
+              ),
+            ),
+            IconButton(
+              tooltip: strings.notesTagsManage,
+              onPressed: _openTagManager,
+              icon: const Icon(Icons.sell_outlined, size: 20),
+            ),
+            IconButton(
+              tooltip: strings.notesTrash,
+              onPressed: _openTrash,
+              icon: const Icon(Icons.delete_outline, size: 20),
+            ),
+            PopupMenuButton<String>(
+              tooltip: strings.notesCopyCiteKeys,
+              icon: const Icon(Icons.format_quote, size: 20),
+              onSelected: (value) {
+                switch (value) {
+                  case 'citekeys':
+                    _copyCiteKeys();
+                  case 'bibtex':
+                    _copyBibtex();
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'citekeys',
+                  child: Text(strings.notesCopyCiteKeys),
+                ),
+                PopupMenuItem(
+                  value: 'bibtex',
+                  child: Text(strings.notesCopyBibtex),
+                ),
+              ],
+            ),
+            PopupMenuButton<String>(
+              tooltip: strings.notesExportAll,
+              icon: const Icon(Icons.import_export, size: 20),
+              onSelected: (value) {
+                switch (value) {
+                  case 'json':
+                    _exportJsonFile();
+                  case 'markdown':
+                    _exportMarkdownFile();
+                  case 'scope-markdown':
+                    _exportScopeMarkdown();
+                  case 'import':
+                    _importJsonFile();
+                  case 'copy':
+                    _exportAll();
+                  case 'citekeys':
+                    _copyCiteKeys();
+                  case 'bibtex':
+                    _copyBibtex();
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'json',
+                  child: Text(strings.notesExportJsonFile),
+                ),
+                PopupMenuItem(
+                  value: 'markdown',
+                  child: Text(strings.notesExportMarkdownFile),
+                ),
+                PopupMenuItem(
+                  value: 'scope-markdown',
+                  child: Text(strings.notesExportScopeMarkdown),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'import',
+                  child: Text(strings.notesImportJsonFile),
+                ),
+                PopupMenuItem(
+                  value: 'copy',
+                  child: Text(strings.notesExportAll),
+                ),
+                PopupMenuItem(
+                  value: 'citekeys',
+                  child: Text(strings.notesCopyCiteKeys),
+                ),
+                PopupMenuItem(
+                  value: 'bibtex',
+                  child: Text(strings.notesCopyBibtex),
+                ),
+              ],
+            ),
+            const SizedBox(width: 6),
+            OutlinedButton.icon(
+              onPressed: () => _showScopePicker(context),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 38),
+              ),
+              icon: const Icon(Icons.folder_outlined, size: 16),
+              label: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 100),
+                child: Text(
+                  _scopeLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            ChoiceChip(
+              label: Text(strings.notesNotesView),
+              selected: !_showEvidence,
+              onSelected: (_) => _setEvidenceMode(false),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            const SizedBox(width: 4),
+            ChoiceChip(
+              label: Text(strings.notesEvidence),
+              selected: _showEvidence,
+              onSelected: (_) => _setEvidenceMode(true),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            if (_showEvidence)
+              IconButton(
+                tooltip: strings.settingsHelp,
+                onPressed: () => _showEvidenceHelp(context),
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.help_outline, size: 18),
+              ),
+            if (_showEvidence && _evidenceRows.isNotEmpty)
+              IconButton(
+                tooltip: strings.notesExportCsv,
+                onPressed: _exportEvidenceCsv,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.download_outlined, size: 18),
+              ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 150,
+              height: 34,
+              child: TextField(
+                controller: _searchController,
+                textAlignVertical: TextAlignVertical.center,
+                style: Theme.of(context).textTheme.bodySmall,
+                decoration: InputDecoration(
+                  hintText: strings.searchButton,
+                  prefixIcon: const Icon(Icons.search, size: 14),
+                  prefixIconConstraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  suffixIcon: _searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: strings.notesSearchClear,
+                          onPressed: _searchController.clear,
+                          icon: const Icon(Icons.close, size: 12),
+                        ),
+                  suffixIconConstraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 4,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1641,19 +1897,28 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
   Widget _viewBar(BuildContext context) {
     final strings = widget.strings;
     final palette = context.palette;
+    final short = MediaQuery.sizeOf(context).height < 560;
     return Container(
-      padding: const EdgeInsets.fromLTRB(Insets.l, Insets.s, Insets.l, 2),
+      padding: EdgeInsets.fromLTRB(
+        Insets.l,
+        short ? 2 : Insets.s,
+        Insets.l,
+        short ? 2 : 2,
+      ),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: palette.divider)),
       ),
-      child: Row(
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 2,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           if (MediaQuery.sizeOf(context).width < 1280)
             OutlinedButton.icon(
               onPressed: () => _showScopePicker(context),
               icon: const Icon(Icons.folder_outlined, size: 17),
               label: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 150),
+                constraints: const BoxConstraints(maxWidth: 130),
                 child: Text(
                   _scopeLabel,
                   maxLines: 1,
@@ -1667,17 +1932,49 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
               style: Theme.of(context).textTheme.titleSmall
                   ?.copyWith(fontWeight: FontWeight.w600),
             ),
-          const Spacer(),
           ChoiceChip(
             label: Text(strings.notesNotesView),
             selected: !_showEvidence,
             onSelected: (_) => _setEvidenceMode(false),
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
-          const SizedBox(width: 6),
           ChoiceChip(
             label: Text(strings.notesEvidence),
             selected: _showEvidence,
             onSelected: (_) => _setEvidenceMode(true),
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          if (_showEvidence)
+            IconButton(
+              tooltip: strings.settingsHelp,
+              onPressed: () => _showEvidenceHelp(context),
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.help_outline, size: 18),
+            ),
+          if (_showEvidence && _evidenceRows.isNotEmpty)
+            IconButton(
+              tooltip: strings.notesExportCsv,
+              onPressed: _exportEvidenceCsv,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.download_outlined, size: 18),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showEvidenceHelp(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(widget.strings.notesEvidence),
+        content: Text(widget.strings.notesEvidenceHint),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(widget.strings.commonClose),
           ),
         ],
       ),
@@ -2466,35 +2763,45 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     }
   }
 
-  Widget _listPane(BuildContext context, {required bool wide}) {
+  Widget _searchField(BuildContext context) {
+    final strings = widget.strings;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        Insets.l,
+        MediaQuery.sizeOf(context).height < 560 ? 4 : Insets.s,
+        Insets.l,
+        MediaQuery.sizeOf(context).height < 560 ? 4 : Insets.s,
+      ),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: strings.notesSearchHint,
+          prefixIcon: const Icon(Icons.search, size: 18),
+          suffixIcon: _searchController.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: strings.notesSearchClear,
+                  onPressed: _searchController.clear,
+                  icon: const Icon(Icons.close, size: 16),
+                ),
+          isDense: true,
+        ),
+      ),
+    );
+  }
+
+  Widget _listPane(
+    BuildContext context, {
+    required bool wide,
+    bool showSearch = true,
+    bool embedded = false,
+  }) {
     final strings = widget.strings;
     final searching = _searchController.text.trim().isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Insets.l,
-            Insets.s,
-            Insets.l,
-            Insets.s,
-          ),
-          child: TextField(
-            controller: _searchController,
-            decoration: InputDecoration(
-              hintText: strings.notesSearchHint,
-              prefixIcon: const Icon(Icons.search, size: 18),
-              suffixIcon: _searchController.text.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: strings.notesSearchClear,
-                      onPressed: _searchController.clear,
-                      icon: const Icon(Icons.close, size: 16),
-                    ),
-              isDense: true,
-            ),
-          ),
-        ),
+        if (showSearch) _searchField(context),
         if (_tagCounts.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -2541,13 +2848,21 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
             ),
           ),
         if (_multiSelect) _selectionBar(context),
-        Expanded(
-          child: _listBody(
+        if (embedded)
+          _listBody(
             context,
             wide: wide,
             searching: searching || _tagFilters.isNotEmpty,
+            embedded: true,
+          )
+        else
+          Expanded(
+            child: _listBody(
+              context,
+              wide: wide,
+              searching: searching || _tagFilters.isNotEmpty,
+            ),
           ),
-        ),
       ],
     );
   }
@@ -2595,10 +2910,17 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     BuildContext context, {
     required bool wide,
     required bool searching,
+    bool embedded = false,
   }) {
     final strings = widget.strings;
     final palette = context.palette;
     if (_loading) {
+      if (embedded) {
+        return const Padding(
+          padding: EdgeInsets.all(Insets.l),
+          child: LoadingPanel(compact: true),
+        );
+      }
       return const Center(child: LoadingPanel(compact: true));
     }
     if (_error != null) {
@@ -2622,10 +2944,85 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
         ),
       );
     }
+    if (embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!searching && MediaQuery.sizeOf(context).height >= 560)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Insets.l,
+                Insets.xs,
+                Insets.l,
+                Insets.xs,
+              ),
+              child: Text(
+                strings.notesRecent,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: palette.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: Insets.l),
+            itemCount: _notes.length + (_notes.length >= _pageSize ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index == _notes.length) {
+                return Padding(
+                  padding: const EdgeInsets.all(Insets.l),
+                  child: Center(
+                    child: TextButton(
+                      onPressed: () => setState(() {
+                        _pageSize += 50;
+                        _reload(showLoading: true);
+                      }),
+                      child: Text(strings.notesLoadMore),
+                    ),
+                  ),
+                );
+              }
+              final note = _notes[index];
+              return Dismissible(
+                key: ValueKey<String>('note-embed-${note.id}'),
+                direction: _multiSelect
+                    ? DismissDirection.none
+                    : DismissDirection.endToStart,
+                confirmDismiss: (_) => _confirmNoteDelete(note),
+                onDismissed: (_) => _deleteNoteFromList(note),
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: Insets.l),
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  child: Icon(
+                    Icons.delete_outline,
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
+                ),
+                child: _NoteListTile(
+                  note: note,
+                  strings: strings,
+                  selected: false,
+                  selectable: _multiSelect,
+                  checked: _checkedNoteIds.contains(note.id),
+                  onToggle: () => _toggleNoteChecked(note),
+                  onTap: () => _select(note, wide: false),
+                  onAddToCollection: () => _addToCollection(note),
+                  onCollectionTap: _filterByCollection,
+                  onTagTap: _filterByTag,
+                ),
+              );
+            },
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (!searching)
+        if (!searching && MediaQuery.sizeOf(context).height >= 560)
           Padding(
             padding: const EdgeInsets.fromLTRB(
               Insets.l,
@@ -2756,6 +3153,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
             ? const <String>[]
             : <String>[_collectionFilter!],
         autofocusTitle: true,
+        onCopyCiteKeys: (note) => _copyCiteKeys(notes: [note]),
+        onCopyBibtex: (note) => _copyBibtex(notes: [note]),
         onSaved: _onDraftSaved,
         onCancel: () {
           if (!mounted) return;
@@ -2786,6 +3185,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       strings: strings,
       note: selected,
       changeSignal: widget.changes,
+      onCopyCiteKeys: (note) => _copyCiteKeys(notes: [note]),
+      onCopyBibtex: (note) => _copyBibtex(notes: [note]),
       onDeleted: _onDeleted,
       onSaved: (saved) {
         if (!mounted) return;

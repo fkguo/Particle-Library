@@ -3,12 +3,12 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'note_markdown.dart';
 import 'notes_exception.dart';
 import 'notes_models.dart';
+import '../core/app_paths.dart';
 
 /// Local, writable user-notes database.
 ///
@@ -177,7 +177,7 @@ class NotesStore {
       return File(trimmed).absolute.path;
     }
     try {
-      final support = await getApplicationSupportDirectory();
+      final support = await appSupportDirectory();
       return '${support.path}${Platform.pathSeparator}ParticleDesk'
           '${Platform.pathSeparator}$databaseFileName';
     } catch (error) {

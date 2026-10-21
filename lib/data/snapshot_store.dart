@@ -3,11 +3,12 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../core/contract.dart';
 import '../core/errors.dart';
+import '../core/app_paths.dart';
 
 class PreparedSnapshot {
   const PreparedSnapshot({
@@ -42,6 +43,8 @@ class SnapshotStore {
   );
 
   Future<PreparedSnapshot> prepare() async {
+    final watch = Stopwatch()..start();
+    debugPrint('SNAPSHOT prepare start');
     if (_pathOverride.isNotEmpty) {
       final file = File(_pathOverride);
       if (!await file.exists()) {
@@ -68,7 +71,9 @@ class SnapshotStore {
 
     Directory dir;
     try {
-      final support = await getApplicationSupportDirectory();
+      debugPrint('SNAPSHOT path start ${watch.elapsedMilliseconds}ms');
+      final support = await appSupportDirectory();
+      debugPrint('SNAPSHOT path got ${watch.elapsedMilliseconds}ms');
       dir = Directory('${support.path}/ParticleDesk');
       if (!await dir.exists()) await dir.create(recursive: true);
     } catch (error) {
@@ -79,12 +84,17 @@ class SnapshotStore {
       );
     }
 
+    debugPrint('SNAPSHOT dir ${watch.elapsedMilliseconds}ms');
     final target = File('${dir.path}/${SnapshotContract.fileName}');
     if (await target.exists()) {
       final correctSize =
           await target.length() == SnapshotContract.expectedSizeBytes;
+      debugPrint('SNAPSHOT exists size=$correctSize');
       if (correctSize) {
         final cached = await _cachedVerifiedHash(target);
+        debugPrint(
+          'SNAPSHOT cached=${cached != null} ${watch.elapsedMilliseconds}ms',
+        );
         if (cached == SnapshotContract.expectedSha256) {
           return PreparedSnapshot(
             path: target.path,
@@ -93,6 +103,7 @@ class SnapshotStore {
           );
         }
       }
+      debugPrint('SNAPSHOT hashing');
       final digest = correctSize ? await _hashFile(target) : null;
       if (digest == SnapshotContract.expectedSha256) {
         await _writeVerificationStamp(target, digest!);
@@ -114,6 +125,7 @@ class SnapshotStore {
       }
     }
 
+    debugPrint('SNAPSHOT copying bundled asset');
     final bytes = await _loadAsset();
     final digest = await Isolate.run(() => sha256.convert(bytes).toString());
     if (digest != SnapshotContract.expectedSha256) {

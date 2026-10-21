@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
+
+import '../core/app_paths.dart';
 
 enum FavoriteKind { entry, reference }
 
@@ -232,13 +233,28 @@ class UserStore extends ChangeNotifier {
   Future<void> _writeChain = Future.value();
   String? recoveryWarning;
 
+  /// Reads only the saved settings for the boot screen, without opening or
+  /// locking the full user store. Returns null when no settings exist yet.
+  static Future<AppSettings?> previewSettings() async {
+    try {
+      final support = await appSupportDirectory();
+      final file = File('${support.path}/ParticleDesk/user_store.json');
+      if (!await file.exists()) return null;
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map) return null;
+      return AppSettings.fromJson(decoded['settings']);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<UserStore> open({String? overridePath}) async {
     File? file;
     if (overridePath != null) {
       file = File(overridePath);
     } else {
       try {
-        final support = await getApplicationSupportDirectory();
+        final support = await appSupportDirectory();
         file = File('${support.path}/ParticleDesk/user_store.json');
       } catch (_) {
         file = null;

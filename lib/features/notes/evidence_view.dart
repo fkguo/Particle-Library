@@ -31,16 +31,18 @@ class NotesEvidenceView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty) {
-      return EmptyPanel(
-        message: strings.notesEvidenceEmpty,
-        icon: Icons.table_chart_outlined,
-        action: onExport == null
-            ? null
-            : OutlinedButton.icon(
-                onPressed: onExport,
-                icon: const Icon(Icons.download_outlined, size: 18),
-                label: Text(strings.notesExportCsv),
-              ),
+      return SingleChildScrollView(
+        child: EmptyPanel(
+          message: strings.notesEvidenceEmpty,
+          icon: Icons.table_chart_outlined,
+          action: onExport == null
+              ? null
+              : OutlinedButton.icon(
+                  onPressed: onExport,
+                  icon: const Icon(Icons.download_outlined, size: 18),
+                  label: Text(strings.notesExportCsv),
+                ),
+        ),
       );
     }
     return LayoutBuilder(
@@ -80,21 +82,7 @@ class NotesEvidenceView extends StatelessWidget {
                           ),
                           label: Text(strings.notesReviewLinks(reviewCount)),
                         ),
-                      if (onExport != null)
-                        TextButton.icon(
-                          onPressed: onExport,
-                          icon: const Icon(Icons.download_outlined, size: 17),
-                          label: Text(strings.notesExportCsv),
-                        ),
                     ],
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      strings.notesEvidenceHint,
-                      style: Theme.of(context).textTheme.bodySmall
-                          ?.copyWith(color: context.palette.textSecondary),
-                    ),
                   ),
                 ],
               ),

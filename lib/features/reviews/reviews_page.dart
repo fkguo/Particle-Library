@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
 import '../../app/error_text.dart';
+import '../../app/app_strings.dart';
 import '../../app/app_theme.dart';
 import '../../app/navigation.dart';
 import '../../data/review_cache.dart';
 import '../common/description_text.dart';
 import '../common/page.dart';
+import '../common/page_outline.dart';
 import '../common/ui.dart';
 import 'review_index.dart';
 import 'review_viewer_page.dart';
@@ -29,6 +31,7 @@ class _ReviewsPageState extends State<ReviewsPage> {
   _ReviewCacheFilter _cacheFilter = _ReviewCacheFilter.all;
   ReviewCache? _cache;
   Set<String> _cached = {};
+  final Map<String, GlobalKey> _groupKeys = {};
   int _cachedBytes = 0;
   String? _downloadingFile;
   double? _downloadProgress;
@@ -323,6 +326,25 @@ class _ReviewsPageState extends State<ReviewsPage> {
     return '$bytes B';
   }
 
+  Future<void> _showIntroHelp(BuildContext context, AppStrings strings) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.reviewsTitle),
+        content: SingleChildScrollView(child: Text(strings.reviewsIntro)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(strings.commonClose),
+          ),
+        ],
+      ),
+    );
+  }
+
+  GlobalKey _groupKey(ReviewGroup group) =>
+      _groupKeys.putIfAbsent(group.titleEn, () => GlobalKey());
+
   @override
   Widget build(BuildContext context) {
     final scope = AppScope.of(context);
@@ -355,189 +377,53 @@ class _ReviewsPageState extends State<ReviewsPage> {
     }
     final total = groups.fold<int>(0, (sum, item) => sum + item.entries.length);
     final allCached = _cached.length >= _allEntries.length;
+    final outlineItems = [
+      for (final item in groups)
+        PageOutlineItem(
+          label: zh ? item.group.titleZh : item.group.titleEn,
+          target: _groupKey(item.group),
+          icon: Icons.folder_outlined,
+        ),
+    ];
 
     return PageScaffold(
-      maxWidth: 1120,
+      maxWidth: double.infinity,
       title: Text(strings.reviewsTitle),
       subtitle: strings.reviewsSubtitle,
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: Insets.xxl),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Insets.l,
-              Insets.m,
-              Insets.l,
-              Insets.s,
+      actions: [
+        if (outlineItems.isNotEmpty)
+          IconButton(
+            tooltip: strings.reviewOutlineTab,
+            onPressed: () => showPageOutlineSheet(
+              context,
+              label: strings.reviewOutlineTab,
+              items: outlineItems,
+              onSelect: (item) {
+                if (item.onTap != null) {
+                  item.onTap!();
+                } else if (item.target != null) {
+                  scrollToOutlineTarget(item.target!);
+                }
+              },
             ),
-            child: SectionCard(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: 18,
-                    color: palette.textSecondary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      strings.reviewsIntro,
-                      style: Theme.of(context).textTheme.bodyMedium
-                          ?.copyWith(color: palette.textSecondary),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            icon: const Icon(Icons.toc, size: 20),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(Insets.l, 0, Insets.l, Insets.s),
-            child: TextField(
-              controller: _controller,
-              onChanged: (value) => setState(() => _query = value),
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search, size: 19),
-                hintText: strings.reviewsSearchHint,
-                border: const OutlineInputBorder(),
-                isDense: true,
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: strings.commonClear,
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          _controller.clear();
-                          setState(() => _query = '');
-                        },
-                      ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(Insets.l, 0, Insets.l, Insets.s),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                FilterChip(
-                  label: Text(
-                    '${strings.reviewsFilterAll} · ${_allowedEntries.length}',
-                  ),
-                  selected: _cacheFilter == _ReviewCacheFilter.all,
-                  onSelected: (_) =>
-                      setState(() => _cacheFilter = _ReviewCacheFilter.all),
-                ),
-                FilterChip(
-                  label: Text(
-                    '${strings.reviewsFilterCached} · ${_allowedEntries.where((entry) => _cached.contains(entry.file)).length}',
-                  ),
-                  selected: _cacheFilter == _ReviewCacheFilter.cached,
-                  onSelected: (_) =>
-                      setState(() => _cacheFilter = _ReviewCacheFilter.cached),
-                ),
-                FilterChip(
-                  label: Text(
-                    '${strings.reviewsFilterNotCached} · ${_allowedEntries.where((entry) => !_cached.contains(entry.file)).length}',
-                  ),
-                  selected: _cacheFilter == _ReviewCacheFilter.notCached,
-                  onSelected: (_) => setState(
-                    () => _cacheFilter = _ReviewCacheFilter.notCached,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(Insets.l, 0, Insets.l, Insets.s),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  zh
-                      ? '共 $total 篇 · PDG $reviewEdition'
-                      : '$total reviews · PDG $reviewEdition',
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: palette.textSecondary),
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      strings.reviewsCacheStatus(
-                        _cached.length,
-                        _allEntries.length,
-                        _formatBytes(_cachedBytes),
-                      ),
-                      style: Theme.of(context).textTheme.bodySmall
-                          ?.copyWith(color: palette.textSecondary),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _cache == null || _bulkRunning || allCached
-                          ? null
-                          : () => _downloadAll(),
-                      icon: const Icon(
-                        Icons.download_for_offline_outlined,
-                        size: 17,
-                      ),
-                      label: Text(
-                        allCached
-                            ? strings.reviewsCached
-                            : _bulkRunning
-                            ? strings.reviewsBulkProgress(_bulkDone, _bulkTotal)
-                            : strings.reviewsCacheAll,
-                      ),
-                    ),
-                    if (_bulkRunning)
-                      TextButton(
-                        onPressed: () => setState(() => _bulkCancel = true),
-                        child: Text(strings.reviewsStop),
-                      ),
-                    if (_cached.isNotEmpty)
-                      TextButton.icon(
-                        onPressed: _bulkRunning ? null : _manageCache,
-                        icon: const Icon(Icons.delete_outline, size: 17),
-                        label: Text(strings.reviewsManageCache),
-                      ),
-                  ],
-                ),
-                if (_bulkRunning)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: LinearProgressIndicator(
-                      value: _bulkTotal == 0 ? null : _bulkDone / _bulkTotal,
-                    ),
-                  )
-                else if (_downloadProgress != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: LinearProgressIndicator(value: _downloadProgress),
-                  ),
-                if (_cacheError != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      _cacheError!,
-                      style: Theme.of(context).textTheme.bodySmall
-                          ?.copyWith(color: palette.warning),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (groups.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Insets.l),
-              child: EmptyPanel(
-                message: strings.reviewsEmpty,
-                icon: Icons.menu_book_outlined,
-              ),
-            )
-          else
-            for (final item in groups)
+        IconButton(
+          tooltip: strings.settingsHelp,
+          onPressed: () => _showIntroHelp(context, strings),
+          icon: const Icon(Icons.help_outline, size: 20),
+        ),
+      ],
+      body: PageOutlineScaffold(
+        label: strings.reviewOutlineTab,
+        items: outlineItems,
+        minWidth: 560,
+        showNarrowButton: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: Insets.xxl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   Insets.l,
@@ -545,37 +431,211 @@ class _ReviewsPageState extends State<ReviewsPage> {
                   Insets.l,
                   Insets.s,
                 ),
-                child: SectionCard(
-                  titleWidget: DescriptionText(
-                    zh ? item.group.titleZh : item.group.titleEn,
-                    style: Theme.of(context).textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: zh
-                      ? '${item.entries.length} 篇'
-                      : '${item.entries.length} reviews',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (var i = 0; i < item.entries.length; i++)
-                        _ReviewTile(
-                          entry: item.entries[i],
-                          last: i == item.entries.length - 1,
-                          cached: _cached.contains(item.entries[i].file),
-                          downloading: _downloadingFile == item.entries[i].file,
-                          progress: _downloadingFile == item.entries[i].file
-                              ? _downloadProgress
-                              : null,
-                          onTap: () => _open(context, item.entries[i]),
-                          onDownload: _bulkRunning
-                              ? null
-                              : () => _download(item.entries[i]),
-                        ),
-                    ],
+                child: TextField(
+                  controller: _controller,
+                  onChanged: (value) => setState(() => _query = value),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search, size: 19),
+                    hintText: strings.reviewsSearchHint,
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: strings.commonClear,
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              _controller.clear();
+                              setState(() => _query = '');
+                            },
+                          ),
                   ),
                 ),
               ),
-        ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.l,
+                  0,
+                  Insets.l,
+                  Insets.s,
+                ),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    FilterChip(
+                      label: Text(
+                        '${strings.reviewsFilterAll} · ${_allowedEntries.length}',
+                      ),
+                      selected: _cacheFilter == _ReviewCacheFilter.all,
+                      onSelected: (_) =>
+                          setState(() => _cacheFilter = _ReviewCacheFilter.all),
+                    ),
+                    FilterChip(
+                      label: Text(
+                        '${strings.reviewsFilterCached} · ${_allowedEntries.where((entry) => _cached.contains(entry.file)).length}',
+                      ),
+                      selected: _cacheFilter == _ReviewCacheFilter.cached,
+                      onSelected: (_) => setState(
+                        () => _cacheFilter = _ReviewCacheFilter.cached,
+                      ),
+                    ),
+                    FilterChip(
+                      label: Text(
+                        '${strings.reviewsFilterNotCached} · ${_allowedEntries.where((entry) => !_cached.contains(entry.file)).length}',
+                      ),
+                      selected: _cacheFilter == _ReviewCacheFilter.notCached,
+                      onSelected: (_) => setState(
+                        () => _cacheFilter = _ReviewCacheFilter.notCached,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.l,
+                  0,
+                  Insets.l,
+                  Insets.s,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      zh
+                          ? '共 $total 篇 · PDG $reviewEdition'
+                          : '$total reviews · PDG $reviewEdition',
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: palette.textSecondary),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          strings.reviewsCacheStatus(
+                            _cached.length,
+                            _allEntries.length,
+                            _formatBytes(_cachedBytes),
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: palette.textSecondary),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _cache == null || _bulkRunning || allCached
+                              ? null
+                              : () => _downloadAll(),
+                          icon: const Icon(
+                            Icons.download_for_offline_outlined,
+                            size: 17,
+                          ),
+                          label: Text(
+                            allCached
+                                ? strings.reviewsCached
+                                : _bulkRunning
+                                ? strings.reviewsBulkProgress(
+                                    _bulkDone,
+                                    _bulkTotal,
+                                  )
+                                : strings.reviewsCacheAll,
+                          ),
+                        ),
+                        if (_bulkRunning)
+                          TextButton(
+                            onPressed: () => setState(() => _bulkCancel = true),
+                            child: Text(strings.reviewsStop),
+                          ),
+                        if (_cached.isNotEmpty)
+                          TextButton.icon(
+                            onPressed: _bulkRunning ? null : _manageCache,
+                            icon: const Icon(Icons.delete_outline, size: 17),
+                            label: Text(strings.reviewsManageCache),
+                          ),
+                      ],
+                    ),
+                    if (_bulkRunning)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: LinearProgressIndicator(
+                          value: _bulkTotal == 0
+                              ? null
+                              : _bulkDone / _bulkTotal,
+                        ),
+                      )
+                    else if (_downloadProgress != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: LinearProgressIndicator(
+                          value: _downloadProgress,
+                        ),
+                      ),
+                    if (_cacheError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          _cacheError!,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: palette.warning),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (groups.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Insets.l),
+                  child: EmptyPanel(
+                    message: strings.reviewsEmpty,
+                    icon: Icons.menu_book_outlined,
+                  ),
+                )
+              else
+                for (final item in groups)
+                  Padding(
+                    key: _groupKey(item.group),
+                    padding: const EdgeInsets.fromLTRB(
+                      Insets.l,
+                      0,
+                      Insets.l,
+                      Insets.s,
+                    ),
+                    child: SectionCard(
+                      titleWidget: DescriptionText(
+                        zh ? item.group.titleZh : item.group.titleEn,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: zh
+                          ? '${item.entries.length} 篇'
+                          : '${item.entries.length} reviews',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (var i = 0; i < item.entries.length; i++)
+                            _ReviewTile(
+                              entry: item.entries[i],
+                              last: i == item.entries.length - 1,
+                              cached: _cached.contains(item.entries[i].file),
+                              downloading:
+                                  _downloadingFile == item.entries[i].file,
+                              progress: _downloadingFile == item.entries[i].file
+                                  ? _downloadProgress
+                                  : null,
+                              onTap: () => _open(context, item.entries[i]),
+                              onDownload: _bulkRunning
+                                  ? null
+                                  : () => _download(item.entries[i]),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+            ],
+          ),
+        ),
       ),
     );
   }

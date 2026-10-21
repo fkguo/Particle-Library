@@ -75,6 +75,45 @@ void scrollToOutlineTarget(GlobalKey key, {double alignment = 0.0}) {
   }
 }
 
+/// Shows the compact, narrow-window table of contents as a modal sheet.
+Future<void> showPageOutlineSheet(
+  BuildContext context, {
+  required String label,
+  required List<PageOutlineItem> items,
+  required ValueChanged<PageOutlineItem> onSelect,
+}) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              label,
+              style: Theme.of(sheetContext).textTheme.titleSmall,
+            ),
+          ),
+          for (final item in items)
+            ListTile(
+              dense: true,
+              leading: Icon(item.icon ?? Icons.chevron_right, size: 18),
+              title: Text(item.label),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  onSelect(item);
+                });
+              },
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
 class PageOutlineScaffold extends StatefulWidget {
   const PageOutlineScaffold({
     super.key,
@@ -82,12 +121,14 @@ class PageOutlineScaffold extends StatefulWidget {
     required this.items,
     required this.child,
     this.minWidth = 760,
+    this.showNarrowButton = true,
   });
 
   final String label;
   final List<PageOutlineItem> items;
   final Widget child;
   final double minWidth;
+  final bool showNarrowButton;
 
   @override
   State<PageOutlineScaffold> createState() => _PageOutlineScaffoldState();
@@ -227,48 +268,19 @@ class _PageOutlineScaffoldState extends State<PageOutlineScaffold> {
   Widget _narrowOutlineButton(BuildContext context) {
     return Positioned(
       top: 8,
-      left: 8,
+      left: 0,
       child: Material(
         elevation: 2,
         color: context.palette.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
         child: IconButton(
           tooltip: widget.label,
-          onPressed: () async {
-            await showModalBottomSheet<void>(
-              context: context,
-              showDragHandle: true,
-              builder: (sheetContext) => SafeArea(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      child: Text(
-                        widget.label,
-                        style: Theme.of(sheetContext).textTheme.titleSmall,
-                      ),
-                    ),
-                    for (final item in widget.items)
-                      ListTile(
-                        dense: true,
-                        leading: Icon(
-                          item.icon ?? Icons.chevron_right,
-                          size: 18,
-                        ),
-                        title: Text(item.label),
-                        onTap: () {
-                          Navigator.of(sheetContext).pop();
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            _select(item);
-                          });
-                        },
-                      ),
-                  ],
-                ),
-              ),
-            );
-          },
+          onPressed: () => showPageOutlineSheet(
+            context,
+            label: widget.label,
+            items: widget.items,
+            onSelect: _select,
+          ),
           icon: const Icon(Icons.toc, size: 18),
         ),
       ),
@@ -281,6 +293,7 @@ class _PageOutlineScaffoldState extends State<PageOutlineScaffold> {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < widget.minWidth) {
+          if (!widget.showNarrowButton) return widget.child;
           return Stack(children: [widget.child, _narrowOutlineButton(context)]);
         }
         return Row(

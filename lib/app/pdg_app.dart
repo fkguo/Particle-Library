@@ -7,10 +7,12 @@ import 'app_scope.dart';
 import 'app_shell.dart';
 import 'app_strings.dart';
 import 'app_theme.dart';
+import '../domain/labels.dart';
 import 'bootstrap.dart';
 import 'debug_bridge.dart';
 import 'debug_hooks.dart';
 import 'boot_screen.dart';
+import '../user/user_store.dart';
 
 class PdgApp extends StatefulWidget {
   const PdgApp({super.key, this.bootLoader});
@@ -25,6 +27,7 @@ class PdgApp extends StatefulWidget {
 class _PdgAppState extends State<PdgApp> with WidgetsBindingObserver {
   AppServices? _services;
   Object? _error;
+  TextLang? _bootLanguage;
   bool _loading = true;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   bool _debugBridgeRegistered = false;
@@ -49,6 +52,7 @@ class _PdgAppState extends State<PdgApp> with WidgetsBindingObserver {
   }
 
   Future<void> _boot() async {
+    final preview = UserStore.previewSettings();
     setState(() {
       _loading = true;
       _error = null;
@@ -56,7 +60,18 @@ class _PdgAppState extends State<PdgApp> with WidgetsBindingObserver {
     });
     try {
       final loader = widget.bootLoader ?? AppBootstrap.load;
-      final services = await loader();
+      final servicesFuture = loader();
+      final savedSettings = await preview;
+      if (mounted && savedSettings != null) {
+        setState(() {
+          _bootLanguage = savedSettings.locale == 'zh'
+              ? TextLang.zh
+              : savedSettings.locale == 'en'
+              ? TextLang.en
+              : null;
+        });
+      }
+      final services = await servicesFuture;
       if (!mounted) return;
       setState(() {
         _services = services;
@@ -92,7 +107,11 @@ class _PdgAppState extends State<PdgApp> with WidgetsBindingObserver {
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
         themeMode: ThemeMode.system,
-        home: BootScreen(error: _loading ? null : _error, onRetry: _boot),
+        home: BootScreen(
+          error: _loading ? null : _error,
+          onRetry: _boot,
+          language: _bootLanguage,
+        ),
       );
     }
 

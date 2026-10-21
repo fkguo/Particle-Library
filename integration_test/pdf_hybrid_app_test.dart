@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path_provider/path_provider.dart';
@@ -87,7 +87,6 @@ void main() {
     }
     final page = controller.layout.pageLayouts.first;
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('Region selection'), findsWidgets);
     final hitKey = Key('region-hit-${region.id}');
     final hitCenter = tester.getCenter(find.byKey(hitKey));
     final beforeUnselectedDrag = await ReviewAnnotationNotes.load(
@@ -182,6 +181,16 @@ void main() {
     final textHitKey = Key('text-hit-${textHighlight.id}-0');
     expect(find.byKey(textHitKey), findsOneWidget);
     final textHitCenter = tester.getCenter(find.byKey(textHitKey));
+    await tester.tapAt(textHitCenter);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(const Key('pdfrxAnchorBPositioned')), findsOneWidget);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.tapAt(textHitCenter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(PopupMenuItem<String>), findsWidgets);
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tapAt(textHitCenter, buttons: kSecondaryMouseButton);
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(PopupMenuItem<String>), findsWidgets);
@@ -202,6 +211,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Copy'), findsOneWidget);
     expect(find.text('Select All'), findsNothing);
+
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tapAt(textHitCenter);
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tapAt(textHitCenter);
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(find.byType(TextField), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 }
 

@@ -48,6 +48,8 @@ class NoteEditor extends StatefulWidget {
     this.onSaved,
     this.onDeleted,
     this.onCancel,
+    this.onCopyCiteKeys,
+    this.onCopyBibtex,
     this.draft = false,
     this.autofocusTitle = false,
     this.debounce = const Duration(milliseconds: 500),
@@ -62,6 +64,8 @@ class NoteEditor extends StatefulWidget {
   final ValueChanged<NoteRecord>? onSaved;
   final VoidCallback? onDeleted;
   final VoidCallback? onCancel;
+  final Future<void> Function(NoteRecord note)? onCopyCiteKeys;
+  final Future<void> Function(NoteRecord note)? onCopyBibtex;
   final bool draft;
   final bool autofocusTitle;
   final Duration debounce;
@@ -1107,6 +1111,19 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _copyReference({required bool bibtex}) async {
+    final saved = await _persist();
+    if (!mounted) return;
+    if (saved == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(widget.strings.notesSaveFailed)));
+      return;
+    }
+    final callback = bibtex ? widget.onCopyBibtex : widget.onCopyCiteKeys;
+    if (callback != null) await callback(saved);
+  }
+
   Future<void> _confirmDelete() async {
     final record = _record;
     if (record == null) return;
@@ -1188,123 +1205,136 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
           LayoutBuilder(
             builder: (context, headerConstraints) {
               final compactHeader = headerConstraints.maxWidth < 620;
-              return Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _record == null
-                          ? strings.notesNew
-                          : widget.draft
-                          ? strings.notesDraft
-                          : strings.notesEdit,
-                      style: Theme.of(context).textTheme.labelLarge
-                          ?.copyWith(color: palette.textSecondary),
-                    ),
-                  ),
-                  _StatusIndicator(
-                    stage: _stage,
-                    error: _saveError,
-                    strings: strings,
-                    onRetry: _saveNow,
-                    onReload:
-                        _saveError is NotesException &&
-                            (_saveError as NotesException).code ==
-                                NotesErrorCode.conflict
-                        ? _reloadFromDisk
-                        : null,
-                    onKeepMine:
-                        _saveError is NotesException &&
-                            (_saveError as NotesException).code ==
-                                NotesErrorCode.conflict
-                        ? _keepMine
-                        : null,
-                  ),
-                  if (scope != null)
-                    Builder(
-                      builder: (context) {
-                        final railVisible =
-                            MediaQuery.sizeOf(context).width >= 1360 &&
-                            _showPdgRail &&
-                            _linkPreviewTarget == null;
-                        return IconButton(
-                          tooltip: strings.notesPdgLookup,
-                          style: IconButton.styleFrom(
-                            backgroundColor: railVisible
-                                ? palette.primary.withValues(alpha: 0.12)
-                                : null,
-                            foregroundColor: railVisible
-                                ? palette.primary
-                                : null,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(9),
-                            ),
+              final status = _StatusIndicator(
+                stage: _stage,
+                error: _saveError,
+                strings: strings,
+                onRetry: _saveNow,
+                onReload:
+                    _saveError is NotesException &&
+                        (_saveError as NotesException).code ==
+                            NotesErrorCode.conflict
+                    ? _reloadFromDisk
+                    : null,
+                onKeepMine:
+                    _saveError is NotesException &&
+                        (_saveError as NotesException).code ==
+                            NotesErrorCode.conflict
+                    ? _keepMine
+                    : null,
+              );
+              final actions = <Widget>[
+                if (scope != null)
+                  Builder(
+                    builder: (context) {
+                      final railVisible =
+                          MediaQuery.sizeOf(context).width >= 1360 &&
+                          _showPdgRail &&
+                          _linkPreviewTarget == null;
+                      return IconButton(
+                        tooltip: strings.notesPdgLookup,
+                        style: IconButton.styleFrom(
+                          backgroundColor: railVisible
+                              ? palette.primary.withValues(alpha: 0.12)
+                              : null,
+                          foregroundColor: railVisible ? palette.primary : null,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9),
                           ),
-                          onPressed: () {
-                            if (MediaQuery.sizeOf(context).width >= 1360) {
-                              setState(() {
-                                _linkPreviewTarget = null;
-                                _showPdgRail = !_showPdgRail;
-                              });
-                            } else {
-                              _openPdgLookup();
-                            }
-                          },
-                          icon: Icon(
-                            railVisible
-                                ? Icons.travel_explore
-                                : Icons.travel_explore_outlined,
-                            size: 19,
-                          ),
-                        );
-                      },
-                    ),
-                  if (!compactHeader)
-                    IconButton(
-                      tooltip: strings.notesLinkNote,
-                      onPressed: _linkAnotherNote,
-                      icon: const Icon(Icons.add_link, size: 19),
-                    ),
-                  if (!compactHeader &&
-                      _record != null &&
-                      _record!.anchors.isNotEmpty)
-                    IconButton(
-                      tooltip: strings.notesRelated,
-                      onPressed: _showRelatedNotes,
-                      icon: const Icon(Icons.hub_outlined, size: 19),
-                    ),
-                  if (!compactHeader)
-                    IconButton(
-                      tooltip: _previewOnly
-                          ? strings.notesWrite
-                          : strings.notesPreview,
-                      onPressed: () =>
-                          setState(() => _previewOnly = !_previewOnly),
-                      icon: Icon(
-                        _previewOnly
-                            ? Icons.edit_note_outlined
-                            : Icons.visibility_outlined,
-                        size: 19,
+                        ),
+                        onPressed: () {
+                          if (MediaQuery.sizeOf(context).width >= 1360) {
+                            setState(() {
+                              _linkPreviewTarget = null;
+                              _showPdgRail = !_showPdgRail;
+                            });
+                          } else {
+                            _openPdgLookup();
+                          }
+                        },
+                        icon: Icon(
+                          railVisible
+                              ? Icons.travel_explore
+                              : Icons.travel_explore_outlined,
+                          size: 19,
+                        ),
+                      );
+                    },
+                  ),
+                IconButton(
+                  tooltip: strings.notesLinkNote,
+                  onPressed: _linkAnotherNote,
+                  icon: const Icon(Icons.add_link, size: 19),
+                ),
+                if (_record != null && _record!.anchors.isNotEmpty)
+                  IconButton(
+                    tooltip: strings.notesRelated,
+                    onPressed: _showRelatedNotes,
+                    icon: const Icon(Icons.hub_outlined, size: 19),
+                  ),
+                IconButton(
+                  tooltip: _previewOnly
+                      ? strings.notesWrite
+                      : strings.notesPreview,
+                  onPressed: () => setState(() => _previewOnly = !_previewOnly),
+                  icon: Icon(
+                    _previewOnly
+                        ? Icons.edit_note_outlined
+                        : Icons.visibility_outlined,
+                    size: 19,
+                  ),
+                ),
+                IconButton(
+                  tooltip: strings.notesCopyMarkdown,
+                  onPressed: _record == null ? null : _copyMarkdown,
+                  icon: const Icon(Icons.copy_all_outlined, size: 18),
+                ),
+                if (_record != null &&
+                    (widget.onCopyCiteKeys != null ||
+                        widget.onCopyBibtex != null))
+                  PopupMenuButton<String>(
+                    tooltip: strings.notesCopyCiteKeys,
+                    icon: const Icon(Icons.format_quote, size: 18),
+                    onSelected: (value) =>
+                        unawaited(_copyReference(bibtex: value == 'bibtex')),
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'citekeys',
+                        child: Text(strings.notesCopyCiteKeys),
                       ),
-                    ),
-                  if (!compactHeader)
-                    IconButton(
-                      tooltip: strings.notesCopyMarkdown,
-                      onPressed: _record == null ? null : _copyMarkdown,
-                      icon: const Icon(Icons.copy_all_outlined, size: 18),
-                    ),
-                  if (_record != null)
-                    IconButton(
-                      tooltip: strings.notesDelete,
-                      onPressed: _confirmDelete,
-                      icon: const Icon(Icons.delete_outline, size: 18),
-                    ),
-                  if (widget.draft && widget.onCancel != null)
-                    IconButton(
-                      tooltip: strings.notesDiscardDraft,
-                      onPressed: _cancelDraft,
-                      icon: const Icon(Icons.close, size: 19),
-                    ),
-                ],
+                      PopupMenuItem(
+                        value: 'bibtex',
+                        child: Text(strings.notesCopyBibtex),
+                      ),
+                    ],
+                  ),
+                if (_record != null)
+                  IconButton(
+                    tooltip: strings.notesDelete,
+                    onPressed: _confirmDelete,
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                  ),
+                if (widget.draft && widget.onCancel != null)
+                  IconButton(
+                    tooltip: strings.notesDiscardDraft,
+                    onPressed: _cancelDraft,
+                    icon: const Icon(Icons.close, size: 19),
+                  ),
+              ];
+              if (compactHeader) {
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 0,
+                    runSpacing: 0,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [status, ...actions],
+                  ),
+                );
+              }
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [status, ...actions],
               );
             },
           ),

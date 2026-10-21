@@ -542,11 +542,11 @@ class _AppShellState extends State<AppShell> {
                     ],
                   ),
                 );
-                final ownsTextSelection =
-                    _navHub.globalSelectionDisabled ||
-                    _navHub.tabChromeHidden ||
-                    _navHub.detailChromeHidden;
-                return ownsTextSelection ? shell : SelectionArea(child: shell);
+                // Pages that need selectable text provide their own
+                // SelectionArea (PageScaffold). Keeping a global SelectionArea
+                // around the PDF route makes it fight pdfrx's selection
+                // lifecycle and can corrupt the widget tree on iOS.
+                return shell;
               },
             );
           },

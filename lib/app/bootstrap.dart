@@ -19,6 +19,8 @@ class AppBootstrap {
     String? notesStoreOverridePath,
     bool openNotes = true,
   }) async {
+    final watch = Stopwatch()..start();
+    debugPrint('BOOT 0ms start');
     final userStoreFuture = UserStore.open(overridePath: userStoreOverridePath);
     // Notes are opened in parallel but their failure is contained: the PDG
     // snapshot must keep working even when the notes database cannot open.
@@ -29,15 +31,20 @@ class AppBootstrap {
     SqlExecutor? executor;
     try {
       prepared = await (snapshotStore ?? SnapshotStore()).prepare();
+      debugPrint('BOOT snapshot ${watch.elapsedMilliseconds}ms');
       executor = await IsolateSqlExecutor.open(prepared.path);
+      debugPrint('BOOT sql isolate ${watch.elapsedMilliseconds}ms');
       final database = await PdgDatabase.open(
         executor,
         snapshotHash: prepared.sha256,
         validateSchema: true,
         verifyIntegrity: false,
       );
+      debugPrint('BOOT pdg ${watch.elapsedMilliseconds}ms');
       final userStore = await userStoreFuture;
+      debugPrint('BOOT user store ${watch.elapsedMilliseconds}ms');
       final notesResult = await notesFuture;
+      debugPrint('BOOT notes open ${watch.elapsedMilliseconds}ms');
       // A notes database with a newer/foreign schema is not an app failure;
       // its error state is surfaced on the Notes page instead.
       var notesStore = notesResult.store;
@@ -50,6 +57,7 @@ class AppBootstrap {
         try {
           await notesStore.cleanupLegacyMeasurementMarkers();
           await ReviewAnnotationNotes.ensureMigrated(notesStore);
+          debugPrint('BOOT notes migrate ${watch.elapsedMilliseconds}ms');
         } catch (error) {
           debugPrint('Notes cleanup failed; disabling notes: $error');
           notesError = error;
@@ -61,6 +69,7 @@ class AppBootstrap {
         userStore,
         systemLocale: WidgetsBinding.instance.platformDispatcher.locale,
       );
+      debugPrint('BOOT total ${watch.elapsedMilliseconds}ms');
       final notesChanges = ValueNotifier<int>(0);
       return AppServices(
         database: database,

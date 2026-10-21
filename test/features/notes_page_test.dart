@@ -53,6 +53,50 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('narrow phone layout does not overflow the Notes header', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await pumpWorkspace(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.text('New note'), findsWidgets);
+  });
+
+  testWidgets('landscape phone layout keeps the note list visible', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(932, 430);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await store.create(title: 'Landscape note', bodyMarkdown: 'body');
+    await pumpWorkspace(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.text('Landscape note'), findsOneWidget);
+    expect(find.byIcon(Icons.add_rounded), findsWidgets);
+  });
+
+  testWidgets('rotating Evidence from landscape to portrait stays valid', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(932, 430);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await store.create(title: 'Evidence note', bodyMarkdown: 'body');
+    await pumpWorkspace(tester);
+    await tester.tap(find.text('Evidence'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    tester.view.physicalSize = const Size(430, 932);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Evidence'), findsWidgets);
+  });
+
   testWidgets('lists recent notes, searches CJK text and opens the editor', (
     tester,
   ) async {
@@ -90,7 +134,7 @@ void main() {
     await tester.tap(find.text('D0 寿命'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Edit note'), findsOneWidget);
+    expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
     final titleField = tester.widget<TextField>(find.byType(TextField).at(1));
     expect(titleField.controller?.text, 'D0 寿命');
   });
