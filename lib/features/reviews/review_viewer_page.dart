@@ -79,6 +79,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   bool _annotationSelectionMode = false;
   bool _zenMode = false;
   bool _pdfDarkMode = false;
+
+  /// 'auto' | 'width' | 'page'; remembered per document.
+  String _fitMode = 'auto';
+  double? _restoredZoom;
   bool _mobileTextSelection = false;
   bool _regionMode = false;
   bool _searchOpen = false;
@@ -150,6 +154,12 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       if (page is num) _restoredPage = page.toInt();
       _showAnnotations = state['showAnnotations'] != false;
       _pdfDarkMode = state['dark'] == true;
+      final fit = state['fit'];
+      if (fit is String && (fit == 'width' || fit == 'page' || fit == 'auto')) {
+        _fitMode = fit;
+      }
+      final zoom = state['zoom'];
+      if (zoom is num && zoom > 0) _restoredZoom = zoom.toDouble();
     }
     _ready = _loadAnnotations(scope.notes).then((_) {
       _reviewLog(
@@ -2240,24 +2250,65 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     await _controller.goToPage(pageNumber: page);
   }
 
-  Future<void> _fitInitialPageWidth(int pageNumber) async {
+  Future<void> _fitInitialPage(int pageNumber) async {
     if (pageNumber > 1) {
       await _controller.goToPage(pageNumber: pageNumber);
     }
     if (!mounted) return;
     final page = _controller.pageNumber ?? pageNumber;
-    _fitWidthInSafeArea(page);
+    _applyFit(page);
+    final zoom = _restoredZoom;
+    if (zoom != null) _applyZoom(zoom);
   }
 
+  /// Applies [mode] and remembers it for this document.
+  ///
+  /// `auto` is the viewport decision from the research: fit width on a phone,
+  /// fit the whole page when there is room for it.
   void _fitPage(String mode) {
     if (!_controller.isReady) return;
+    setState(() => _fitMode = mode);
     final page = _controller.pageNumber ?? _currentPage ?? 1;
-    if (mode == 'width') {
-      _fitWidthInSafeArea(page);
-      return;
+    _applyFit(page);
+    _persistReadingState();
+  }
+
+  void _applyFit(int pageNumber) {
+    switch (_fitMode) {
+      case 'width':
+        _fitWidthInSafeArea(pageNumber);
+      case 'page':
+        _fitPageMatrix(pageNumber);
+      default:
+        if (context.isCompactLayout) {
+          _fitWidthInSafeArea(pageNumber);
+        } else {
+          _fitPageMatrix(pageNumber);
+        }
     }
-    final matrix = _controller.calcMatrixForFit(pageNumber: page);
+  }
+
+  void _fitPageMatrix(int pageNumber) {
+    final matrix = _controller.calcMatrixForFit(pageNumber: pageNumber);
     if (matrix != null) _controller.value = matrix;
+  }
+
+  /// Scales the current view around its centre, which is what restoring a
+  /// saved zoom needs (the fit matrix is applied first, then this adjusts it).
+  void _applyZoom(double target) {
+    if (!_controller.isReady) return;
+    final matrix = _controller.value;
+    final current = matrix.getMaxScaleOnAxis();
+    if (current <= 0) return;
+    final clamped = target.clamp(0.1, 8.0);
+    final factor = clamped / current;
+    if ((factor - 1).abs() < 0.002) return;
+    final view = _controller.viewSize;
+    final centre = Offset(view.width / 2, view.height / 2);
+    _controller.value = Matrix4.translationValues(centre.dx, centre.dy, 0)
+      ..multiply(Matrix4.diagonal3Values(factor, factor, 1))
+      ..multiply(Matrix4.translationValues(-centre.dx, -centre.dy, 0))
+      ..multiply(matrix);
   }
 
   /// Fit-width that respects the horizontal safe area.
@@ -2341,6 +2392,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         unawaited(_undo());
       case 'redo':
         unawaited(_redo());
+      case 'fit-auto':
+        _fitPage('auto');
       case 'fit-width':
         _fitPage('width');
       case 'fit-page':
@@ -2621,6 +2674,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                       ),
                       const PopupMenuDivider(),
                       PopupMenuItem(
+                        value: 'fit-auto',
+                        child: Text(strings.reviewFitAuto),
+                      ),
+                      PopupMenuItem(
                         value: 'fit-width',
                         child: Text(strings.reviewFitWidth),
                       ),
@@ -2832,6 +2889,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         'sidebarTab': _sidebarTab,
         'showAnnotations': _showAnnotations,
         'dark': _pdfDarkMode,
+        'fit': _fitMode,
+        if (_controller.isReady && _controller.value.getMaxScaleOnAxis() > 0)
+          'zoom': _controller.value.getMaxScaleOnAxis(),
       }),
     );
   }
@@ -2994,7 +3054,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
             _currentPage = _controller.pageNumber;
             unawaited(_loadOutline(document));
             final targetPage = _restoredPage ?? widget.initialPage;
-            unawaited(_fitInitialPageWidth(targetPage));
+            unawaited(_fitInitialPage(targetPage));
           },
           pagePaintCallbacks: [
             _paintAnnotations,

@@ -86,6 +86,7 @@ void main() {
       );
     }
     final page = controller.layout.pageLayouts.first;
+    double? chosenScale;
     await tester.pump(const Duration(milliseconds: 400));
 
     // A medium window opens the inspector as an end drawer with the same
@@ -122,6 +123,19 @@ void main() {
       tester.getRect(find.byType(PdfViewer)).height,
       closeTo(readingViewport.height, 1),
     );
+
+    // Fit is a per-document decision: a medium window defaults to auto (fit
+    // page here), and an explicit fit is what reopening restores later.
+    final fitWidthScale = controller
+        .calcMatrixFitWidthForPage(pageNumber: 1)!
+        .getMaxScaleOnAxis();
+    expect(controller.value.getMaxScaleOnAxis(), lessThan(fitWidthScale));
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('Fit width'));
+    await tester.pump(const Duration(milliseconds: 300));
+    chosenScale = controller.value.getMaxScaleOnAxis();
+    expect(chosenScale, closeTo(fitWidthScale, fitWidthScale * 0.05));
     final hitKey = Key('region-hit-${region.id}');
     final hitCenter = tester.getCenter(find.byKey(hitKey));
     final beforeUnselectedDrag = await ReviewAnnotationNotes.load(
@@ -171,9 +185,18 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(selectedKey), findsOneWidget);
 
-    final viewerRect = tester.getRect(find.byType(PdfViewer));
-    final background = viewerRect.bottomRight - const Offset(20, 20);
-    await tester.tapAt(background);
+    // Tap inside the visible part of the page but away from the region. A
+    // point outside the page (or outside the viewport) never reaches the
+    // general-tap handler.
+    final visiblePage = controller.visibleRect.intersect(page);
+    final background = controller.documentToGlobal(
+      Offset(
+        visiblePage.left + visiblePage.width * 0.85,
+        visiblePage.top + visiblePage.height * 0.85,
+      ),
+    );
+    expect(background, isNotNull);
+    await tester.tapAt(background!);
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byKey(selectedKey), findsNothing);
 
@@ -255,6 +278,51 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
     expect(find.byType(TextField), findsWidgets);
     expect(tester.takeException(), isNull);
+
+    // Reopening the document restores the fit and zoom chosen earlier.
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: AppScope(
+          services: services,
+          child: ReviewViewerPage(
+            title: 'Hybrid Page',
+            path: pdf.path,
+            officialUrl: '',
+          ),
+        ),
+      ),
+    );
+    for (var i = 0; i < 200; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      if (find.byType(PdfViewer).evaluate().isNotEmpty) break;
+    }
+    final reopened = tester
+        .widget<PdfViewer>(find.byType(PdfViewer))
+        .controller!;
+    for (var i = 0; i < 200 && !reopened.isReady; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+    }
+    for (var i = 0; i < 100; i++) {
+      try {
+        if (reopened.layout.pageLayouts.isNotEmpty) break;
+      } catch (_) {}
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+    }
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      reopened.value.getMaxScaleOnAxis(),
+      closeTo(chosenScale, chosenScale * 0.03),
+    );
   });
 }
 
