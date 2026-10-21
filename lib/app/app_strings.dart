@@ -1127,10 +1127,8 @@ class AppStrings {
   String get reviewFullScreen => _t('全屏阅读', 'Full-screen reading');
   String get reviewExitFullScreen => _t('退出全屏', 'Exit full screen');
   String get reviewRegionSelect => _t('框选区域', 'Select region');
-  String get reviewRegionSelectHint => _t(
-    '拖拽框选图片、公式或任意区域；Esc 取消。',
-    'Drag to select an image, formula, or any region; press Esc to cancel.',
-  );
+  String get reviewRegionSelectHint =>
+      _t('拖拽框选图片、公式或任意区域。', 'Drag to select an image, formula, or any region.');
   String get reviewAnnotationRegion => _t('区域选择', 'Region selection');
   String get reviewAnnotationsTab => _t('批注', 'Annotations');
   String get reviewOutlineTab => _t('目录', 'Contents');
