@@ -151,6 +151,49 @@ void main() {
     await targetNotes.close();
   });
 
+  test(
+    'full backup fails instead of silently dropping a referenced PNG',
+    () async {
+      final dir = await Directory.systemTemp.createTemp(
+        'particle-backup-missing-',
+      );
+      addTearDown(() => dir.delete(recursive: true));
+      final user = await UserStore.open(overridePath: '${dir.path}/user.json');
+      final notes = await NotesStore.open(overridePath: '${dir.path}/notes.db');
+      await notes.create(
+        title: 'Missing image',
+        anchors: [
+          NoteAnchorInput.review(
+            '2026/review.pdf',
+            context: {
+              'schema': 1,
+              'kind': 'pdf_annotation',
+              'pageNumber': 1,
+              'imagePath': 'missing.png',
+              'rects': [
+                [0.1, 0.1, 0.2, 0.2],
+              ],
+            },
+          ),
+        ],
+      );
+      final regions = Directory('${dir.path}/regions');
+      await regions.create();
+      final archive = '${dir.path}/backup.zip';
+      await expectLater(
+        FullBackup.export(
+          user: user,
+          notes: notes,
+          destinationPath: archive,
+          reviewRegionsDirectory: regions,
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(File(archive).existsSync(), isFalse);
+      await notes.close();
+    },
+  );
+
   test('full backup round-trips settings, favorites and notes', () async {
     final dir = await Directory.systemTemp.createTemp('particle-backup-');
     addTearDown(() => dir.delete(recursive: true));

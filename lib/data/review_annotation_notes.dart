@@ -161,7 +161,10 @@ class ReviewAnnotationNotes {
     // comment remains authoritative in the anchor context; only an untouched
     // generated body is rewritten.
     final generatedBodyUntouched = note.bodyMarkdown.trim() == oldBody.trim();
-    final nextBody = generatedBodyUntouched
+    final commentChanged = currentComment != comment.trim();
+    final nextBody = !commentChanged
+        ? null
+        : generatedBodyUntouched
         ? body
         : _projectComment(note.bodyMarkdown, comment);
     final anchors = <NoteAnchorInput>[];
@@ -453,15 +456,33 @@ class ReviewAnnotationNotes {
   }
 
   static String _projectComment(String body, String comment) {
-    final marker = body.indexOf('<!-- annotation-comment -->');
-    final base = marker < 0
-        ? body.trimRight()
-        : body.substring(0, marker).trimRight();
-    final value = comment.trim();
-    if (value.isEmpty) return base;
-    // Keep the user's prose, but make the latest annotation comment visible to
-    // search and Markdown export even after the generated body was expanded.
-    return '$base\n\n<!-- annotation-comment -->\n> $value\n';
+    const startMarker = '<!-- annotation-comment:start -->';
+    const endMarker = '<!-- annotation-comment:end -->';
+    var before = body;
+    var after = '';
+    final start = before.indexOf(startMarker);
+    if (start >= 0) {
+      final end = before.indexOf(endMarker, start + startMarker.length);
+      if (end >= 0) {
+        after = before.substring(end + endMarker.length).trim();
+        before = before.substring(0, start);
+      } else {
+        before = before.substring(0, start);
+      }
+    }
+    // Migrate the old single-marker projection without deleting prose the user
+    // appended after its quoted comment.
+    before = before.replaceAll(
+      RegExp(r'\n*<!-- annotation-comment -->\n> [^\n]*\n?'),
+      '',
+    );
+    final parts = <String>[
+      if (before.trim().isNotEmpty) before.trimRight(),
+      if (comment.trim().isNotEmpty)
+        '$startMarker\n> ${comment.trim()}\n$endMarker',
+      if (after.isNotEmpty) after,
+    ];
+    return parts.isEmpty ? '' : '${parts.join('\n\n')}\n';
   }
 
   static String _commentFromBody(String body) {
@@ -469,6 +490,11 @@ class ReviewAnnotationNotes {
     final result = <String>[];
     for (final line in lines) {
       final trimmed = line.trim();
+      if (trimmed == '<!-- annotation-comment -->' ||
+          trimmed == '<!-- annotation-comment:start -->' ||
+          trimmed == '<!-- annotation-comment:end -->') {
+        continue;
+      }
       if (trimmed.startsWith('>')) continue;
       if (RegExp(r'^\[.*\]\(review:[^)]+\)$').hasMatch(trimmed)) continue;
       result.add(line);

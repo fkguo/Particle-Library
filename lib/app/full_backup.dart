@@ -32,6 +32,7 @@ class FullBackup {
             ) as Map,
           );
     _makeRegionPathsPortable(notePayload);
+    final requiredRegionNames = _regionBasenames(notePayload);
     final payload = <String, Object?>{
       'format': format,
       'formatVersion': 2,
@@ -66,23 +67,27 @@ class FullBackup {
       } catch (_) {
         // A missing/unreadable cache does not prevent the data backup.
       }
+      final includedRegions = <String>{};
+      Directory? regionsDirectory;
       try {
-        final regionsDirectory = await _regionsDirectory(
-          reviewRegionsDirectory,
-        );
-        if (await regionsDirectory.exists()) {
-          await for (final entity in regionsDirectory.list()) {
-            if (entity is! File ||
-                !entity.path.toLowerCase().endsWith('.png')) {
-              continue;
-            }
-            final name = entity.uri.pathSegments.last;
-            await encoder.addFile(entity, 'regions/$name');
-            regions++;
-          }
-        }
+        regionsDirectory = await _regionsDirectory(reviewRegionsDirectory);
       } catch (_) {
-        // Region thumbnails are optional; the notes and PDFs still restore.
+        if (requiredRegionNames.isNotEmpty) rethrow;
+      }
+      if (regionsDirectory != null && await regionsDirectory.exists()) {
+        await for (final entity in regionsDirectory.list()) {
+          if (entity is! File || !entity.path.toLowerCase().endsWith('.png')) {
+            continue;
+          }
+          final name = entity.uri.pathSegments.last;
+          await encoder.addFile(entity, 'regions/$name');
+          includedRegions.add(name);
+          regions++;
+        }
+      }
+      final missing = requiredRegionNames.difference(includedRegions);
+      if (missing.isNotEmpty) {
+        throw FormatException('完整备份缺少区域截图：${missing.join(', ')}');
       }
       await encoder.close();
       return FullBackupExport(
@@ -93,6 +98,10 @@ class FullBackup {
     } catch (_) {
       try {
         await encoder.close();
+      } catch (_) {}
+      try {
+        final partial = File(destinationPath);
+        if (await partial.exists()) await partial.delete();
       } catch (_) {}
       rethrow;
     }
@@ -226,6 +235,27 @@ class FullBackup {
         _makeRegionPathsPortable(item);
       }
     }
+  }
+
+  static Set<String> _regionBasenames(Object? value) {
+    final names = <String>{};
+    void walk(Object? item) {
+      if (item is Map) {
+        final imagePath = item['imagePath']?.toString() ?? '';
+        final name = imagePath.split(RegExp(r'[\\/]')).last;
+        if (name.isNotEmpty) names.add(name);
+        for (final child in item.values) {
+          walk(child);
+        }
+      } else if (item is List) {
+        for (final child in item) {
+          walk(child);
+        }
+      }
+    }
+
+    walk(value);
+    return names;
   }
 
   static void _rewriteRegionPaths(Object? value, Map<String, String> paths) {

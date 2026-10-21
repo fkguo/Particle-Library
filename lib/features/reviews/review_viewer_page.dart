@@ -1397,7 +1397,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       ),
     );
     query.dispose();
-    searcher.resetTextSearch();
   }
 
   Future<void> _openPageDialog() async {
@@ -1910,7 +1909,11 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
             unawaited(controller.goToPage(pageNumber: widget.initialPage));
           }
         },
-        pagePaintCallbacks: [_paintAnnotations],
+        pagePaintCallbacks: [
+          _paintAnnotations,
+          (canvas, pageRect, page) =>
+              _searcher?.pageTextMatchPaintCallback(canvas, pageRect, page),
+        ],
         pageOverlaysBuilder: _annotationOverlays,
         textSelectionParams: PdfTextSelectionParams(
           enabled: !_regionMode,

@@ -294,6 +294,21 @@ void main() {
       final saved = await notes.noteById(note.id);
       expect(saved!.bodyMarkdown, contains('my synthesis'));
       expect(saved.bodyMarkdown, contains('new comment'));
+      // Append prose after the managed comment block, then edit the comment
+      // again: both the tail and the newest comment must survive.
+      await notes.update(
+        note.id,
+        bodyMarkdown: '${saved.bodyMarkdown}\n\nTAIL AFTER COMMENT',
+      );
+      await ReviewAnnotationNotes.updateComment(
+        notes,
+        annotation,
+        'second comment',
+      );
+      final savedAgain = (await notes.noteById(note.id))!;
+      expect(savedAgain.bodyMarkdown, contains('TAIL AFTER COMMENT'));
+      expect(savedAgain.bodyMarkdown, contains('second comment'));
+      expect(savedAgain.bodyMarkdown, isNot(contains('new comment')));
     },
   );
 
