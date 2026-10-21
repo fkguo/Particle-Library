@@ -37,6 +37,15 @@ void main() {
       color: 'yellow',
       reviewTitle: 'Hybrid Page',
     );
+    final textHighlight = await ReviewAnnotationNotes.create(
+      notes,
+      fileName: pdf.uri.pathSegments.last,
+      pageNumber: 1,
+      rects: const [Rect.fromLTWH(0.55, 0.10, 0.30, 0.06)],
+      text: 'Hybrid page line 10',
+      color: 'blue',
+      reviewTitle: 'Hybrid Page',
+    );
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
@@ -99,10 +108,14 @@ void main() {
       pdf.uri.pathSegments.last,
       reviewTitle: 'Hybrid Page',
     );
-    expect(
-      afterUnselectedDrag.single.rects.single,
-      beforeUnselectedDrag.single.rects.single,
+    expect(afterUnselectedDrag, hasLength(2));
+    final regionBefore = beforeUnselectedDrag.firstWhere(
+      (annotation) => annotation.id == region.id,
     );
+    final regionAfter = afterUnselectedDrag.firstWhere(
+      (annotation) => annotation.id == region.id,
+    );
+    expect(regionAfter.rects.single, regionBefore.rects.single);
 
     final docCenter = Offset(
       page.left + 0.23 * page.width,
@@ -166,6 +179,17 @@ void main() {
 
     await tester.tapAt(const Offset(8, 8));
     await tester.pump(const Duration(milliseconds: 400));
+    final textHitKey = Key('text-hit-${textHighlight.id}-0');
+    expect(find.byKey(textHitKey), findsOneWidget);
+    final textHitCenter = tester.getCenter(find.byKey(textHitKey));
+    await tester.tapAt(textHitCenter, buttons: kSecondaryMouseButton);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(PopupMenuItem<String>), findsWidgets);
+    expect(find.text('Copy'), findsNothing);
+    expect(find.text('Select All'), findsNothing);
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pump(const Duration(milliseconds: 400));
+
     await tester.runAsync(
       () => controller.textSelectionDelegate.selectAllText(),
     );
