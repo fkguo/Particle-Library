@@ -61,6 +61,7 @@ void main() {
       note: 'remember this',
       color: 'yellow',
       createdAt: DateTime(2026, 10, 18, 12),
+      imagePath: '/tmp/region.png',
     );
     await store.save([annotation]);
     final loaded = await store.load();
@@ -68,6 +69,7 @@ void main() {
     expect(loaded.single.pageNumber, 3);
     expect(loaded.single.rects.single.left, closeTo(0.1, 1e-9));
     expect(loaded.single.note, 'remember this');
+    expect(loaded.single.imagePath, '/tmp/region.png');
     await dir.delete(recursive: true);
   });
 }

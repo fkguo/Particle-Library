@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -603,6 +607,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           color: previous.color,
           createdAt: previous.createdAt,
           noteId: previous.noteId,
+          imagePath: previous.imagePath,
         );
       });
       _notifyNotesChanged();
@@ -723,6 +728,70 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     unawaited(_controller.goToDest(node.dest));
   }
 
+  Future<String?> _renderRegionImage(int pageNumber, Rect rect) async {
+    try {
+      if (!_controller.isReady ||
+          pageNumber < 1 ||
+          pageNumber > _controller.pages.length) {
+        return null;
+      }
+      final page = await _controller.pages[pageNumber - 1].ensureLoaded();
+      const scale = 2.0;
+      final fullWidth = (page.width * scale).round().clamp(1, 6000);
+      final fullHeight = (page.height * scale).round().clamp(1, 6000);
+      final left = (rect.left * fullWidth).round().clamp(0, fullWidth - 1);
+      final top = (rect.top * fullHeight).round().clamp(0, fullHeight - 1);
+      final right = (rect.right * fullWidth).round().clamp(left + 1, fullWidth);
+      final bottom = (rect.bottom * fullHeight).round().clamp(
+        top + 1,
+        fullHeight,
+      );
+      final rendered = await page.render(
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+        fullWidth: fullWidth.toDouble(),
+        fullHeight: fullHeight.toDouble(),
+        backgroundColor: 0xffffffff,
+      );
+      if (rendered == null) return null;
+      try {
+        final buffer = await ui.ImmutableBuffer.fromUint8List(rendered.pixels);
+        final descriptor = ui.ImageDescriptor.raw(
+          buffer,
+          width: rendered.width,
+          height: rendered.height,
+          rowBytes: rendered.width * 4,
+          pixelFormat: ui.PixelFormat.bgra8888,
+        );
+        final codec = await descriptor.instantiateCodec();
+        final frame = await codec.getNextFrame();
+        final png = await frame.image.toByteData(
+          format: ui.ImageByteFormat.png,
+        );
+        frame.image.dispose();
+        codec.dispose();
+        buffer.dispose();
+        if (png == null) return null;
+        final support = await getApplicationSupportDirectory();
+        final directory = Directory(
+          '${support.path}/ParticleDesk/review_regions',
+        );
+        await directory.create(recursive: true);
+        final file = File(
+          '${directory.path}/region-${DateTime.now().microsecondsSinceEpoch}-$pageNumber.png',
+        );
+        await file.writeAsBytes(png.buffer.asUint8List(), flush: true);
+        return file.path;
+      } finally {
+        rendered.dispose();
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _createRegionAnnotation(int pageNumber, Rect rect) async {
     if (rect.width < 0.004 || rect.height < 0.004) return;
     await _ready;
@@ -745,6 +814,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         text: '',
         color: _highlightColor,
         reviewTitle: widget.title,
+        imagePath: await _renderRegionImage(pageNumber, rect),
       );
       if (!mounted) return;
       setState(() {
@@ -837,6 +907,26 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     final widgets = <Widget>[];
     for (final annotation in _annotations) {
       if (annotation.pageNumber != page.pageNumber) continue;
+      if (annotation.text.trim().isEmpty) {
+        final rect = annotation.rects.first;
+        widgets.add(
+          Positioned(
+            left: rect.left * pageRect.width,
+            top: rect.top * pageRect.height,
+            width: rect.width * pageRect.width,
+            height: rect.height * pageRect.height,
+            child: _PdfRegionAdjustOverlay(
+              rect: rect,
+              pageSize: pageRect.size,
+              color: _annotationColor(annotation.color),
+              onChanged: (next) => _updateRegionAnnotation(annotation.id, next),
+              onEnd: (next) => unawaited(_persistRegion(annotation.id, next)),
+              onTap: () => unawaited(_showAnnotationActions(annotation)),
+            ),
+          ),
+        );
+        continue;
+      }
       for (final rect in annotation.rects) {
         final left = rect.left * pageRect.width - 5;
         final top = rect.top * pageRect.height - 5;
@@ -884,6 +974,63 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     return widgets;
   }
 
+  ReviewAnnotation _withRect(ReviewAnnotation annotation, Rect rect) {
+    return ReviewAnnotation(
+      id: annotation.id,
+      fileName: annotation.fileName,
+      pageNumber: annotation.pageNumber,
+      rects: <Rect>[rect],
+      text: annotation.text,
+      note: annotation.note,
+      color: annotation.color,
+      createdAt: annotation.createdAt,
+      noteId: annotation.noteId,
+      imagePath: annotation.imagePath,
+    );
+  }
+
+  void _updateRegionAnnotation(String id, Rect rect) {
+    setState(() {
+      _annotations = [
+        for (final annotation in _annotations)
+          annotation.id == id ? _withRect(annotation, rect) : annotation,
+      ];
+    });
+  }
+
+  Future<void> _persistRegion(String id, Rect rect) async {
+    final notes = _notes;
+    if (notes == null) return;
+    final index = _annotations.indexWhere((annotation) => annotation.id == id);
+    if (index < 0) return;
+    final annotation = _annotations[index];
+    try {
+      final updated = await ReviewAnnotationNotes.updateRange(
+        notes,
+        annotation,
+        rects: <Rect>[rect],
+        text: '',
+      );
+      if (!mounted || updated == null) return;
+      setState(() {
+        _annotations = [
+          for (final item in _annotations)
+            if (item.id == updated.id) updated else item,
+        ];
+      });
+      _notifyNotesChanged();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${AppScope.of(context).strings.notesSaveFailed}: ${errorText(error, AppScope.of(context).strings)}',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _showAnnotationActions(ReviewAnnotation annotation) async {
     final strings = AppScope.of(context).strings;
     await showModalBottomSheet<void>(
@@ -905,6 +1052,19 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                 strings.reviewAnnotationPage(annotation.pageNumber),
               ),
             ),
+            if (annotation.imagePath != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.file(
+                    File(annotation.imagePath!),
+                    height: 120,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
             ListTile(
               leading: const Icon(Icons.note_alt_outlined),
               title: Text(strings.reviewOpenNote),
@@ -1384,7 +1544,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           enabled: !_regionMode,
           buildSelectionHandle: _buildSelectionHandle,
           onTextSelectionChange: _onTextSelectionChanged,
-          enableSelectionHandles: true,
+          enableSelectionHandles:
+              defaultTargetPlatform == TargetPlatform.iOS ||
+              defaultTargetPlatform == TargetPlatform.android,
           onSelectionHandlePanStart: (_) => _autoHighlightTimer?.cancel(),
         ),
         customizeContextMenuItems: _customizePdfContextMenu,
@@ -1769,6 +1931,25 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
+                              if (annotation.imagePath != null) ...[
+                                const SizedBox(height: 5),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(5),
+                                  child: Image.file(
+                                    File(annotation.imagePath!),
+                                    height: 64,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, _, _) => const SizedBox(
+                                      height: 22,
+                                      child: Icon(
+                                        Icons.broken_image_outlined,
+                                        size: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                               if (annotation.note.trim().isNotEmpty) ...[
                                 const SizedBox(height: 3),
                                 Text(
@@ -1932,6 +2113,123 @@ class _PdfRegionSelectorState extends State<_PdfRegionSelector> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Direct manipulation for a region annotation: drag inside to move, or drag
+/// the bottom-right handle to resize.
+class _PdfRegionAdjustOverlay extends StatefulWidget {
+  const _PdfRegionAdjustOverlay({
+    required this.rect,
+    required this.pageSize,
+    required this.color,
+    required this.onChanged,
+    required this.onEnd,
+    required this.onTap,
+  });
+
+  final Rect rect;
+  final Size pageSize;
+  final Color color;
+  final ValueChanged<Rect> onChanged;
+  final ValueChanged<Rect> onEnd;
+  final VoidCallback onTap;
+
+  @override
+  State<_PdfRegionAdjustOverlay> createState() =>
+      _PdfRegionAdjustOverlayState();
+}
+
+class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
+  Rect? _start;
+  Offset? _startLocal;
+  Rect? _latest;
+  bool _resizing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.move,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        onPanStart: (details) {
+          _start = widget.rect;
+          _startLocal = details.localPosition;
+          _latest = widget.rect;
+          final size = widget.pageSize;
+          final local = details.localPosition;
+          final width = widget.rect.width * size.width;
+          final height = widget.rect.height * size.height;
+          _resizing = local.dx >= width - 18 && local.dy >= height - 18;
+        },
+        onPanUpdate: (details) {
+          final start = _start;
+          final origin = _startLocal;
+          if (start == null || origin == null) return;
+          final delta = details.localPosition - origin;
+          final dx = delta.dx / widget.pageSize.width;
+          final dy = delta.dy / widget.pageSize.height;
+          late final Rect next;
+          if (_resizing) {
+            final right = (start.right + dx).clamp(start.left + 0.01, 1.0);
+            final bottom = (start.bottom + dy).clamp(start.top + 0.01, 1.0);
+            next = Rect.fromLTRB(start.left, start.top, right, bottom);
+          } else {
+            final left = (start.left + dx).clamp(0.0, 1.0 - start.width);
+            final top = (start.top + dy).clamp(0.0, 1.0 - start.height);
+            next = Rect.fromLTWH(left, top, start.width, start.height);
+          }
+          _latest = next;
+          widget.onChanged(next);
+        },
+        onPanEnd: (_) {
+          final latest = _latest;
+          _start = null;
+          _startLocal = null;
+          _latest = null;
+          _resizing = false;
+          if (latest != null) widget.onEnd(latest);
+        },
+        onPanCancel: () {
+          _start = null;
+          _startLocal = null;
+          _latest = null;
+          _resizing = false;
+        },
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: widget.color.withValues(alpha: 0.12),
+                    border: Border.all(color: widget.color, width: 1.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              right: -6,
+              bottom: -6,
+              child: IgnorePointer(
+                child: Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: widget.color,
+                    border: Border.all(color: Colors.white, width: 1),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

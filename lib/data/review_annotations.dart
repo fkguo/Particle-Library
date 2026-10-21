@@ -20,6 +20,7 @@ class ReviewAnnotation {
     required this.color,
     required this.createdAt,
     this.noteId,
+    this.imagePath,
   });
 
   final String id;
@@ -34,6 +35,9 @@ class ReviewAnnotation {
   /// Owning note id, when this annotation is stored in the notes database.
   final String? noteId;
 
+  /// Rendered PNG for a region annotation, when available.
+  final String? imagePath;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'fileName': fileName,
@@ -45,6 +49,7 @@ class ReviewAnnotation {
     'note': note,
     'color': color,
     'createdAt': createdAt.toUtc().toIso8601String(),
+    if (imagePath != null) 'imagePath': imagePath,
   };
 
   static ReviewAnnotation? fromJson(Object? raw) {
@@ -89,6 +94,7 @@ class ReviewAnnotation {
       color: data['color']?.toString() ?? 'yellow',
       createdAt: createdAt.toLocal(),
       noteId: data['noteId']?.toString(),
+      imagePath: data['imagePath']?.toString(),
     );
   }
 }

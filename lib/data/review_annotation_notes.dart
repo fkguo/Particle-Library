@@ -65,6 +65,7 @@ class ReviewAnnotationNotes {
         reviewTitle: _titleFromFile(record.fileName),
         uuid: uuid,
         createdAt: record.createdAt,
+        imagePath: record.imagePath,
       );
     }
     // Keep the sidecar for a retry if malformed/duplicate records were
@@ -111,6 +112,7 @@ class ReviewAnnotationNotes {
     required String color,
     required String reviewTitle,
     String comment = '',
+    String? imagePath,
   }) => _createNote(
     notes,
     fileName: fileName,
@@ -120,6 +122,7 @@ class ReviewAnnotationNotes {
     comment: comment,
     color: color,
     reviewTitle: reviewTitle,
+    imagePath: imagePath,
   );
 
   static Future<void> updateComment(
@@ -286,6 +289,7 @@ class ReviewAnnotationNotes {
     required String reviewTitle,
     String? uuid,
     DateTime? createdAt,
+    String? imagePath,
   }) async {
     final id = _newAnnotationId(pageNumber);
     final reviewKey = _reviewKey(fileName);
@@ -311,6 +315,7 @@ class ReviewAnnotationNotes {
       'color': color,
       'quote': text,
       'comment': comment,
+      'imagePath': ?imagePath,
     };
     final note = await notes.create(
       title: title,
@@ -335,6 +340,7 @@ class ReviewAnnotationNotes {
       color: color,
       createdAt: note.createdAt,
       noteId: note.id,
+      imagePath: imagePath,
     );
   }
 
@@ -376,6 +382,7 @@ class ReviewAnnotationNotes {
       color: context['color']?.toString() ?? 'yellow',
       createdAt: note.createdAt,
       noteId: note.id,
+      imagePath: context['imagePath']?.toString(),
     );
   }
 

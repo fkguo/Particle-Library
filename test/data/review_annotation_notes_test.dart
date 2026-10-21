@@ -30,6 +30,7 @@ void main() {
       color: 'green',
       reviewTitle: 'Quantum chromodynamics',
       comment: 'worth revisiting',
+      imagePath: '/tmp/region.png',
     );
 
     expect(annotation.noteId, isNotNull);
@@ -50,6 +51,7 @@ void main() {
     expect(loaded.single.note, 'worth revisiting');
     expect(loaded.single.color, 'green');
     expect(loaded.single.rects.single.left, closeTo(0.1, 1e-9));
+    expect(loaded.single.imagePath, '/tmp/region.png');
 
     final hits = await notes.search('selected sentence');
     expect(hits.map((hit) => hit.id), contains(note.id));
