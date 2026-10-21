@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
+import '../../app/error_text.dart';
 import '../../app/app_strings.dart';
 import '../../app/immersive_page.dart';
 import '../../app/app_theme.dart';
@@ -1156,7 +1157,11 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         _saveError = error;
       });
       messenger.showSnackBar(
-        SnackBar(content: Text('${strings.notesDeleteFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.notesDeleteFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     }
   }
@@ -1792,7 +1797,7 @@ class _StatusIndicator extends StatelessWidget {
       ],
     );
     if (error == null) return row;
-    return Tooltip(message: '$error', child: row);
+    return Tooltip(message: errorText(error!, strings), child: row);
   }
 }
 

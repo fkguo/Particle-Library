@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
+import '../../app/error_text.dart';
 import '../../app/navigation.dart';
 import '../../notes/notes.dart';
 import 'note_editor.dart';
@@ -301,7 +302,11 @@ Future<void> captureTextToNote(
   } catch (error) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${strings.notesSaveFailed}: $error')),
+      SnackBar(
+        content: Text(
+          '${strings.notesSaveFailed}: ${errorText(error, strings)}',
+        ),
+      ),
     );
     return;
   }

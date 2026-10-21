@@ -705,7 +705,11 @@ class _TokenRow extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 3),
                 child: Text(
-                  '经 pdgitem_map 展开：${resolution!.chain.map((item) => '${item.name} [${item.itemType}]').join(' → ')}',
+                  strings.decayExpandedFromPdgItemMap(
+                    resolution!.chain
+                        .map((item) => '${item.name} [${item.itemType}]')
+                        .join(' → '),
+                  ),
                   style: Theme.of(context).textTheme.bodySmall
                       ?.copyWith(color: palette.textSecondary),
                 ),
@@ -781,7 +785,9 @@ class _RelatedQuantityCard extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      '目标条目的真实类型为 ${dataTypeInfo(target.dataType).label(strings.lang)}；不把它改称分支分数。',
+                      strings.decayTrueTypeNotFraction(
+                        dataTypeInfo(target.dataType).label(strings.lang),
+                      ),
                       style: Theme.of(context).textTheme.bodySmall
                           ?.copyWith(color: palette.textSecondary),
                     ),

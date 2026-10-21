@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_scope.dart';
+import '../../app/error_text.dart';
 import '../../app/app_strings.dart';
 import '../../app/full_backup.dart';
 import '../../app/settings_controller.dart';
@@ -94,11 +95,11 @@ class _SettingsPageState extends State<SettingsPage> {
       }
     } on UpdateCheckException catch (error) {
       if (!mounted) return;
-      debugPrint('Update check failed: $error');
+      debugPrint('Update check failed: ${errorText(error, strings)}');
       setState(() => _updateStatus = strings.settingsUpdateUnavailable);
     } catch (error) {
       if (!mounted) return;
-      debugPrint('Update check failed: $error');
+      debugPrint('Update check failed: ${errorText(error, strings)}');
       setState(() => _updateStatus = strings.settingsUpdateUnavailable);
     } finally {
       if (mounted) setState(() => _checkingUpdate = false);
@@ -143,7 +144,11 @@ class _SettingsPageState extends State<SettingsPage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.settingsFullBackupFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.settingsFullBackupFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _fullBackupBusy = false);
@@ -201,7 +206,11 @@ class _SettingsPageState extends State<SettingsPage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.settingsFullBackupFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.settingsFullBackupFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _fullBackupBusy = false);
@@ -249,7 +258,11 @@ class _SettingsPageState extends State<SettingsPage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.settingsNotesBackupFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.settingsNotesBackupFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _backingUpNotes = false);
@@ -293,7 +306,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   Insets.s,
                 ),
                 child: MetaChip(
-                  scope.store.recoveryWarning!,
+                  strings.localizedRecoveryWarning(
+                    scope.store.recoveryWarning!,
+                  ),
                   tone: BadgeTone.warning,
                 ),
               ),

@@ -5,6 +5,7 @@ import 'package:pdfrx/pdfrx.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_scope.dart';
+import '../../app/error_text.dart';
 import '../../app/app_strings.dart';
 import '../../app/immersive_page.dart';
 import '../../app/app_theme.dart';
@@ -116,7 +117,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${AppScope.of(context).strings.notesUnavailable}: $error',
+            '${AppScope.of(context).strings.notesUnavailable}: ${errorText(error, AppScope.of(context).strings)}',
           ),
         ),
       );
@@ -223,7 +224,11 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     } catch (error) {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.notesCollectionFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.notesCollectionFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
       return false;
     }
@@ -512,7 +517,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${AppScope.of(context).strings.notesSaveFailed}: $error',
+              '${AppScope.of(context).strings.notesSaveFailed}: ${errorText(error, AppScope.of(context).strings)}',
             ),
           ),
         );
@@ -598,7 +603,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${AppScope.of(context).strings.notesSaveFailed}: $error',
+              '${AppScope.of(context).strings.notesSaveFailed}: ${errorText(error, AppScope.of(context).strings)}',
             ),
           ),
         );
@@ -651,7 +656,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${AppScope.of(context).strings.notesSaveFailed}: $error',
+              '${AppScope.of(context).strings.notesSaveFailed}: ${errorText(error, AppScope.of(context).strings)}',
             ),
           ),
         );

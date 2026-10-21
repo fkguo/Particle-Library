@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_strings.dart';
+import '../../app/error_text.dart';
 import '../../app/app_theme.dart';
 import '../../notes/notes.dart';
 import 'notes_format.dart';
@@ -89,7 +90,11 @@ class _TagManagerDialogState extends State<_TagManagerDialog> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${widget.strings.notesSaveFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${widget.strings.notesSaveFailed}: ${errorText(error, widget.strings)}',
+          ),
+        ),
       );
     }
   }
@@ -125,7 +130,11 @@ class _TagManagerDialogState extends State<_TagManagerDialog> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${widget.strings.notesSaveFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${widget.strings.notesSaveFailed}: ${errorText(error, widget.strings)}',
+          ),
+        ),
       );
     }
   }

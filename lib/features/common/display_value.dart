@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 
+import '../../app/app_scope.dart';
 import '../../app/app_theme.dart';
 import '../../domain/display.dart';
 import 'ui.dart';
@@ -22,6 +23,7 @@ class DisplayValueView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    final strings = AppScope.maybeOf(context)?.strings;
     final base = Theme.of(context).textTheme.bodyLarge?.copyWith(
       fontSize: fontSize,
       fontWeight: FontWeight.w400,
@@ -66,8 +68,10 @@ class DisplayValueView extends StatelessWidget {
         if (showLimitBadge && (quantity.isLimit || quantity.isRange))
           MetaChip(
             quantity.isRange
-                ? '区间/排除区间'
-                : (quantity.limitType == 'U' ? '上限' : '下限'),
+                ? (strings?.limitRange ?? 'Range/excluded range')
+                : (quantity.limitType == 'U'
+                      ? (strings?.limitUpper ?? 'Upper limit')
+                      : (strings?.limitLower ?? 'Lower limit')),
             tone: BadgeTone.warning,
           ),
       ],

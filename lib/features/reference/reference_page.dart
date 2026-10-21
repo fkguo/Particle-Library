@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_scope.dart';
+import '../../app/error_text.dart';
 import '../../app/app_strings.dart';
 import '../../app/app_theme.dart';
 import '../../app/navigation.dart';
@@ -111,7 +112,8 @@ class _ReferencePageState extends State<ReferencePage> {
       if (!mounted) return;
       setState(() {
         _lookingUp = false;
-        _lookupError = '${strings.referenceLookupFailed}: $error';
+        _lookupError =
+            '${strings.referenceLookupFailed}: ${errorText(error, strings)}';
       });
     }
   }
@@ -236,7 +238,11 @@ class _ReferencePageState extends State<ReferencePage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.inspireZoteroFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.inspireZoteroFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _zoteroBusy = false);
@@ -284,7 +290,11 @@ class _ReferencePageState extends State<ReferencePage> {
       if (!mounted) return;
       setState(() => _bibtexLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.referenceBibtexFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.referenceBibtexFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     }
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
+import '../../app/error_text.dart';
 import '../../app/app_theme.dart';
 import '../../data/zotero_cache.dart';
 import '../common/ui.dart';
@@ -72,7 +73,7 @@ class _ZoteroCacheSectionState extends State<ZoteroCacheSection> {
       if (!mounted) return;
       setState(() {
         _building = false;
-        _error = '$error';
+        _error = errorText(error, AppScope.of(context).strings);
       });
     }
   }

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:file_selector/file_selector.dart';
 
 import '../../app/app_scope.dart';
+import '../../app/error_text.dart';
 import '../../app/app_strings.dart';
 import '../../app/app_theme.dart';
 import '../../domain/display.dart';
@@ -661,7 +662,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     } catch (error) {
       if (!mounted) return added;
       messenger.showSnackBar(
-        SnackBar(content: Text('${strings.notesCollectionFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.notesCollectionFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     }
     return added;
@@ -790,7 +795,9 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${widget.strings.notesCollectionFailed}: $error'),
+            content: Text(
+              '${widget.strings.notesCollectionFailed}: ${errorText(error, widget.strings)}',
+            ),
           ),
         );
       }
@@ -860,7 +867,9 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${widget.strings.notesCollectionFailed}: $error'),
+          content: Text(
+            '${widget.strings.notesCollectionFailed}: ${errorText(error, widget.strings)}',
+          ),
         ),
       );
     }
@@ -906,7 +915,9 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       if (!mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${widget.strings.notesCollectionFailed}: $error'),
+          content: Text(
+            '${widget.strings.notesCollectionFailed}: ${errorText(error, widget.strings)}',
+          ),
         ),
       );
       return null;
@@ -922,7 +933,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${widget.strings.notesLoadFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${widget.strings.notesLoadFailed}: ${errorText(error, widget.strings)}',
+          ),
+        ),
       );
       return;
     }
@@ -973,7 +988,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                                 messenger.showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      '${widget.strings.notesSaveFailed}: $error',
+                                      '${widget.strings.notesSaveFailed}: ${errorText(error, widget.strings)}',
                                     ),
                                   ),
                                 );
@@ -1028,7 +1043,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.notesExportFileFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.notesExportFileFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     }
   }
@@ -1071,7 +1090,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.notesExportFileFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.notesExportFileFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     }
   }
@@ -1127,7 +1150,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     } catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('${strings.commonCopyFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.commonCopyFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
       return;
     }
@@ -1188,7 +1215,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     } catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('${strings.commonCopyFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.commonCopyFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
       return;
     }
@@ -1251,7 +1282,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.notesExportFileFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.notesExportFileFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     }
   }
@@ -1280,7 +1315,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.notesImportFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.notesImportFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     }
   }
@@ -1307,7 +1346,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.notesLoadFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.notesLoadFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     }
   }
@@ -2145,7 +2188,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${widget.strings.notesSaveFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${widget.strings.notesSaveFailed}: ${errorText(error, widget.strings)}',
+          ),
+        ),
       );
     }
   }
@@ -2226,7 +2273,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.notesExportFileFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.notesExportFileFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     }
   }
@@ -2336,7 +2387,9 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${widget.strings.notesCollectionFailed}: $error'),
+          content: Text(
+            '${widget.strings.notesCollectionFailed}: ${errorText(error, widget.strings)}',
+          ),
         ),
       );
     }
@@ -2394,7 +2447,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
             messenger.showSnackBar(
               SnackBar(
                 content: Text(
-                  '${widget.strings.notesCollectionFailed}: $error',
+                  '${widget.strings.notesCollectionFailed}: ${errorText(error, widget.strings)}',
                 ),
               ),
             );
@@ -2405,7 +2458,9 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${widget.strings.notesCollectionFailed}: $error'),
+          content: Text(
+            '${widget.strings.notesCollectionFailed}: ${errorText(error, widget.strings)}',
+          ),
         ),
       );
     }

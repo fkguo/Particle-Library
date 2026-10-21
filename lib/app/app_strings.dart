@@ -125,6 +125,59 @@ class AppStrings {
   String get commonEmptyString => _t('空字符串', 'Empty string');
   String get commonLoading => _t('正在读取…', 'Loading…');
   String get commonError => _t('读取失败', 'Failed to load');
+  String get searchResizeTooltip => _t(
+    '拖拽调整搜索栏宽度；拉到最窄可收起，双击恢复默认',
+    'Drag to resize the search panel; drag to the narrowest to collapse, double-click to reset',
+  );
+  String get favoritesResizeTooltip => _t(
+    '拖拽调整收藏筛选栏宽度；拉到最窄可收起',
+    'Drag to resize the favorites filter panel; drag to the narrowest to collapse',
+  );
+  String get contextSidebarResizeTooltip => _t(
+    '拖拽调整侧栏宽度；拉到最窄可隐藏，双击恢复自动',
+    'Drag to resize the sidebar; drag to the narrowest to hide, double-click to restore automatic width',
+  );
+  String get resizeSidebar => _t('调整侧栏宽度', 'Resize sidebar');
+  String get limitRange => _t('区间/排除区间', 'Range/excluded range');
+  String get limitUpper => _t('上限', 'Upper limit');
+  String get limitLower => _t('下限', 'Lower limit');
+  String decayExpandedFromPdgItemMap(String chain) =>
+      _t('经 pdgitem_map 展开：$chain', 'Expanded via pdgitem_map: $chain');
+  String decayTrueTypeNotFraction(String type) => _t(
+    '目标条目的真实类型为 $type；不把它改称分支分数。',
+    'The target entry is of type $type; it is not relabeled as a branching fraction.',
+  );
+  String errorEntryNotInSnapshot(String id) =>
+      _t('当前快照未收录条目 $id。', 'This snapshot does not contain entry $id.');
+  String errorReferenceNotInSnapshot(String id) =>
+      _t('当前快照未收录文献记录 $id。', 'This snapshot does not contain reference $id.');
+  String get errorNoteMissing =>
+      _t('笔记不存在或已被删除。', 'The note no longer exists.');
+  String get errorCollectionMissing =>
+      _t('集合不存在。', 'The collection no longer exists.');
+  String get errorNotesConflict => _t(
+    '笔记已被其他编辑更新，请重新载入后再保存。',
+    'The note was changed by another editor. Reload before saving.',
+  );
+  String get errorNotesUnavailable =>
+      _t('笔记数据库不可用。', 'The notes database is unavailable.');
+  String get errorNotesCorrupt =>
+      _t('笔记数据库损坏。', 'The notes database is corrupt.');
+  String get errorNotesWriteFailed =>
+      _t('笔记写入失败。', 'Could not write the note.');
+  String get errorNotesBackupFailed =>
+      _t('笔记备份失败。', 'Could not back up the notes database.');
+  String get errorInvalidInput =>
+      _t('输入数据无效。', 'The supplied data is invalid.');
+  String get errorBackupMissing =>
+      _t('备份中缺少 backup.json。', 'The backup is missing backup.json.');
+  String get errorBackupInvalid =>
+      _t('备份 JSON 无效。', 'The backup JSON is invalid.');
+  String get errorBackupVersion =>
+      _t('不支持的完整备份版本。', 'This full-backup version is not supported.');
+  String get errorImportNotArray =>
+      _t('导入文件不是笔记 JSON 数组。', 'The import is not a notes JSON array.');
+  String get errorGeneric => _t('操作失败。', 'The operation failed.');
   String get commonRetry => _t('重试', 'Retry');
   String get commonRawFields => _t('原始字段', 'Raw fields');
   String get commonRawRecord => _t('原始记录', 'Source record');
@@ -1008,6 +1061,23 @@ class AppStrings {
   String notesHoursAgo(int hours) => _t('$hours 小时前', '$hours h ago');
   String get notesYesterday => _t('昨天', 'yesterday');
   String notesUpdated(String time) => _t('更新于 $time', 'Updated $time');
+
+  String localizedRecoveryWarning(String warning) {
+    if (lang == TextLang.zh) return warning;
+    if (warning.contains('无法访问本机用户数据目录')) {
+      return 'Cannot access the local user-data directory. Settings and favorites will not be saved.';
+    }
+    if (warning.contains('从备份恢复用户数据')) {
+      return 'User data was restored from a backup.';
+    }
+    if (warning.contains('用户数据文件无法读取')) {
+      return 'The user-data file could not be read; starting from empty data.';
+    }
+    if (warning.contains('本机用户数据写入失败')) {
+      return 'Writing local user data failed. Settings and favorites may not be saved.';
+    }
+    return warning;
+  }
 
   String get settingsTitle => _t('设置', 'Settings');
   String get helpTitle => _t('使用说明与名词解释', 'Help and glossary');

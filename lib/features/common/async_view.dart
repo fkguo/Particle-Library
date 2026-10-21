@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
+import '../../app/app_strings.dart';
 import '../../app/app_theme.dart';
+import '../../app/error_text.dart';
 import '../../core/errors.dart';
 import 'ui.dart';
 
@@ -28,9 +30,7 @@ class LoadingPanel extends StatelessWidget {
           const SizedBox(height: Insets.m),
           Text(
             message ?? strings?.commonLoading ?? 'Loading…',
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
+            style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: context.palette.textSecondary),
           ),
         ],
@@ -40,27 +40,45 @@ class LoadingPanel extends StatelessWidget {
 }
 
 class ErrorPanel extends StatelessWidget {
-  const ErrorPanel({super.key, required this.error, this.onRetry, this.compact = false});
+  const ErrorPanel({
+    super.key,
+    required this.error,
+    this.onRetry,
+    this.compact = false,
+    this.strings,
+  });
 
   final Object error;
   final VoidCallback? onRetry;
   final bool compact;
+  final AppStrings? strings;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final strings = AppScope.maybeOf(context)?.strings;
+    final strings = this.strings ?? AppScope.maybeOf(context)?.strings;
     final exception = error is AppException ? error as AppException : null;
+    final message = strings == null
+        ? error.toString()
+        : errorText(error, strings);
+    final detail = strings == null
+        ? exception?.detail
+        : errorDetailText(error, strings);
     final code = exception?.code ?? AppErrorCode.queryFailed;
     final title = switch (code) {
-      AppErrorCode.snapshotMissing => strings?.bootFailed ?? 'Data file missing',
-      AppErrorCode.snapshotMismatch => strings?.bootFailed ?? 'Data file mismatch',
-      AppErrorCode.unsupportedSchema => strings?.bootFailed ?? 'Unsupported database schema',
-      AppErrorCode.corruptDatabase => strings?.bootFailed ?? 'Database is corrupt',
+      AppErrorCode.snapshotMissing =>
+        strings?.bootFailed ?? 'Data file missing',
+      AppErrorCode.snapshotMismatch =>
+        strings?.bootFailed ?? 'Data file mismatch',
+      AppErrorCode.unsupportedSchema =>
+        strings?.bootFailed ?? 'Unsupported database schema',
+      AppErrorCode.corruptDatabase =>
+        strings?.bootFailed ?? 'Database is corrupt',
       AppErrorCode.notFound => strings?.commonNotRecorded ?? 'Not found',
       AppErrorCode.invalidInput => strings?.commonError ?? 'Invalid input',
       AppErrorCode.ambiguous => strings?.commonError ?? 'Ambiguous result',
-      AppErrorCode.storageUnavailable => strings?.bootFailed ?? 'Storage unavailable',
+      AppErrorCode.storageUnavailable =>
+        strings?.bootFailed ?? 'Storage unavailable',
       AppErrorCode.queryFailed => strings?.commonError ?? 'Query failed',
     };
     return Container(
@@ -79,37 +97,39 @@ class ErrorPanel extends StatelessWidget {
               Icon(Icons.error_outline, color: palette.error, size: 20),
               const SizedBox(width: Insets.s),
               Expanded(
-                child: Text(title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: palette.error,
-                          fontWeight: FontWeight.w600,
-                        )),
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: palette.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
               MetaChip(code.wireName, tone: BadgeTone.error),
             ],
           ),
           const SizedBox(height: Insets.s),
           SelectableText(
-            exception?.message ?? '$error',
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
+            message,
+            style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: palette.textPrimary),
           ),
-          if (exception?.detail != null && exception!.detail!.isNotEmpty) ...[
+          if (detail != null && detail.isNotEmpty) ...[
             const SizedBox(height: Insets.s),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               childrenPadding: EdgeInsets.zero,
-              title: Text(strings?.bootDetails ?? 'Details',
-                  style: Theme.of(context).textTheme.labelMedium),
+              title: Text(
+                strings?.bootDetails ?? 'Details',
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
               children: [
                 SelectableText(
-                  exception.detail!,
+                  detail,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: palette.textSecondary,
-                        fontFamily: 'Menlo',
-                      ),
+                    color: palette.textSecondary,
+                    fontFamily: 'Menlo',
+                  ),
                 ),
               ],
             ),
@@ -175,13 +195,20 @@ class _AsyncViewState<T> extends State<AsyncView<T>> {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(Insets.l),
-              child: ErrorPanel(error: snapshot.error!, onRetry: widget.onRetry),
+              child: ErrorPanel(
+                error: snapshot.error!,
+                onRetry: widget.onRetry,
+              ),
             ),
           );
         }
         final value = snapshot.data;
         if (value == null) {
-          return Center(child: EmptyPanel(message: AppScope.of(context).strings.commonNoData));
+          return Center(
+            child: EmptyPanel(
+              message: AppScope.of(context).strings.commonNoData,
+            ),
+          );
         }
         return widget.builder(context, value);
       },

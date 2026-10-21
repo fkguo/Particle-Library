@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_scope.dart';
+import '../../app/error_text.dart';
 import '../../app/app_strings.dart';
 import '../../app/app_theme.dart';
 import '../../app/navigation.dart';
@@ -422,7 +423,11 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
     } catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('${strings.inspireAddToZoteroFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.inspireAddToZoteroFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _zoteroAddBusy = null);
@@ -522,7 +527,11 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.inspireZoteroFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.inspireZoteroFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _zoteroBusy = null);
@@ -546,7 +555,11 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.referenceBibtexFailed}: $error')),
+        SnackBar(
+          content: Text(
+            '${strings.referenceBibtexFailed}: ${errorText(error, strings)}',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _bibtexBusy = null);
@@ -563,7 +576,7 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${AppScope.of(context).strings.inspireZoteroFailed}: $error',
+            '${AppScope.of(context).strings.inspireZoteroFailed}: ${errorText(error, AppScope.of(context).strings)}',
           ),
         ),
       );

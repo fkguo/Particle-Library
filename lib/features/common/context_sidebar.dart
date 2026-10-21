@@ -68,7 +68,7 @@ class _ResizableContextSidebarState extends State<ResizableContextSidebar> {
     return CollapsibleSidePanel(
       width: width,
       handleOnLeft: true,
-      tooltip: '拖拽调整侧栏宽度；拉到最窄可隐藏，双击恢复自动',
+      tooltip: AppScope.of(context).strings.contextSidebarResizeTooltip,
       onDrag: (delta) {
         final next = (width - delta).clamp(_minWidth, _maxWidth);
         // Pulling the rail all the way to its minimum collapses it, and the

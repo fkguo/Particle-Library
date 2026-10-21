@@ -15,7 +15,8 @@ class BootScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final lang = WidgetsBinding.instance.platformDispatcher.locale.languageCode == 'zh'
+    final lang =
+        WidgetsBinding.instance.platformDispatcher.locale.languageCode == 'zh'
         ? TextLang.zh
         : TextLang.en;
     final strings = AppStrings(lang);
@@ -31,22 +32,24 @@ class BootScreen extends StatelessWidget {
               children: [
                 const BrandMark(size: 56),
                 const SizedBox(height: Insets.l),
-                Text(kAppName,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.2,
-                        )),
+                Text(
+                  kAppName,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.2,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text(strings.appTagline,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(color: palette.textSecondary)),
+                Text(
+                  strings.appTagline,
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: palette.textSecondary),
+                ),
                 const SizedBox(height: Insets.xl),
                 if (error == null)
                   LoadingPanel(message: strings.bootLoading)
                 else
-                  ErrorPanel(error: error!, onRetry: onRetry),
+                  ErrorPanel(error: error!, onRetry: onRetry, strings: strings),
               ],
             ),
           ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/app_scope.dart';
+import '../../app/error_text.dart';
 import '../../app/app_theme.dart';
 import 'description_text.dart';
 
@@ -21,7 +22,11 @@ Future<void> copyText(
   } catch (error) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${strings.commonCopyFailed}: $error')),
+      SnackBar(
+        content: Text(
+          '${strings.commonCopyFailed}: ${errorText(error, strings)}',
+        ),
+      ),
     );
     return;
   }

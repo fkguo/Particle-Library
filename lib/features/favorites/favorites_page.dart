@@ -126,7 +126,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 CollapsibleSidebar(
                   expanded: _sidebarOpen,
                   width: _sidebarWidth,
-                  tooltip: '拖拽调整收藏筛选栏宽度；拉到最窄可收起',
+                  tooltip: strings.favoritesResizeTooltip,
                   railIcon: Icons.star_outline,
                   railTooltip: strings.sidebarShow,
                   onExpand: () => setState(() => _sidebarOpen = true),

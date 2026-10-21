@@ -285,7 +285,7 @@ class _HomePageState extends State<HomePage> {
                 CollapsibleSidebar(
                   expanded: _searchPanelOpen,
                   width: resultsWidth,
-                  tooltip: '拖拽调整搜索栏宽度；拉到最窄可收起，双击恢复默认',
+                  tooltip: AppScope.of(context).strings.searchResizeTooltip,
                   railIcon: Icons.search,
                   railTooltip: AppScope.of(context).strings.sidebarShow,
                   onExpand: () => setState(() => _searchPanelOpen = true),

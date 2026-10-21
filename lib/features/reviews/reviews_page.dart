@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
+import '../../app/error_text.dart';
 import '../../app/app_theme.dart';
 import '../../app/navigation.dart';
 import '../../data/review_cache.dart';
@@ -69,7 +70,9 @@ class _ReviewsPageState extends State<ReviewsPage> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _cacheError = '$error');
+      setState(
+        () => _cacheError = errorText(error, AppScope.of(context).strings),
+      );
     }
   }
 
@@ -152,7 +155,11 @@ class _ReviewsPageState extends State<ReviewsPage> {
         _downloadProgress = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.reviewsDownloadFailed} $error')),
+        SnackBar(
+          content: Text(
+            '${strings.reviewsDownloadFailed} ${errorText(error, strings)}',
+          ),
+        ),
       );
       return false;
     }

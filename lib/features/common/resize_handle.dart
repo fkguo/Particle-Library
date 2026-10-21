@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/app_scope.dart';
 import '../../app/app_theme.dart';
 
 /// A thin vertical drag handle used between a resizable panel and the content.
@@ -33,7 +34,10 @@ class _VerticalResizeHandleState extends State<VerticalResizeHandle> {
     final palette = context.palette;
     final active = _hover || _dragging;
     return Semantics(
-      label: widget.tooltip ?? '调整侧栏宽度',
+      label:
+          widget.tooltip ??
+          AppScope.maybeOf(context)?.strings.resizeSidebar ??
+          'Resize sidebar',
       child: MouseRegion(
         cursor: SystemMouseCursors.resizeColumn,
         onEnter: (_) => setState(() => _hover = true),
