@@ -1127,6 +1127,10 @@ class AppStrings {
   String get reviewFullScreen => _t('全屏阅读', 'Full-screen reading');
   String get reviewExitFullScreen => _t('退出全屏', 'Exit full screen');
   String get reviewRegionSelect => _t('框选区域', 'Select region');
+  String get reviewRegionImageRefreshFailed => _t(
+    '区域已移动，但截图刷新失败；当前仍显示旧截图。',
+    'Region moved, but the screenshot could not be refreshed; the old image is still shown.',
+  );
   String get reviewRegionSelectHint =>
       _t('拖拽框选图片、公式或任意区域。', 'Drag to select an image, formula, or any region.');
   String get reviewAnnotationRegion => _t('区域选择', 'Region selection');

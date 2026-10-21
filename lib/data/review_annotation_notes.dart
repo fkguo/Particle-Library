@@ -195,6 +195,7 @@ class ReviewAnnotationNotes {
     ReviewAnnotation annotation, {
     required List<Rect> rects,
     required String text,
+    String? imagePath,
   }) async {
     final noteId = annotation.noteId;
     if (noteId == null) return null;
@@ -241,6 +242,7 @@ class ReviewAnnotationNotes {
                       [rect.left, rect.top, rect.right, rect.bottom],
                   ],
                   'quote': text,
+                  'imagePath': ?imagePath,
                 }
               : anchor.context,
         ),
@@ -272,6 +274,8 @@ class ReviewAnnotationNotes {
       color: annotation.color,
       createdAt: annotation.createdAt,
       noteId: annotation.noteId,
+      imagePath: imagePath ?? annotation.imagePath,
+      tags: note.tagNames,
     );
   }
 

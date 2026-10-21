@@ -95,6 +95,25 @@ void main() {
     await sourceRegions.create();
     final png = File('${sourceRegions.path}/region-1.png');
     await png.writeAsBytes(<int>[0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+    final note = await sourceNotes.create(
+      title: 'Region note',
+      anchors: [
+        NoteAnchorInput.review(
+          '2026/review.pdf',
+          targetLabel: 'p.1',
+          context: {
+            'schema': 1,
+            'kind': 'pdf_annotation',
+            'pageNumber': 1,
+            'rects': [
+              [0.1, 0.1, 0.3, 0.3],
+            ],
+            'quote': '',
+            'imagePath': png.path,
+          },
+        ),
+      ],
+    );
 
     final archive = '${dir.path}/backup.zip';
     final exported = await FullBackup.export(
@@ -122,6 +141,11 @@ void main() {
     expect(
       await File('${targetRegions.path}/region-1.png').readAsBytes(),
       <int>[0x89, 0x50, 0x4e, 0x47, 1, 2, 3],
+    );
+    final restored = (await targetNotes.noteByUuid(note.uuid))!;
+    expect(
+      restored.anchors.single.context!['imagePath'],
+      '${targetRegions.path}/region-1.png',
     );
     await sourceNotes.close();
     await targetNotes.close();

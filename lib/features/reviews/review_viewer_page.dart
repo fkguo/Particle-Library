@@ -724,6 +724,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       );
       if (!mounted) return;
       await _loadAnnotations(notes);
+      _notifyNotesChanged();
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1119,13 +1120,24 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     if (index < 0) return;
     final annotation = _annotations[index];
     try {
+      final imagePath = await _renderRegionImage(annotation.pageNumber, rect);
       final updated = await ReviewAnnotationNotes.updateRange(
         notes,
         annotation,
         rects: <Rect>[rect],
         text: '',
+        imagePath: imagePath,
       );
       if (!mounted || updated == null) return;
+      if (imagePath == null && annotation.imagePath != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppScope.of(context).strings.reviewRegionImageRefreshFailed,
+            ),
+          ),
+        );
+      }
       setState(() {
         _annotations = [
           for (final item in _annotations)
@@ -1539,7 +1551,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(child: _pdfSurface(context)),
-                    if (_showAnnotations && !_zenMode) ...[
+                    if (_showAnnotations &&
+                        !_zenMode &&
+                        constraints.maxWidth >= 700 &&
+                        constraints.maxHeight >= 500) ...[
                       CollapsibleSidePanel(
                         width: sidebarWidth,
                         handleOnLeft: true,
@@ -1642,7 +1657,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       controller: _controller,
       params: PdfViewerParams(
         backgroundColor: _pdfDarkMode
-            ? AppPalette.dark.background
+            ? Colors.white
             : context.palette.background,
         onViewerReady: (document, controller) {
           _pdfRetryTimer?.cancel();
@@ -1672,24 +1687,24 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       // keeps antialiased, thin text readable on the dark paper.
       final dark = AppPalette.dark;
       const slope = 1.12;
-      double offset(Color channel) => slope * 255 + channel.r * 255;
+      double offset(double channel) => slope * 255 + channel * 255;
       viewer = ColorFiltered(
         colorFilter: ColorFilter.matrix(<double>[
           -slope,
           0,
           0,
           0,
-          offset(dark.background),
+          offset(dark.background.r),
           0,
           -slope,
           0,
           0,
-          offset(dark.background),
+          offset(dark.background.g),
           0,
           0,
           -slope,
           0,
-          offset(dark.background),
+          offset(dark.background.b),
           0,
           0,
           0,
@@ -2343,8 +2358,10 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
           final dy = delta.dy / widget.pageSize.height;
           late final Rect next;
           if (_resizing) {
-            final right = (start.right + dx).clamp(start.left + 0.01, 1.0);
-            final bottom = (start.bottom + dy).clamp(start.top + 0.01, 1.0);
+            final minRight = (start.left + 0.01).clamp(0.0, 1.0);
+            final minBottom = (start.top + 0.01).clamp(0.0, 1.0);
+            final right = (start.right + dx).clamp(minRight, 1.0);
+            final bottom = (start.bottom + dy).clamp(minBottom, 1.0);
             next = Rect.fromLTRB(start.left, start.top, right, bottom);
           } else {
             final left = (start.left + dx).clamp(0.0, 1.0 - start.width);

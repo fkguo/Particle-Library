@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../data/review_cache.dart';
 import '../features/notes/notes_format.dart';
@@ -30,6 +31,7 @@ class FullBackup {
               ),
             ) as Map,
           );
+    _makeRegionPathsPortable(notePayload);
     final payload = <String, Object?>{
       'format': format,
       'formatVersion': 2,
@@ -155,6 +157,7 @@ class FullBackup {
     }
     var restoredPdfs = 0;
     var restoredRegions = 0;
+    final regionPaths = <String, String>{};
     if (entries.isNotEmpty) {
       final hasPdfs = entries.keys.any((name) => name.startsWith('reviews/'));
       final hasRegions = entries.keys.any(
@@ -181,11 +184,15 @@ class FullBackup {
         final target = File('${root.path}/$name');
         await target.writeAsBytes(entry.value, flush: true);
         if (isRegion) {
+          regionPaths[name] = target.path;
           restoredRegions++;
         } else {
           restoredPdfs++;
         }
       }
+    }
+    if (notes != null && regionPaths.isNotEmpty) {
+      await _relinkRegionPaths(notes, regionPaths);
     }
     return FullBackupImport(
       full: isFull,
@@ -196,10 +203,84 @@ class FullBackup {
     );
   }
 
+  static void _makeRegionPathsPortable(Object? value) {
+    if (value is Map) {
+      for (final entry in value.entries.toList()) {
+        final key = entry.key.toString();
+        final item = entry.value;
+        if (key == 'imagePath' && item is String && item.isNotEmpty) {
+          value[entry.key] = item.split(RegExp(r'[\\/]')).last;
+        } else {
+          _makeRegionPathsPortable(item);
+        }
+      }
+    } else if (value is List) {
+      for (final item in value) {
+        _makeRegionPathsPortable(item);
+      }
+    }
+  }
+
+  static Future<void> _relinkRegionPaths(
+    NotesStore notes,
+    Map<String, String> paths,
+  ) async {
+    final records = await notes.allForExport();
+    for (final note in records) {
+      var changed = false;
+      final anchors = <NoteAnchorInput>[];
+      for (final anchor in note.anchors) {
+        final context = anchor.context;
+        final oldPath = context?['imagePath']?.toString() ?? '';
+        final base = oldPath.split(RegExp(r'[\\/]')).last;
+        final replacement = paths[base];
+        if (replacement == null || replacement == oldPath) {
+          anchors.add(
+            NoteAnchorInput(
+              targetKind: anchor.targetKind,
+              targetKey: anchor.targetKey,
+              snapshotHash: anchor.snapshotHash.isEmpty
+                  ? null
+                  : anchor.snapshotHash,
+              targetLabel: anchor.targetLabel,
+              status: anchor.status,
+              context: context,
+            ),
+          );
+          continue;
+        }
+        changed = true;
+        anchors.add(
+          NoteAnchorInput(
+            targetKind: anchor.targetKind,
+            targetKey: anchor.targetKey,
+            snapshotHash: anchor.snapshotHash.isEmpty
+                ? null
+                : anchor.snapshotHash,
+            targetLabel: anchor.targetLabel,
+            status: anchor.status,
+            context: {...?context, 'imagePath': replacement},
+          ),
+        );
+      }
+      if (changed) {
+        try {
+          await notes.update(
+            note.id,
+            anchors: anchors,
+            expectedRevision: note.revision,
+          );
+        } catch (_) {
+          // A concurrent edit wins; the backup report remains honest.
+        }
+      }
+    }
+  }
+
   static Future<Directory> _regionsDirectory(Directory? override) async {
     if (override != null) return override;
-    final cache = await ReviewCache.open();
-    return Directory('${cache.rootDirectory.parent.path}/review_regions');
+    final support = await getApplicationSupportDirectory();
+    return Directory('${support.path}/ParticleDesk/review_regions');
   }
 }
 
