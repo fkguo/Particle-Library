@@ -835,6 +835,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                         child: Image.file(
                           File(annotation.imagePath!),
                           height: 130,
+                          cacheWidth: 520,
                           fit: BoxFit.contain,
                           errorBuilder: (_, _, _) => const SizedBox.shrink(),
                         ),
@@ -1674,6 +1675,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         globalPosition & Size.zero,
         Offset.zero & overlay.size,
       ),
+      popUpAnimationStyle: AnimationStyle.noAnimation,
       items: [
         PopupMenuItem(
           value: 'edit',
@@ -1811,6 +1813,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                     child: Image.file(
                       File(annotation.imagePath!),
                       height: 120,
+                      cacheWidth: 480,
                       fit: BoxFit.contain,
                       errorBuilder: (_, _, _) => const SizedBox.shrink(),
                     ),
@@ -2988,6 +2991,7 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
                 Expanded(
                   child: PopupMenuButton<String>(
                     tooltip: strings.reviewFilterColor,
+                    popUpAnimationStyle: AnimationStyle.noAnimation,
                     onSelected: (value) => setState(
                       () => _colorFilter = value == 'all' ? null : value,
                     ),
@@ -3033,6 +3037,7 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
                 Expanded(
                   child: PopupMenuButton<String>(
                     tooltip: strings.reviewFilterTag,
+                    popUpAnimationStyle: AnimationStyle.noAnimation,
                     onSelected: (value) => setState(
                       () => _tagFilter = value == 'all' ? null : value,
                     ),
@@ -3245,6 +3250,7 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
                                       File(annotation.imagePath!),
                                       height: 64,
                                       width: double.infinity,
+                                      cacheWidth: 320,
                                       fit: BoxFit.contain,
                                       errorBuilder: (_, _, _) => const SizedBox(
                                         height: 22,
