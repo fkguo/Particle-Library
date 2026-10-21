@@ -1434,8 +1434,16 @@ class AppStrings {
       _t('完整备份已导入', 'Full backup imported');
   String get settingsFullBackupFailed =>
       _t('完整备份操作失败', 'Full backup operation failed');
-  String settingsFullBackupSummary(int notes, int pdfs) =>
-      _t('$notes 条笔记，$pdfs 个 PDF', '$notes notes, $pdfs PDFs');
+  String settingsFullBackupSummary(int notes, int pdfs, [int regions = 0]) {
+    final regionSuffix = regions == 0
+        ? ''
+        : _t('，$regions 张区域截图', ', $regions region images');
+    return _t(
+      '$notes 条笔记，$pdfs 个 PDF$regionSuffix',
+      '$notes notes, $pdfs PDFs$regionSuffix',
+    );
+  }
+
   String get settingsNotesBackupDone => _t('笔记备份已创建', 'Notes backup created');
   String get settingsNotesBackupFailed => _t('笔记备份失败', 'Notes backup failed');
   String get settingsNotesBackupHint => _t(

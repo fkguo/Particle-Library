@@ -6,6 +6,7 @@ import 'package:pdgapp/notes/notes.dart';
 import 'package:pdgapp/user/user_store.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   test('full backup v2 keeps collections, trash and anchor contexts', () async {
     final dir = await Directory.systemTemp.createTemp('particle-backup-v2-');
     addTearDown(() => dir.delete(recursive: true));
@@ -75,6 +76,53 @@ void main() {
     final restored = (await targetNotes.noteByUuid(active.uuid))!;
     expect(restored.anchors.single.context!['unknownFutureField'], 'preserved');
     expect(restored.collections.single.name, 'Project');
+    await sourceNotes.close();
+    await targetNotes.close();
+  });
+
+  test('full backup includes region annotation images', () async {
+    final dir = await Directory.systemTemp.createTemp(
+      'particle-backup-regions-',
+    );
+    addTearDown(() => dir.delete(recursive: true));
+    final source = await UserStore.open(
+      overridePath: '${dir.path}/source-user.json',
+    );
+    final sourceNotes = await NotesStore.open(
+      overridePath: '${dir.path}/source-notes.db',
+    );
+    final sourceRegions = Directory('${dir.path}/source-regions');
+    await sourceRegions.create();
+    final png = File('${sourceRegions.path}/region-1.png');
+    await png.writeAsBytes(<int>[0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+
+    final archive = '${dir.path}/backup.zip';
+    final exported = await FullBackup.export(
+      user: source,
+      notes: sourceNotes,
+      destinationPath: archive,
+      reviewRegionsDirectory: sourceRegions,
+    );
+    expect(exported.regions, 1);
+
+    final target = await UserStore.open(
+      overridePath: '${dir.path}/target-user.json',
+    );
+    final targetNotes = await NotesStore.open(
+      overridePath: '${dir.path}/target-notes.db',
+    );
+    final targetRegions = Directory('${dir.path}/target-regions');
+    final imported = await FullBackup.import(
+      user: target,
+      notes: targetNotes,
+      sourcePath: archive,
+      reviewRegionsDirectory: targetRegions,
+    );
+    expect(imported.regions, 1);
+    expect(
+      await File('${targetRegions.path}/region-1.png').readAsBytes(),
+      <int>[0x89, 0x50, 0x4e, 0x47, 1, 2, 3],
+    );
     await sourceNotes.close();
     await targetNotes.close();
   });

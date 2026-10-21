@@ -18,6 +18,7 @@ class FullBackup {
     required UserStore user,
     required NotesStore? notes,
     required String destinationPath,
+    Directory? reviewRegionsDirectory,
   }) async {
     final notePayload = notes == null
         ? <String, Object?>{'notes': <Object?>[]}
@@ -38,6 +39,7 @@ class FullBackup {
     };
     final encoder = ZipFileEncoder();
     var pdfs = 0;
+    var regions = 0;
     try {
       encoder.create(destinationPath);
       final bytes = utf8.encode(
@@ -62,10 +64,29 @@ class FullBackup {
       } catch (_) {
         // A missing/unreadable cache does not prevent the data backup.
       }
+      try {
+        final regionsDirectory = await _regionsDirectory(
+          reviewRegionsDirectory,
+        );
+        if (await regionsDirectory.exists()) {
+          await for (final entity in regionsDirectory.list()) {
+            if (entity is! File ||
+                !entity.path.toLowerCase().endsWith('.png')) {
+              continue;
+            }
+            final name = entity.uri.pathSegments.last;
+            await encoder.addFile(entity, 'regions/$name');
+            regions++;
+          }
+        }
+      } catch (_) {
+        // Region thumbnails are optional; the notes and PDFs still restore.
+      }
       await encoder.close();
       return FullBackupExport(
         notes: notes == null ? 0 : (notePayload['notes'] as List).length,
         pdfs: pdfs,
+        regions: regions,
       );
     } catch (_) {
       try {
@@ -79,6 +100,7 @@ class FullBackup {
     required UserStore user,
     required NotesStore? notes,
     required String sourcePath,
+    Directory? reviewRegionsDirectory,
   }) async {
     final file = File(sourcePath);
     final bytes = await file.readAsBytes();
@@ -91,8 +113,10 @@ class FullBackup {
         if (!entry.isFile) continue;
         if (entry.name == 'backup.json') {
           backup = entry;
-        } else if (entry.name.startsWith('reviews/') &&
-            entry.name.toLowerCase().endsWith('.pdf')) {
+        } else if ((entry.name.startsWith('reviews/') &&
+                entry.name.toLowerCase().endsWith('.pdf')) ||
+            (entry.name.startsWith('regions/') &&
+                entry.name.toLowerCase().endsWith('.png'))) {
           final data = entry.readBytes();
           if (data != null) entries[entry.name] = data;
         }
@@ -130,31 +154,65 @@ class FullBackup {
       await user.importData(Map<String, Object?>.from(rawUser));
     }
     var restoredPdfs = 0;
+    var restoredRegions = 0;
     if (entries.isNotEmpty) {
-      final cache = await ReviewCache.open();
-      await cache.rootDirectory.create(recursive: true);
+      final hasPdfs = entries.keys.any((name) => name.startsWith('reviews/'));
+      final hasRegions = entries.keys.any(
+        (name) => name.startsWith('regions/'),
+      );
+      Directory? cacheRoot;
+      if (hasPdfs) {
+        final cache = await ReviewCache.open();
+        await cache.rootDirectory.create(recursive: true);
+        cacheRoot = cache.rootDirectory;
+      }
+      final regionsDirectory = hasRegions
+          ? await _regionsDirectory(reviewRegionsDirectory)
+          : null;
+      if (regionsDirectory != null) {
+        await regionsDirectory.create(recursive: true);
+      }
       for (final entry in entries.entries) {
         final name = entry.key.split('/').last;
         if (name.isEmpty || name.contains('..')) continue;
-        await File('${cache.rootDirectory.path}/$name')
-            .writeAsBytes(entry.value, flush: true);
-        restoredPdfs++;
+        final isRegion = entry.key.startsWith('regions/');
+        final root = isRegion ? regionsDirectory : cacheRoot;
+        if (root == null) continue;
+        final target = File('${root.path}/$name');
+        await target.writeAsBytes(entry.value, flush: true);
+        if (isRegion) {
+          restoredRegions++;
+        } else {
+          restoredPdfs++;
+        }
       }
     }
     return FullBackupImport(
       full: isFull,
       notes: importedNotes,
       pdfs: restoredPdfs,
+      regions: restoredRegions,
       renamedCollections: renamedCollections,
     );
+  }
+
+  static Future<Directory> _regionsDirectory(Directory? override) async {
+    if (override != null) return override;
+    final cache = await ReviewCache.open();
+    return Directory('${cache.rootDirectory.parent.path}/review_regions');
   }
 }
 
 class FullBackupExport {
-  const FullBackupExport({required this.notes, required this.pdfs});
+  const FullBackupExport({
+    required this.notes,
+    required this.pdfs,
+    this.regions = 0,
+  });
 
   final int notes;
   final int pdfs;
+  final int regions;
 }
 
 class FullBackupImport {
@@ -162,11 +220,13 @@ class FullBackupImport {
     required this.full,
     required this.notes,
     required this.pdfs,
+    this.regions = 0,
     this.renamedCollections = const <String>[],
   });
 
   final bool full;
   final int notes;
   final int pdfs;
+  final int regions;
   final List<String> renamedCollections;
 }

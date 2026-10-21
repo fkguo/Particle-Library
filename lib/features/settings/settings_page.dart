@@ -137,7 +137,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${strings.settingsFullBackupDone}: ${strings.settingsFullBackupSummary(result.notes, result.pdfs)}',
+            '${strings.settingsFullBackupDone}: ${strings.settingsFullBackupSummary(result.notes, result.pdfs, result.regions)}',
           ),
         ),
       );
@@ -199,7 +199,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${strings.settingsFullBackupImported}: ${strings.settingsFullBackupSummary(result.notes, result.pdfs)}',
+            '${strings.settingsFullBackupImported}: ${strings.settingsFullBackupSummary(result.notes, result.pdfs, result.regions)}',
           ),
         ),
       );
