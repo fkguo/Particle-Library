@@ -20,10 +20,11 @@ void main() {
   testWidgets('real page right-click has one annotation menu', (tester) async {
     final temp = await getTemporaryDirectory();
     await temp.create(recursive: true);
-    final pdf = File('${temp.path}/hybrid-page.pdf');
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final pdf = File('${temp.path}/hybrid-page-$stamp.pdf');
     await pdf.writeAsBytes(_pdf());
     final services = await AppBootstrap.load(
-      notesStoreOverridePath: '${temp.path}/hybrid-page-notes.sqlite',
+      notesStoreOverridePath: '${temp.path}/hybrid-page-$stamp.sqlite',
     ).timeout(const Duration(seconds: 60));
     final notes = services.notes;
     expect(notes, isNotNull);
@@ -78,6 +79,31 @@ void main() {
     final page = controller.layout.pageLayouts.first;
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Region selection'), findsWidgets);
+    final hitKey = Key('region-hit-${region.id}');
+    final hitCenter = tester.getCenter(find.byKey(hitKey));
+    final beforeUnselectedDrag = await ReviewAnnotationNotes.load(
+      notes,
+      pdf.uri.pathSegments.last,
+      reviewTitle: 'Hybrid Page',
+    );
+    await tester.dragFrom(hitCenter, const Offset(35, 25));
+    await tester.pump(const Duration(milliseconds: 400));
+    final selectedKey = Key('selected-region-${region.id}');
+    expect(
+      find.byKey(selectedKey),
+      findsNothing,
+      reason: 'unselected region drag must not select it',
+    );
+    final afterUnselectedDrag = await ReviewAnnotationNotes.load(
+      notes,
+      pdf.uri.pathSegments.last,
+      reviewTitle: 'Hybrid Page',
+    );
+    expect(
+      afterUnselectedDrag.single.rects.single,
+      beforeUnselectedDrag.single.rects.single,
+    );
+
     final docCenter = Offset(
       page.left + 0.23 * page.width,
       page.top + 0.18 * page.height,
@@ -96,7 +122,6 @@ void main() {
 
     await tester.tapAt(global);
     await tester.pump(const Duration(milliseconds: 400));
-    final selectedKey = Key('selected-region-${region.id}');
     expect(find.byKey(selectedKey), findsOneWidget);
 
     final viewerRect = tester.getRect(find.byType(PdfViewer));
