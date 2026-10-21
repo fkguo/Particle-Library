@@ -47,6 +47,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   final PdfViewerController _controller = PdfViewerController();
   PdfTextSearcher? _searcher;
   int? _currentPage;
+  final GlobalKey _pdfOverlayKey = GlobalKey();
   NotesStore? _notes;
   List<ReviewAnnotation> _annotations = const <ReviewAnnotation>[];
   bool _showAnnotations = true;
@@ -1007,6 +1008,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   }
 
   void _paintAnnotations(Canvas canvas, Rect pageRect, PdfPage page) {
+    if (_pdfDarkMode) return; // Dark mode paints annotations above the filter.
     for (final annotation in _annotations) {
       if (annotation.pageNumber != page.pageNumber) continue;
       final paint = Paint()
@@ -1785,7 +1787,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(child: _pdfSurface(context)),
+                      Expanded(child: _pdfSurfaceWithOverlay(context)),
                       if (_showAnnotations &&
                           !_zenMode &&
                           constraints.maxWidth >= 700 &&
@@ -1890,6 +1892,29 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     );
   }
 
+  Widget _pdfSurfaceWithOverlay(BuildContext context) {
+    final surface = _pdfSurface(context);
+    if (!_pdfDarkMode) return surface;
+    return Stack(
+      children: [
+        Positioned.fill(child: surface),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(
+              key: _pdfOverlayKey,
+              painter: _PdfAnnotationScreenPainter(
+                controller: _controller,
+                annotations: _annotations,
+                overlayKey: _pdfOverlayKey,
+                colorOf: _annotationColor,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _pdfSurface(BuildContext context) {
     Widget viewer = PdfViewer.file(
       widget.path,
@@ -1937,7 +1962,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       // becomes textPrimary, but chroma is kept so a yellow highlight stays
       // yellow instead of turning blue. Each channel is solved independently
       // for white->background and black->foreground.
-      final paper = AppPalette.dark.background;
+      final paper = AppPalette.dark.surface;
       final ink = AppPalette.dark.textPrimary;
       final rows = <double>[];
       for (final (bg, fg) in [
@@ -2658,4 +2683,69 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
       ),
     );
   }
+}
+
+/// Paints saved highlights above the dark-mode color filter so their colours
+/// are not altered by the paper/ink luminance mapping.
+class _PdfAnnotationScreenPainter extends CustomPainter {
+  _PdfAnnotationScreenPainter({
+    required this.controller,
+    required this.annotations,
+    required this.overlayKey,
+    required this.colorOf,
+  }) : super(repaint: controller);
+
+  final PdfViewerController controller;
+  final List<ReviewAnnotation> annotations;
+  final GlobalKey overlayKey;
+  final Color Function(String) colorOf;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!controller.isReady) return;
+    final box = overlayKey.currentContext?.findRenderObject();
+    if (box is! RenderBox) return;
+    final origin = box.localToGlobal(Offset.zero);
+    for (final annotation in annotations) {
+      final index = annotation.pageNumber - 1;
+      if (index < 0 || index >= controller.layout.pageLayouts.length) {
+        continue;
+      }
+      final page = controller.layout.pageLayouts[index];
+      for (final rect in annotation.rects) {
+        final documentRect = Rect.fromLTWH(
+          page.left + rect.left * page.width,
+          page.top + rect.top * page.height,
+          rect.width * page.width,
+          rect.height * page.height,
+        );
+        final topLeft = controller.documentToGlobal(documentRect.topLeft);
+        final bottomRight = controller.documentToGlobal(
+          documentRect.bottomRight,
+        );
+        if (topLeft == null || bottomRight == null) continue;
+        final local = Rect.fromPoints(
+          topLeft - origin,
+          bottomRight - origin,
+        ).intersect(Offset.zero & size);
+        if (local.isEmpty) continue;
+        final color = colorOf(annotation.color);
+        canvas.drawRect(local, Paint()..color = color.withValues(alpha: 0.34));
+        if (annotation.text.trim().isEmpty) {
+          canvas.drawRect(
+            local,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.4
+              ..color = color,
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PdfAnnotationScreenPainter oldDelegate) =>
+      oldDelegate.annotations != annotations ||
+      oldDelegate.controller != controller;
 }
