@@ -1466,6 +1466,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
               width: width,
               height: height,
               child: _PdfRegionAdjustOverlay(
+                key: ValueKey('selected-region-${annotation.id}'),
                 rect: rect,
                 pageSize: pageRect.size,
                 color: _annotationColor(annotation.color),
@@ -1507,6 +1508,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                   ),
                   Positioned.fill(
                     child: PdfOverlayInteractionRegion(
+                      key: ValueKey('region-hit-${annotation.id}'),
                       onTap: (_) {
                         _selectAnnotation(annotation);
                         return true;
@@ -1538,6 +1540,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         }
         continue;
       }
+      var fragmentIndex = 0;
       for (final rect in annotation.rects) {
         final left = rect.left * pageRect.width - 5;
         final top = rect.top * pageRect.height - 5;
@@ -1550,6 +1553,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
             width: width < 28 ? 28 : width,
             height: height < 28 ? 28 : height,
             child: PdfOverlayInteractionRegion(
+              key: ValueKey('text-hit-${annotation.id}-${fragmentIndex++}'),
               onTap: (_) {
                 _selectAnnotation(annotation);
                 return true;
@@ -3715,6 +3719,7 @@ enum _RegionHandle {
 
 class _PdfRegionAdjustOverlay extends StatefulWidget {
   const _PdfRegionAdjustOverlay({
+    super.key,
     required this.rect,
     required this.pageSize,
     required this.color,
@@ -3818,7 +3823,10 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final size = context.size ?? Size.zero;
+    final size = Size(
+      widget.rect.width * widget.pageSize.width,
+      widget.rect.height * widget.pageSize.height,
+    );
     return MouseRegion(
       cursor: _cursor,
       onHover: (event) {
