@@ -189,6 +189,7 @@ class AppStrings {
   String get commonShowLess => _t('收起', 'Show less');
   String get commonViewAll => _t('查看全部', 'View all');
   String get commonOpen => _t('打开', 'Open');
+  String get commonGo => _t('跳转', 'Go');
   String get commonDetails => _t('详情', 'Details');
   String get commonCount => _t('数量', 'Count');
   String get commonYear => _t('年份', 'Year');
@@ -1104,6 +1105,10 @@ class AppStrings {
     '删除这条高亮及其笔记？笔记会进入回收站。',
     'Delete this highlight and its note? The note goes to the recycle bin.',
   );
+  String reviewHighlightsPartiallySaved(int saved, int total) => _t(
+    '已保存 $saved/$total 页高亮；其余页面失败，可重新选择。',
+    'Saved $saved/$total page highlights; the remaining pages failed and can be selected again.',
+  );
   String get reviewSelectText =>
       _t('请先在 PDF 中选择文字。', 'Select text in the PDF first.');
   String get reviewAnnotations => _t('批注', 'Annotations');
@@ -1151,6 +1156,22 @@ class AppStrings {
   String get reviewTags => _t('标签', 'Tags');
   String get reviewAddTag => _t('添加标签', 'Add tag');
   String get reviewTagHint => _t('输入标签后回车', 'Type a tag and press Enter');
+  String get reviewSearch => _t('搜索 PDF', 'Search PDF');
+  String get reviewSearchHint => _t('输入要查找的文字', 'Search text');
+  String get reviewNoMatches => _t('没有匹配项', 'No matches');
+  String reviewMatchProgress(int found, int page, int total) => _t(
+    '已找到 $found 项，正在搜索第 $page/$total 页',
+    '$found found, searching page $page/$total',
+  );
+  String get reviewPreviousMatch => _t('上一项', 'Previous');
+  String get reviewNextMatch => _t('下一项', 'Next');
+  String get reviewPageNumber => _t('页码', 'Page');
+  String get reviewFitWidth => _t('适宽', 'Fit width');
+  String get reviewFitPage => _t('整页', 'Fit page');
+  String get reviewSaveImage => _t('保存区域图片', 'Save region image');
+  String get reviewImageSaved => _t('区域图片已保存', 'Region image saved');
+  String get reviewImageSaveFailed =>
+      _t('区域图片保存失败', 'Could not save region image');
   String get reviewGoToPage => _t('跳转到页面', 'Go to page');
   String get reviewCancelEdit => _t('取消', 'Cancel');
   String get reviewAnnotationSidebar => _t('批注侧栏', 'Annotation sidebar');

@@ -84,6 +84,42 @@ void main() {
     expect(loaded.single.tags, ['important', 'qcd']);
   });
 
+  test(
+    'new comment stays searchable after the note body is expanded',
+    () async {
+      final annotation = await ReviewAnnotationNotes.create(
+        notes,
+        fileName: 'review.pdf',
+        pageNumber: 2,
+        rects: const [Rect.fromLTRB(0.1, 0.1, 0.4, 0.2)],
+        text: 'quoted',
+        color: 'yellow',
+        reviewTitle: 'Review',
+      );
+      final note = (await notes.noteById(annotation.noteId!))!;
+      await notes.update(
+        note.id,
+        bodyMarkdown: '${note.bodyMarkdown}\n\nMy own prose.',
+      );
+      await ReviewAnnotationNotes.updateComment(
+        notes,
+        annotation,
+        'searchable after expansion',
+      );
+      final loaded = (await ReviewAnnotationNotes.load(
+        notes,
+        'review.pdf',
+        reviewTitle: 'Review',
+      )).single;
+      expect(loaded.note, 'searchable after expansion');
+      final stored = (await notes.noteById(annotation.noteId!))!;
+      expect(stored.bodyMarkdown, contains('My own prose.'));
+      expect(stored.bodyMarkdown, contains('searchable after expansion'));
+      final hits = await notes.search('searchable after expansion');
+      expect(hits.map((hit) => hit.id), contains(annotation.noteId));
+    },
+  );
+
   test('comment edits update the note body and survive reload', () async {
     final annotation = await ReviewAnnotationNotes.create(
       notes,
@@ -257,7 +293,7 @@ void main() {
       expect(reloaded.single.note, 'new comment');
       final saved = await notes.noteById(note.id);
       expect(saved!.bodyMarkdown, contains('my synthesis'));
-      expect(saved.bodyMarkdown, isNot(contains('new comment')));
+      expect(saved.bodyMarkdown, contains('new comment'));
     },
   );
 

@@ -161,6 +161,9 @@ class ReviewAnnotationNotes {
     // comment remains authoritative in the anchor context; only an untouched
     // generated body is rewritten.
     final generatedBodyUntouched = note.bodyMarkdown.trim() == oldBody.trim();
+    final nextBody = generatedBodyUntouched
+        ? body
+        : _projectComment(note.bodyMarkdown, comment);
     final anchors = <NoteAnchorInput>[];
     for (final anchor in note.anchors) {
       final isReviewAnchor =
@@ -183,7 +186,7 @@ class ReviewAnnotationNotes {
     }
     await notes.update(
       note.id,
-      bodyMarkdown: generatedBodyUntouched ? body : null,
+      bodyMarkdown: nextBody,
       anchors: anchors,
       tags: tags,
       expectedRevision: note.revision,
@@ -447,6 +450,18 @@ class ReviewAnnotationNotes {
       '',
       '[${_escapeLabel(sourceLabel)}]($sourceTarget)',
     ].join('\n');
+  }
+
+  static String _projectComment(String body, String comment) {
+    final marker = body.indexOf('<!-- annotation-comment -->');
+    final base = marker < 0
+        ? body.trimRight()
+        : body.substring(0, marker).trimRight();
+    final value = comment.trim();
+    if (value.isEmpty) return base;
+    // Keep the user's prose, but make the latest annotation comment visible to
+    // search and Markdown export even after the generated body was expanded.
+    return '$base\n\n<!-- annotation-comment -->\n> $value\n';
   }
 
   static String _commentFromBody(String body) {

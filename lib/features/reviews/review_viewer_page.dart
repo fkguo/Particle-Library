@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -44,6 +45,8 @@ class ReviewViewerPage extends StatefulWidget implements ImmersivePage {
 
 class _ReviewViewerPageState extends State<ReviewViewerPage> {
   final PdfViewerController _controller = PdfViewerController();
+  PdfTextSearcher? _searcher;
+  int? _currentPage;
   NotesStore? _notes;
   List<ReviewAnnotation> _annotations = const <ReviewAnnotation>[];
   bool _showAnnotations = true;
@@ -81,6 +84,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
 
   @override
   void dispose() {
+    _searcher?.dispose();
     _autoHighlightTimer?.cancel();
     _pdfRetryTimer?.cancel();
     super.dispose();
@@ -372,23 +376,43 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       // the viewer is disposed.
       await delegate.clearTextSelection();
       final additions = <ReviewAnnotation>[];
+      Object? failure;
       for (final item in selected) {
-        additions.add(
-          await ReviewAnnotationNotes.create(
-            notes,
-            fileName: _fileName,
-            pageNumber: item.page,
-            rects: item.rects,
-            text: item.text,
-            color: _highlightColor,
-            reviewTitle: widget.title,
+        try {
+          additions.add(
+            await ReviewAnnotationNotes.create(
+              notes,
+              fileName: _fileName,
+              pageNumber: item.page,
+              rects: item.rects,
+              text: item.text,
+              color: _highlightColor,
+              reviewTitle: widget.title,
+            ),
+          );
+        } catch (error) {
+          failure = error;
+          break;
+        }
+      }
+      if (!mounted) return;
+      if (additions.isNotEmpty) {
+        setState(() => _annotations = [...additions, ..._annotations]);
+        _notifyNotesChanged();
+        _offerAddToCollection(additions);
+      }
+      if (failure != null && additions.length < selected.length) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppScope.of(context).strings.reviewHighlightsPartiallySaved(
+                additions.length,
+                selected.length,
+              ),
+            ),
           ),
         );
       }
-      if (!mounted) return;
-      setState(() => _annotations = [...additions, ..._annotations]);
-      _notifyNotesChanged();
-      _offerAddToCollection(additions);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -739,6 +763,34 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       }
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _saveRegionImage(ReviewAnnotation annotation) async {
+    final path = annotation.imagePath;
+    if (path == null) return;
+    final strings = AppScope.of(context).strings;
+    try {
+      final location = await getSaveLocation(
+        suggestedName: path.split(RegExp(r'[\\/]')).last,
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'PNG', extensions: ['png']),
+        ],
+      );
+      if (location == null) return;
+      await File(path).copy(location.path);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(strings.reviewImageSaved)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${strings.reviewImageSaveFailed}: ${errorText(error, strings)}',
+          ),
+        ),
+      );
     }
   }
 
@@ -1201,6 +1253,15 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                     ),
                   ),
                 ),
+              if (annotation.imagePath != null)
+                ListTile(
+                  leading: const Icon(Icons.save_alt_outlined),
+                  title: Text(strings.reviewSaveImage),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    unawaited(_saveRegionImage(annotation));
+                  },
+                ),
               ListTile(
                 leading: const Icon(Icons.note_alt_outlined),
                 title: Text(strings.reviewOpenNote),
@@ -1271,6 +1332,117 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         _selectedAnnotationIds.clear();
       });
     }
+  }
+
+  Future<void> _openSearchDialog() async {
+    final searcher = _searcher;
+    if (searcher == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppScope.of(context).strings.reviewPdfLoading)),
+      );
+      return;
+    }
+    final strings = AppScope.of(context).strings;
+    final query = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: TextField(
+          controller: query,
+          autofocus: true,
+          decoration: InputDecoration(hintText: strings.reviewSearchHint),
+          onChanged: (value) {
+            if (value.trim().isEmpty) {
+              searcher.resetTextSearch();
+            } else {
+              searcher.startTextSearch(value, searchImmediately: true);
+            }
+          },
+        ),
+        content: SizedBox(
+          width: 420,
+          child: AnimatedBuilder(
+            animation: searcher,
+            builder: (context, _) {
+              final matches = searcher.matches.length;
+              final total = searcher.totalPageCount;
+              final page = searcher.searchingPageNumber;
+              final progress = searcher.searchProgress;
+              final current = searcher.currentIndex;
+              return Text(
+                searcher.isSearching && total != null && page != null
+                    ? strings.reviewMatchProgress(matches, page, total)
+                    : matches == 0
+                    ? strings.reviewNoMatches
+                    : '${current == null ? 0 : current + 1} / $matches'
+                          '${progress == null ? '' : ' · ${(progress * 100).round()}%'}',
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => unawaited(searcher.goToPrevMatch()),
+            child: Text(strings.reviewPreviousMatch),
+          ),
+          TextButton(
+            onPressed: () => unawaited(searcher.goToNextMatch()),
+            child: Text(strings.reviewNextMatch),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(strings.commonClose),
+          ),
+        ],
+      ),
+    );
+    query.dispose();
+    searcher.resetTextSearch();
+  }
+
+  Future<void> _openPageDialog() async {
+    if (!_controller.isReady) return;
+    final strings = AppScope.of(context).strings;
+    final controller = TextEditingController(
+      text: '${_currentPage ?? _controller.pageNumber ?? 1}',
+    );
+    final page = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.reviewPageNumber),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          onSubmitted: (value) =>
+              Navigator.of(dialogContext).pop(int.tryParse(value)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(strings.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(int.tryParse(controller.text)),
+            child: Text(strings.commonGo),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (page == null || !mounted) return;
+    if (page < 1 || page > _controller.pageCount) return;
+    await _controller.goToPage(pageNumber: page);
+  }
+
+  void _fitPage(String mode) {
+    if (!_controller.isReady) return;
+    final page = _controller.pageNumber ?? _currentPage ?? 1;
+    final matrix = mode == 'width'
+        ? _controller.calcMatrixFitWidthForPage(pageNumber: page)
+        : _controller.calcMatrixForFit(pageNumber: page);
+    if (matrix != null) _controller.value = matrix;
   }
 
   bool _annotationSheetOnly(BuildContext context) {
@@ -1369,6 +1541,33 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                       .clamp(maxScaleFactor: 1.3),
                 ),
                 actions: [
+                  IconButton(
+                    tooltip: strings.reviewSearch,
+                    onPressed: () => unawaited(_openSearchDialog()),
+                    icon: const Icon(Icons.search, size: 19),
+                  ),
+                  TextButton(
+                    onPressed: () => unawaited(_openPageDialog()),
+                    child: Text(
+                      '${_currentPage ?? 1}/${_controller.isReady ? _controller.pageCount : '—'}',
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: strings.reviewFitWidth,
+                    icon: const Icon(Icons.fit_screen, size: 19),
+                    onSelected: _fitPage,
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'width',
+                        child: Text(strings.reviewFitWidth),
+                      ),
+                      PopupMenuItem(
+                        value: 'page',
+                        child: Text(strings.reviewFitPage),
+                      ),
+                    ],
+                  ),
                   IconButton(
                     tooltip: _pdfDarkMode
                         ? strings.reviewPdfLightMode
@@ -1704,6 +1903,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         onViewerReady: (document, controller) {
           _pdfRetryTimer?.cancel();
           _pdfReady = true;
+          _searcher ??= PdfTextSearcher(_controller);
+          _currentPage = _controller.pageNumber;
           unawaited(_loadOutline(document));
           if (widget.initialPage > 1) {
             unawaited(controller.goToPage(pageNumber: widget.initialPage));
@@ -1722,32 +1923,35 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           onSelectionHandlePanStart: (_) => _autoHighlightTimer?.cancel(),
         ),
         customizeContextMenuItems: _customizePdfContextMenu,
+        onPageChanged: (page) {
+          if (!mounted || page == null) return;
+          setState(() => _currentPage = page);
+        },
       ),
     );
     if (_pdfDarkMode) {
-      // Keep the exact app dark paper colour, but use a steeper inversion so
-      // antialiased, thin PDF glyphs stay legible instead of turning into
-      // faint grey edges. Ink intentionally clips to the light end.
+      // Luminance inversion: paper becomes AppPalette.dark.background, ink
+      // becomes textPrimary, but chroma is kept so a yellow highlight stays
+      // yellow instead of turning blue. Each channel is solved independently
+      // for white->background and black->foreground.
       final paper = AppPalette.dark.background;
-      const slope = 1.18;
-      double offset(double channel) => slope * 255 + channel * 255;
+      final ink = AppPalette.dark.textPrimary;
+      final rows = <double>[];
+      for (final (bg, fg) in [
+        (paper.r, ink.r),
+        (paper.g, ink.g),
+        (paper.b, ink.b),
+      ]) {
+        final slope = (255 + fg * 255 - bg * 255) / 255;
+        final offDiagonal = -slope / 3;
+        final diagonal = 1 + offDiagonal;
+        rows.addAll([diagonal, offDiagonal, offDiagonal, 0, fg * 255]);
+      }
       viewer = ColorFiltered(
         colorFilter: ColorFilter.matrix(<double>[
-          -slope,
-          0,
-          0,
-          0,
-          offset(paper.r),
-          0,
-          -slope,
-          0,
-          0,
-          offset(paper.g),
-          0,
-          0,
-          -slope,
-          0,
-          offset(paper.b),
+          ...rows.sublist(0, 5),
+          ...rows.sublist(5, 10),
+          ...rows.sublist(10, 15),
           0,
           0,
           0,
