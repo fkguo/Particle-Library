@@ -1264,7 +1264,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(child: _pdfSurface()),
+                    Expanded(child: _pdfSurface(context)),
                     if (_showAnnotations && !_zenMode) ...[
                       CollapsibleSidePanel(
                         width: sidebarWidth,
@@ -1361,12 +1361,15 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     );
   }
 
-  Widget _pdfSurface() {
+  Widget _pdfSurface(BuildContext context) {
     Widget viewer = PdfViewer.file(
       widget.path,
       key: ValueKey<String>('pdf-${widget.path}-$_pdfEpoch'),
       controller: _controller,
       params: PdfViewerParams(
+        backgroundColor: _pdfDarkMode
+            ? AppPalette.dark.background
+            : context.palette.background,
         onViewerReady: (document, controller) {
           _pdfRetryTimer?.cancel();
           _pdfReady = true;
@@ -1388,23 +1391,29 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       ),
     );
     if (_pdfDarkMode) {
+      // Map white PDF paper onto AppPalette.dark.background and black ink onto
+      // a light foreground. A slightly steeper slope than a plain inversion
+      // keeps antialiased, thin text readable on the dark paper.
+      final dark = AppPalette.dark;
+      const slope = 1.12;
+      double offset(Color channel) => slope * 255 + channel.r * 255;
       viewer = ColorFiltered(
-        colorFilter: const ColorFilter.matrix(<double>[
-          -1,
+        colorFilter: ColorFilter.matrix(<double>[
+          -slope,
           0,
           0,
           0,
-          255,
+          offset(dark.background),
           0,
-          -1,
-          0,
-          0,
-          255,
+          -slope,
           0,
           0,
-          -1,
+          offset(dark.background),
           0,
-          255,
+          0,
+          -slope,
+          0,
+          offset(dark.background),
           0,
           0,
           0,
