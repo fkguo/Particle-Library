@@ -58,6 +58,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   List<ReviewAnnotation> _annotations = const <ReviewAnnotation>[];
   bool _showAnnotations = true;
   bool _sidebarInitialized = false;
+  bool _hadReadingState = false;
   bool _saving = false;
   bool _addingHighlight = false;
   bool _highlightMode = false;
@@ -115,6 +116,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     _userStore = scope.store;
     final state = scope.store.reviewState(_fileName);
     if (state != null) {
+      _hadReadingState = true;
       final width = state['sidebarWidth'];
       if (width is num) _sidebarWidth = width.toDouble().clamp(220, 560);
       final tab = state['sidebarTab'];
@@ -2277,12 +2279,14 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                     builder: (context, constraints) {
                       if (!_sidebarInitialized) {
                         _sidebarInitialized = true;
-                        // A phone in landscape is wide but short; opening the 320 px
-                        // sidebar there leaves too little room for the page. Tablets and
-                        // desktops still get the inline sidebar.
-                        _showAnnotations =
-                            constraints.maxWidth >= 700 &&
-                            constraints.maxHeight >= 500;
+                        if (!_hadReadingState) {
+                          // A phone in landscape is wide but short; opening the 320 px
+                          // sidebar there leaves too little room for the page. Tablets and
+                          // desktops still get the inline sidebar.
+                          _showAnnotations =
+                              constraints.maxWidth >= 700 &&
+                              constraints.maxHeight >= 500;
+                        }
                       }
                       final maxSidebar = (constraints.maxWidth - 260).clamp(
                         220.0,
