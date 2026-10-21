@@ -113,6 +113,8 @@ void main() {
       text: 'old quote',
       color: 'blue',
       reviewTitle: 'Review',
+      tags: const ['important'],
+      imagePath: '/tmp/region.png',
     );
     final updated = await ReviewAnnotationNotes.updateRange(
       notes,
@@ -121,6 +123,8 @@ void main() {
       text: 'new longer quote',
     );
     expect(updated, isNotNull);
+    expect(updated!.tags, ['important']);
+    expect(updated.imagePath, '/tmp/region.png');
     final loaded = await ReviewAnnotationNotes.load(
       notes,
       'review.pdf',
@@ -129,6 +133,8 @@ void main() {
     expect(loaded.single.text, 'new longer quote');
     expect(loaded.single.rects.single.right, closeTo(0.8, 1e-9));
     expect(loaded.single.color, 'blue');
+    expect(loaded.single.tags, ['important']);
+    expect(loaded.single.imagePath, '/tmp/region.png');
   });
 
   test('comment and range edits keep the human review title in body', () async {
