@@ -1119,8 +1119,14 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     PdfViewerGeneralTapHandlerDetails details,
   ) {
     if (details.type == PdfViewerGeneralTapType.tap) {
-      if (_editingRange != null) {
-        setState(() => _editingRange = null);
+      final hadRange = _editingRange != null;
+      if (_selectedAnnotationId != null || hadRange) {
+        setState(() {
+          _selectedAnnotationId = null;
+          _editingRange = null;
+        });
+      }
+      if (hadRange) {
         unawaited(_controller.textSelectionDelegate.clearTextSelection());
       }
       return false;
@@ -1195,24 +1201,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(strings.commonCopyFailed)));
-    }
-  }
-
-  void _customizePdfContextMenu(
-    PdfViewerContextMenuBuilderParams params,
-    List<ContextMenuButtonItem> items,
-  ) {
-    if (params.textSelectionDelegate.hasSelectedText) {
-      items.insert(
-        0,
-        ContextMenuButtonItem(
-          label: AppScope.of(context).strings.reviewHighlight,
-          onPressed: () {
-            params.dismissContextMenu();
-            unawaited(_highlightSelection());
-          },
-        ),
-      );
     }
   }
 
@@ -1371,7 +1359,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     for (final annotation in _annotations) {
       if (annotation.pageNumber != page.pageNumber) continue;
       final paint = Paint()
-        ..color = _annotationColor(annotation.color).withValues(alpha: 0.38);
+        ..color = _annotationColor(annotation.color).withValues(
+          alpha: annotation.id == _selectedAnnotationId ? 0.55 : 0.38,
+        );
       for (final rect in mergeRectsForDisplay(annotation.rects)) {
         final target = Rect.fromLTWH(
           pageRect.left + rect.left * pageRect.width,
@@ -1441,32 +1431,111 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     Rect pageRect,
     PdfPage page,
   ) {
-    final widgets = <Widget>[];
+    final widgets = <Widget>[
+      // The page-level hit region gives a free text selection a right-click
+      // target. Annotation regions are registered after this one and therefore
+      // take precedence for their own areas.
+      Positioned.fill(
+        child: PdfOverlayInteractionRegion(
+          onSecondaryTap: (details) {
+            if (_controller.isReady &&
+                _controller.textSelectionDelegate.hasSelectedText) {
+              unawaited(_showTextSelectionMenu(details.globalPosition));
+              return true;
+            }
+            return false;
+          },
+          child: const SizedBox.expand(),
+        ),
+      ),
+    ];
     for (final annotation in _annotations) {
       if (annotation.pageNumber != page.pageNumber) continue;
+      final selected = _selectedAnnotationId == annotation.id;
       if (annotation.text.trim().isEmpty) {
         final rect = annotation.rects.first;
-        widgets.add(
-          Positioned(
-            left: rect.left * pageRect.width,
-            top: rect.top * pageRect.height,
-            width: rect.width * pageRect.width,
-            height: rect.height * pageRect.height,
-            child: _PdfRegionAdjustOverlay(
-              rect: rect,
-              pageSize: pageRect.size,
-              color: _annotationColor(annotation.color),
-              onChanged: (next) => _updateRegionAnnotation(annotation.id, next),
-              onEnd: (next) => unawaited(_persistRegion(annotation.id, next)),
-              selected: _selectedAnnotationId == annotation.id,
-              onTap: () => _selectAnnotation(annotation),
-              onDoubleTap: () => unawaited(_editAnnotation(annotation)),
-              onLongPress: () => unawaited(_showAnnotationActions(annotation)),
-              onContextMenu: (position) =>
-                  unawaited(_showAnnotationContextMenu(annotation, position)),
+        final left = rect.left * pageRect.width;
+        final top = rect.top * pageRect.height;
+        final width = rect.width * pageRect.width;
+        final height = rect.height * pageRect.height;
+        if (selected) {
+          widgets.add(
+            Positioned(
+              left: left,
+              top: top,
+              width: width,
+              height: height,
+              child: _PdfRegionAdjustOverlay(
+                rect: rect,
+                pageSize: pageRect.size,
+                color: _annotationColor(annotation.color),
+                onChanged: (next) =>
+                    _updateRegionAnnotation(annotation.id, next),
+                onEnd: (next) => unawaited(_persistRegion(annotation.id, next)),
+                selected: true,
+                onTap: () => _selectAnnotation(annotation),
+                onDoubleTap: () => unawaited(_editAnnotation(annotation)),
+                onLongPress: () =>
+                    unawaited(_showAnnotationActions(annotation)),
+                onContextMenu: (position) =>
+                    unawaited(_showAnnotationContextMenu(annotation, position)),
+              ),
             ),
-          ),
-        );
+          );
+        } else {
+          widgets.add(
+            Positioned(
+              left: left,
+              top: top,
+              width: width,
+              height: height,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: _annotationColor(annotation.color),
+                            width: 1.4,
+                          ),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: PdfOverlayInteractionRegion(
+                      onTap: (_) {
+                        _selectAnnotation(annotation);
+                        return true;
+                      },
+                      onDoubleTap: (_) {
+                        unawaited(_editAnnotation(annotation));
+                        return true;
+                      },
+                      onSecondaryTap: (details) {
+                        unawaited(
+                          _showAnnotationContextMenu(
+                            annotation,
+                            details.globalPosition,
+                          ),
+                        );
+                        return true;
+                      },
+                      onLongPress: (_) {
+                        unawaited(_showAnnotationActions(annotation));
+                        return true;
+                      },
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         continue;
       }
       for (final rect in annotation.rects) {
@@ -1483,7 +1552,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
             child: PdfOverlayInteractionRegion(
               onTap: (_) {
                 _selectAnnotation(annotation);
-                unawaited(_beginAdjustRange(annotation));
                 return true;
               },
               onDoubleTap: (_) {
@@ -1491,18 +1559,12 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                 return true;
               },
               onSecondaryTap: (details) {
-                if (defaultTargetPlatform == TargetPlatform.macOS ||
-                    defaultTargetPlatform == TargetPlatform.windows ||
-                    defaultTargetPlatform == TargetPlatform.linux) {
-                  unawaited(
-                    _showAnnotationContextMenu(
-                      annotation,
-                      details.globalPosition,
-                    ),
-                  );
-                } else {
-                  unawaited(_showAnnotationActions(annotation));
-                }
+                unawaited(
+                  _showAnnotationContextMenu(
+                    annotation,
+                    details.globalPosition,
+                  ),
+                );
                 return true;
               },
               onLongPress: (_) {
@@ -1790,16 +1852,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     Offset globalPosition,
   ) async {
     setState(() => _selectedAnnotationId = annotation.id);
-    // pdfrx also owns a text-selection context menu. Clear its selection
-    // before opening the annotation menu so the user does not get two menus.
-    if (_controller.isReady) {
-      await _controller.textSelectionDelegate.clearTextSelection();
-    }
-    if (!mounted) return;
     final overlay = Overlay.of(context).context.findRenderObject();
     if (overlay is! RenderBox) return;
     final strings = AppScope.of(context).strings;
-    final action = await showMenu<String>(
+    final menu = showMenu<String>(
       context: context,
       position: RelativeRect.fromRect(
         globalPosition & Size.zero,
@@ -1902,6 +1958,12 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         ),
       ],
     );
+    // Clear pdfrx's text selection after opening our menu. Awaiting the
+    // clear before showMenu can race with the menu route and dismiss it.
+    if (_controller.isReady) {
+      unawaited(_controller.textSelectionDelegate.clearTextSelection());
+    }
+    final action = await menu;
     if (!mounted || action == null) return;
     switch (action) {
       case 'edit':
@@ -2783,11 +2845,14 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           },
         ),
         buildContextMenu: (context, params) => null,
-        customizeContextMenuItems: _customizePdfContextMenu,
         onGeneralTap: _onPdfGeneralTap,
         onPageChanged: (page) {
           if (!mounted || page == null) return;
-          setState(() => _currentPage = page);
+          final changed = _currentPage != page;
+          setState(() {
+            _currentPage = page;
+            if (changed) _selectedAnnotationId = null;
+          });
         },
       ),
     );
@@ -3897,7 +3962,13 @@ class _PdfAnnotationScreenPainter extends CustomPainter {
         ).intersect(Offset.zero & size);
         if (local.isEmpty) continue;
         final color = colorOf(annotation.color);
-        canvas.drawRect(local, Paint()..color = color.withValues(alpha: 0.34));
+        canvas.drawRect(
+          local,
+          Paint()
+            ..color = color.withValues(
+              alpha: annotation.id == selectedId ? 0.55 : 0.34,
+            ),
+        );
         if (annotation.id == selectedId && annotation.text.trim().isEmpty) {
           canvas.drawRect(
             local,
