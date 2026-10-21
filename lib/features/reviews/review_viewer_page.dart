@@ -1341,6 +1341,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
               onChanged: (next) => _updateRegionAnnotation(annotation.id, next),
               onEnd: (next) => unawaited(_persistRegion(annotation.id, next)),
               onTap: () => unawaited(_showAnnotationActions(annotation)),
+              onContextMenu: (position) =>
+                  unawaited(_showAnnotationContextMenu(annotation, position)),
             ),
           ),
         );
@@ -1364,8 +1366,19 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                 unawaited(_beginAdjustRange(annotation));
                 return true;
               },
-              onSecondaryTap: (_) {
-                unawaited(_showAnnotationActions(annotation));
+              onSecondaryTap: (details) {
+                if (defaultTargetPlatform == TargetPlatform.macOS ||
+                    defaultTargetPlatform == TargetPlatform.windows ||
+                    defaultTargetPlatform == TargetPlatform.linux) {
+                  unawaited(
+                    _showAnnotationContextMenu(
+                      annotation,
+                      details.globalPosition,
+                    ),
+                  );
+                } else {
+                  unawaited(_showAnnotationActions(annotation));
+                }
                 return true;
               },
               onLongPress: (_) {
@@ -1646,6 +1659,125 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       imageStale: imageStale,
     );
     await _reloadAfterHistory();
+  }
+
+  Future<void> _showAnnotationContextMenu(
+    ReviewAnnotation annotation,
+    Offset globalPosition,
+  ) async {
+    final overlay = Overlay.of(context).context.findRenderObject();
+    if (overlay is! RenderBox) return;
+    final strings = AppScope.of(context).strings;
+    final action = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        globalPosition & Size.zero,
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'edit',
+          child: Row(
+            children: [
+              const Icon(Icons.edit_outlined, size: 17),
+              const SizedBox(width: 8),
+              Text(strings.reviewAnnotationEdit),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'note',
+          child: Row(
+            children: [
+              const Icon(Icons.note_alt_outlined, size: 17),
+              const SizedBox(width: 8),
+              Text(strings.reviewOpenNote),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'page',
+          child: Row(
+            children: [
+              const Icon(Icons.picture_as_pdf_outlined, size: 17),
+              const SizedBox(width: 8),
+              Text(strings.reviewGoToPage),
+            ],
+          ),
+        ),
+        if (annotation.imagePath != null && !annotation.imageStale) ...[
+          PopupMenuItem(
+            value: 'save',
+            child: Row(
+              children: [
+                const Icon(Icons.save_alt_outlined, size: 17),
+                const SizedBox(width: 8),
+                Text(strings.reviewSaveImage),
+              ],
+            ),
+          ),
+          if (defaultTargetPlatform == TargetPlatform.macOS)
+            PopupMenuItem(
+              value: 'copy',
+              child: Row(
+                children: [
+                  const Icon(Icons.copy_all_outlined, size: 17),
+                  const SizedBox(width: 8),
+                  Text(strings.reviewCopyImage),
+                ],
+              ),
+            ),
+        ],
+        if (annotation.imageStale)
+          PopupMenuItem(
+            value: 'retry',
+            child: Row(
+              children: [
+                const Icon(Icons.refresh, size: 17),
+                const SizedBox(width: 8),
+                Text(strings.reviewRegionRetryImage),
+              ],
+            ),
+          ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(
+                Icons.delete_outline,
+                size: 17,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                strings.commonDelete,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'edit':
+        await _editAnnotation(annotation);
+      case 'note':
+        await _openAnnotationNote(annotation);
+      case 'page':
+        if (_controller.isReady) {
+          await _controller.goToPage(pageNumber: annotation.pageNumber);
+        }
+      case 'save':
+        await _saveRegionImage(annotation);
+      case 'copy':
+        await _copyRegionImage(annotation);
+      case 'retry':
+        await _refreshRegionImage(annotation);
+      case 'delete':
+        await _deleteAnnotation(annotation);
+    }
   }
 
   Future<void> _showAnnotationActions(ReviewAnnotation annotation) async {
@@ -2003,6 +2135,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                 Navigator.of(sheetContext).pop();
                 unawaited(_removeAnnotationTag(annotation, tag));
               },
+              onContextMenu: (annotation, position) =>
+                  unawaited(_showAnnotationContextMenu(annotation, position)),
             ),
           ),
         ),
@@ -2359,6 +2493,13 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                                   onRemoveTag: (annotation, tag) => unawaited(
                                     _removeAnnotationTag(annotation, tag),
                                   ),
+                                  onContextMenu: (annotation, position) =>
+                                      unawaited(
+                                        _showAnnotationContextMenu(
+                                          annotation,
+                                          position,
+                                        ),
+                                      ),
                                 ),
                               ),
                             ],
@@ -2553,6 +2694,7 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
     required this.outlineLoading,
     required this.onOpenOutline,
     required this.onRemoveTag,
+    required this.onContextMenu,
   });
 
   final List<ReviewAnnotation> annotations;
@@ -2573,6 +2715,8 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
   final bool outlineLoading;
   final ValueChanged<PdfOutlineNode> onOpenOutline;
   final void Function(ReviewAnnotation annotation, String tag) onRemoveTag;
+  final void Function(ReviewAnnotation annotation, Offset position)
+  onContextMenu;
 
   @override
   State<_ReviewAnnotationSidebar> createState() =>
@@ -2602,6 +2746,8 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
   bool get outlineLoading => widget.outlineLoading;
   ValueChanged<PdfOutlineNode> get onOpenOutline => widget.onOpenOutline;
   void Function(ReviewAnnotation, String) get onRemoveTag => widget.onRemoveTag;
+  void Function(ReviewAnnotation, Offset) get onContextMenu =>
+      widget.onContextMenu;
 
   @override
   void dispose() {
@@ -2966,189 +3112,196 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
                     itemBuilder: (context, index) {
                       final annotation = ordered[index];
                       final selected = selectedIds.contains(annotation.id);
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        hoverColor: palette.accent.withValues(alpha: 0.08),
-                        onTap: selectionMode
-                            ? () => onToggleSelection(annotation.id)
-                            : () => onEditNote(annotation),
-                        child: Container(
-                          padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: palette.divider),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  if (selectionMode) ...[
-                                    Checkbox(
-                                      value: selected,
-                                      onChanged: (_) =>
-                                          onToggleSelection(annotation.id),
-                                      visualDensity: VisualDensity.compact,
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                    const SizedBox(width: 2),
-                                  ],
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color: switch (annotation.color) {
-                                        'green' => const Color(0xFF4CAF50),
-                                        'pink' => const Color(0xFFE91E63),
-                                        'blue' => const Color(0xFF2196F3),
-                                        _ => const Color(0xFFFFC107),
-                                      },
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Tooltip(
-                                    message: strings.reviewGoToPage,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(4),
-                                      onTap: () => onOpen(annotation),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 3,
-                                          vertical: 2,
-                                        ),
-                                        child: Text(
-                                          strings.reviewAnnotationPage(
-                                            annotation.pageNumber,
-                                          ),
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .labelSmall
-                                              ?.copyWith(
-                                                color: palette.textSecondary,
-                                              ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  if (!selectionMode)
-                                    IconButton(
-                                      tooltip: strings.reviewAnnotationEdit,
-                                      visualDensity: VisualDensity.compact,
-                                      onPressed: () => onEditNote(annotation),
-                                      icon: const Icon(
-                                        Icons.edit_outlined,
-                                        size: 16,
-                                      ),
-                                    ),
-                                  if (!selectionMode)
-                                    PopupMenuButton<String>(
-                                      tooltip: strings.moreActions,
-                                      icon: const Icon(
-                                        Icons.more_horiz,
-                                        size: 18,
-                                      ),
-                                      onSelected: (value) {
-                                        switch (value) {
-                                          case 'open':
-                                            onOpenNote(annotation);
-                                          case 'edit':
-                                            onEditNote(annotation);
-                                          case 'delete':
-                                            onDelete(annotation);
-                                        }
-                                      },
-                                      itemBuilder: (context) => [
-                                        PopupMenuItem(
-                                          value: 'open',
-                                          child: Text(strings.reviewOpenNote),
-                                        ),
-                                        PopupMenuItem(
-                                          value: 'edit',
-                                          child: Text(
-                                            strings.reviewAnnotationEdit,
-                                          ),
-                                        ),
-                                        PopupMenuItem(
-                                          value: 'delete',
-                                          child: Text(strings.commonDelete),
-                                        ),
-                                      ],
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                annotation.text.trim().isEmpty
-                                    ? strings.reviewAnnotationRegion
-                                    : annotation.text,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                              if (annotation.imagePath != null) ...[
-                                const SizedBox(height: 5),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(5),
-                                  child: Image.file(
-                                    File(annotation.imagePath!),
-                                    height: 64,
-                                    width: double.infinity,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (_, _, _) => const SizedBox(
-                                      height: 22,
-                                      child: Icon(
-                                        Icons.broken_image_outlined,
-                                        size: 16,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              if (annotation.imageStale) ...[
-                                const SizedBox(height: 3),
-                                Text(
-                                  strings.reviewRegionImageStale,
-                                  style: Theme.of(context).textTheme.labelSmall
-                                      ?.copyWith(color: Colors.orange),
-                                ),
-                              ],
-                              const SizedBox(height: 3),
-                              Text(
-                                annotation.note.trim().isEmpty
-                                    ? strings.reviewNoComment
-                                    : annotation.note,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: palette.textSecondary,
-                                      fontStyle: annotation.note.trim().isEmpty
-                                          ? FontStyle.normal
-                                          : FontStyle.italic,
-                                    ),
-                              ),
-                              if (annotation.tags.isNotEmpty) ...[
-                                const SizedBox(height: 5),
-                                Wrap(
-                                  spacing: 4,
-                                  runSpacing: 2,
+                      return GestureDetector(
+                        onSecondaryTapDown: (details) =>
+                            onContextMenu(annotation, details.globalPosition),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          hoverColor: palette.accent.withValues(alpha: 0.08),
+                          onTap: selectionMode
+                              ? () => onToggleSelection(annotation.id)
+                              : () => onEditNote(annotation),
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: palette.divider),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
                                   children: [
-                                    for (final tag in annotation.tags)
-                                      InputChip(
-                                        label: Text(tag),
-                                        onDeleted: () =>
-                                            onRemoveTag(annotation, tag),
+                                    if (selectionMode) ...[
+                                      Checkbox(
+                                        value: selected,
+                                        onChanged: (_) =>
+                                            onToggleSelection(annotation.id),
                                         visualDensity: VisualDensity.compact,
                                         materialTapTargetSize:
                                             MaterialTapTargetSize.shrinkWrap,
                                       ),
+                                      const SizedBox(width: 2),
+                                    ],
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: switch (annotation.color) {
+                                          'green' => const Color(0xFF4CAF50),
+                                          'pink' => const Color(0xFFE91E63),
+                                          'blue' => const Color(0xFF2196F3),
+                                          _ => const Color(0xFFFFC107),
+                                        },
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Tooltip(
+                                      message: strings.reviewGoToPage,
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(4),
+                                        onTap: () => onOpen(annotation),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 3,
+                                            vertical: 2,
+                                          ),
+                                          child: Text(
+                                            strings.reviewAnnotationPage(
+                                              annotation.pageNumber,
+                                            ),
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .labelSmall
+                                                ?.copyWith(
+                                                  color: palette.textSecondary,
+                                                ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    if (!selectionMode)
+                                      IconButton(
+                                        tooltip: strings.reviewAnnotationEdit,
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: () => onEditNote(annotation),
+                                        icon: const Icon(
+                                          Icons.edit_outlined,
+                                          size: 16,
+                                        ),
+                                      ),
+                                    if (!selectionMode)
+                                      PopupMenuButton<String>(
+                                        tooltip: strings.moreActions,
+                                        icon: const Icon(
+                                          Icons.more_horiz,
+                                          size: 18,
+                                        ),
+                                        onSelected: (value) {
+                                          switch (value) {
+                                            case 'open':
+                                              onOpenNote(annotation);
+                                            case 'edit':
+                                              onEditNote(annotation);
+                                            case 'delete':
+                                              onDelete(annotation);
+                                          }
+                                        },
+                                        itemBuilder: (context) => [
+                                          PopupMenuItem(
+                                            value: 'open',
+                                            child: Text(strings.reviewOpenNote),
+                                          ),
+                                          PopupMenuItem(
+                                            value: 'edit',
+                                            child: Text(
+                                              strings.reviewAnnotationEdit,
+                                            ),
+                                          ),
+                                          PopupMenuItem(
+                                            value: 'delete',
+                                            child: Text(strings.commonDelete),
+                                          ),
+                                        ],
+                                      ),
                                   ],
                                 ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  annotation.text.trim().isEmpty
+                                      ? strings.reviewAnnotationRegion
+                                      : annotation.text,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                if (annotation.imagePath != null) ...[
+                                  const SizedBox(height: 5),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(5),
+                                    child: Image.file(
+                                      File(annotation.imagePath!),
+                                      height: 64,
+                                      width: double.infinity,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, _, _) => const SizedBox(
+                                        height: 22,
+                                        child: Icon(
+                                          Icons.broken_image_outlined,
+                                          size: 16,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                if (annotation.imageStale) ...[
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    strings.reviewRegionImageStale,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(color: Colors.orange),
+                                  ),
+                                ],
+                                const SizedBox(height: 3),
+                                Text(
+                                  annotation.note.trim().isEmpty
+                                      ? strings.reviewNoComment
+                                      : annotation.note,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: palette.textSecondary,
+                                        fontStyle:
+                                            annotation.note.trim().isEmpty
+                                            ? FontStyle.normal
+                                            : FontStyle.italic,
+                                      ),
+                                ),
+                                if (annotation.tags.isNotEmpty) ...[
+                                  const SizedBox(height: 5),
+                                  Wrap(
+                                    spacing: 4,
+                                    runSpacing: 2,
+                                    children: [
+                                      for (final tag in annotation.tags)
+                                        InputChip(
+                                          label: Text(tag),
+                                          onDeleted: () =>
+                                              onRemoveTag(annotation, tag),
+                                          visualDensity: VisualDensity.compact,
+                                          materialTapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                    ],
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
                         ),
                       );
@@ -3324,6 +3477,7 @@ class _PdfRegionAdjustOverlay extends StatefulWidget {
     required this.onChanged,
     required this.onEnd,
     required this.onTap,
+    required this.onContextMenu,
   });
 
   final Rect rect;
@@ -3332,6 +3486,7 @@ class _PdfRegionAdjustOverlay extends StatefulWidget {
   final ValueChanged<Rect> onChanged;
   final ValueChanged<Rect> onEnd;
   final VoidCallback onTap;
+  final ValueChanged<Offset> onContextMenu;
 
   @override
   State<_PdfRegionAdjustOverlay> createState() =>
@@ -3428,6 +3583,8 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
+        onSecondaryTapDown: (details) =>
+            widget.onContextMenu(details.globalPosition),
         onPanStart: (details) {
           final box = context.findRenderObject();
           if (box is! RenderBox) return;
