@@ -378,6 +378,13 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     });
   }
 
+  Set<String> _dragNoteIds(NoteRecord note) {
+    if (_multiSelect && _checkedNoteIds.contains(note.id)) {
+      return Set<String>.of(_checkedNoteIds);
+    }
+    return <String>{note.id};
+  }
+
   void _toggleSelectAllNotes() {
     final visible = {for (final note in _notes) note.id};
     final allChecked =
@@ -1770,8 +1777,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                     trailing: '${summary.activeNoteCount}',
                     selected: _collectionFilter == summary.id,
                     onTap: () => _selectCollectionScope(summary.collection),
-                    onAcceptNote: (noteId) =>
-                        _addNoteIdsToCollection({noteId}, summary.collection),
+                    onAcceptNotes: (noteIds) =>
+                        _addNoteIdsToCollection(noteIds, summary.collection),
                     onSecondaryTap: (position) => _showCollectionMenu(
                       context,
                       summary.collection,
@@ -1793,7 +1800,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     required bool selected,
     required VoidCallback onTap,
     String? trailing,
-    ValueChanged<String>? onAcceptNote,
+    ValueChanged<Set<String>>? onAcceptNotes,
     ValueChanged<Offset>? onSecondaryTap,
   }) {
     final palette = context.palette;
@@ -1838,10 +1845,10 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                 onSecondaryTap(details.globalPosition),
             child: tile,
           );
-    if (onAcceptNote == null) return interactive;
-    return DragTarget<String>(
+    if (onAcceptNotes == null) return interactive;
+    return DragTarget<Set<String>>(
       onWillAcceptWithDetails: (_) => true,
-      onAcceptWithDetails: (details) => onAcceptNote(details.data),
+      onAcceptWithDetails: (details) => onAcceptNotes(details.data),
       builder: (context, candidates, rejected) {
         final active = candidates.isNotEmpty;
         return AnimatedContainer(
@@ -2599,6 +2606,7 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                 );
               }
               final note = _notes[index];
+              final dragIds = _dragNoteIds(note);
               final tile = _NoteListTile(
                 note: note,
                 strings: strings,
@@ -2627,8 +2635,8 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                     color: Theme.of(context).colorScheme.onErrorContainer,
                   ),
                 ),
-                child: LongPressDraggable<String>(
-                  data: note.id,
+                child: LongPressDraggable<Set<String>>(
+                  data: dragIds,
                   delay: const Duration(milliseconds: 320),
                   dragAnchorStrategy: pointerDragAnchorStrategy,
                   feedback: Material(
@@ -2651,7 +2659,11 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
                               const SizedBox(width: 7),
                               Flexible(
                                 child: Text(
-                                  noteDisplayTitle(note, strings),
+                                  dragIds.length > 1
+                                      ? strings.notesSelectedCount(
+                                          dragIds.length,
+                                        )
+                                      : noteDisplayTitle(note, strings),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),

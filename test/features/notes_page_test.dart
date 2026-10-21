@@ -297,6 +297,40 @@ void main() {
     expect(find.text('2 selected'), findsNothing);
   });
 
+  testWidgets('dragging a checked note moves the whole selection', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final collection = await store.createCollection('Project');
+    final first = await store.create(title: 'One');
+    final second = await store.create(title: 'Two');
+    await pumpWorkspace(tester);
+
+    await tester.tap(find.byTooltip('Select notes'));
+    await tester.pump();
+    await tester.tap(find.text('One'));
+    await tester.tap(find.text('Two'));
+    await tester.pump();
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('One')),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await gesture.moveTo(tester.getCenter(find.text('Project')));
+    await tester.pump(const Duration(milliseconds: 200));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    for (final id in [first.id, second.id]) {
+      expect(
+        (await store.noteById(id))!.collections.map((c) => c.id),
+        contains(collection.id),
+      );
+    }
+  });
+
   testWidgets('editor does not remove a collection added elsewhere', (
     tester,
   ) async {
