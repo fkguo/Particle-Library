@@ -88,7 +88,12 @@ void main() {
     final page = controller.layout.pageLayouts.first;
     await tester.pump(const Duration(milliseconds: 400));
 
-    // The reader has one inspector with Contents, Annotations and Notes tabs.
+    // A medium window opens the inspector as an end drawer with the same
+    // Contents / Annotations / Notes tabs.
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('Annotation sidebar').last);
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Annotations'), findsWidgets);
     expect(find.text('Contents'), findsWidgets);
     await tester.tap(find.text('Notes').last);
@@ -96,15 +101,10 @@ void main() {
     expect(find.textContaining('Hybrid page line 10'), findsWidgets);
     await tester.tap(find.text('Annotations').first);
     await tester.pump(const Duration(milliseconds: 300));
-
-    // The inspector collapses to a rail and reopens from it, like the other
-    // sidebars in the app.
+    // The drawer closes from the chevron in its own header.
     await tester.tap(find.byIcon(Icons.keyboard_double_arrow_right).last);
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Annotations'), findsNothing);
-    await tester.tap(find.byIcon(Icons.keyboard_double_arrow_left));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Annotations'), findsWidgets);
 
     // Annotate mode adds one contextual strip and shrinks the page viewport;
     // leaving it restores full-height reading.

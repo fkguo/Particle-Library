@@ -60,6 +60,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   }
 
   final PdfViewerController _controller = PdfViewerController();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   PdfTextSearcher? _searcher;
   UserStore? _userStore;
   int? _currentPage;
@@ -2286,9 +2287,41 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       ..multiply(base);
   }
 
-  /// Compact windows get the inspector as a sheet; medium and expanded
-  /// windows dock it. Rotation cannot change this class.
-  bool _annotationSheetOnly(BuildContext context) => context.isCompactLayout;
+  /// Opens the inspector in the host its width class calls for: a sheet on
+  /// compact, an end drawer on medium, and the docked panel on expanded.
+  void _openInspector({int tab = 0, bool toggle = false}) {
+    switch (context.layoutClass) {
+      case LayoutClass.compact:
+        _openAnnotationsSheet(tab: tab);
+      case LayoutClass.medium:
+        setState(() => _sidebarTab = tab);
+        _scaffoldKey.currentState?.openEndDrawer();
+      case LayoutClass.expanded:
+        setState(() {
+          _sidebarTab = tab;
+          _showAnnotations = toggle ? !_showAnnotations : true;
+        });
+    }
+  }
+
+  Widget _inspectorDrawer(BuildContext context) {
+    final palette = _pdfDarkMode ? AppPalette.dark : context.palette;
+    final width = (MediaQuery.sizeOf(context).width * 0.9).clamp(280.0, 400.0);
+    void close() => _scaffoldKey.currentState?.closeEndDrawer();
+    return Drawer(
+      width: width,
+      backgroundColor: palette.surface,
+      child: SafeArea(
+        child: _inspectorSidebar(
+          context,
+          palette: palette,
+          strings: AppScope.of(context).strings,
+          close: close,
+          onCollapse: close,
+        ),
+      ),
+    );
+  }
 
   void _toggleAnnotateMode() {
     setState(() {
@@ -2317,20 +2350,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       case 'zen':
         setState(() => _zenMode = true);
       case 'outline':
-        if (_annotationSheetOnly(context)) {
-          _openAnnotationsSheet(tab: 1);
-        } else {
-          setState(() {
-            _showAnnotations = true;
-            _sidebarTab = 1;
-          });
-        }
+        _openInspector(tab: 1);
       case 'inspector':
-        if (_annotationSheetOnly(context)) {
-          _openAnnotationsSheet();
-        } else {
-          setState(() => _showAnnotations = !_showAnnotations);
-        }
+        _openInspector(toggle: true);
       case 'official':
         _openExternally();
     }
@@ -2433,6 +2455,79 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     );
   }
 
+  /// The inspector body shared by all three hosts: bottom sheet (compact),
+  /// end drawer (medium) and docked panel (expanded).
+  Widget _inspectorSidebar(
+    BuildContext context, {
+    required AppPalette palette,
+    required AppStrings strings,
+    required VoidCallback close,
+    VoidCallback? refresh,
+    VoidCallback? onCollapse,
+  }) {
+    return _ReviewAnnotationSidebar(
+      annotations: _annotations,
+      notes: _reviewNotes,
+      onOpenNoteRecord: (note) {
+        close();
+        unawaited(_openNoteRecord(note));
+      },
+      palette: palette,
+      strings: strings,
+      onOpen: (annotation) {
+        close();
+        if (_controller.isReady) {
+          unawaited(_controller.goToPage(pageNumber: annotation.pageNumber));
+        }
+      },
+      onOpenNote: (annotation) {
+        close();
+        unawaited(_openAnnotationNote(annotation));
+      },
+      onEditNote: (annotation) {
+        close();
+        unawaited(_editAnnotation(annotation));
+      },
+      onDelete: (annotation) {
+        close();
+        unawaited(_deleteAnnotation(annotation));
+      },
+      selectionMode: _annotationSelectionMode,
+      selectedIds: _selectedAnnotationIds,
+      onToggleSelectionMode: () {
+        _toggleAnnotationSelectionMode();
+        refresh?.call();
+      },
+      onToggleSelection: (id) {
+        _toggleAnnotationSelected(id);
+        refresh?.call();
+      },
+      onAddSelected: () async {
+        await _addSelectedAnnotationsToCollection();
+        refresh?.call();
+      },
+      tabIndex: _sidebarTab,
+      onTabChanged: (index) {
+        setState(() => _sidebarTab = index);
+        refresh?.call();
+      },
+      outline: _outline,
+      outlineLoading: _outlineLoading,
+      onOpenOutline: _openOutline,
+      onRemoveTag: (annotation, tag) {
+        close();
+        unawaited(_removeAnnotationTag(annotation, tag));
+      },
+      onContextMenu: (annotation, position) =>
+          unawaited(_showAnnotationContextMenu(annotation, position)),
+      selectedId: _selectedAnnotationId,
+      onSelect: _selectAnnotation,
+      onShowActions: (annotation) =>
+          unawaited(_showAnnotationActions(annotation)),
+      onCollapse: onCollapse,
+    );
+  }
+
   void _openAnnotationsSheet({int tab = 0}) {
     setState(() => _sidebarTab = tab);
     showModalBottomSheet<void>(
@@ -2446,67 +2541,12 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
             // The sheet is the inspector host on phones; it needs most of the
             // height now that it carries Contents, Annotations and Notes.
             height: MediaQuery.sizeOf(context).height * 0.85,
-            child: _ReviewAnnotationSidebar(
-              annotations: _annotations,
-              notes: _reviewNotes,
-              onOpenNoteRecord: (note) {
-                Navigator.of(sheetContext).pop();
-                unawaited(_openNoteRecord(note));
-              },
+            child: _inspectorSidebar(
+              context,
               palette: _pdfDarkMode ? AppPalette.dark : context.palette,
               strings: AppScope.of(context).strings,
-              onOpen: (annotation) {
-                Navigator.of(context).pop();
-                if (_controller.isReady) {
-                  unawaited(
-                    _controller.goToPage(pageNumber: annotation.pageNumber),
-                  );
-                }
-              },
-              onOpenNote: (annotation) {
-                Navigator.of(sheetContext).pop();
-                unawaited(_openAnnotationNote(annotation));
-              },
-              onEditNote: (annotation) {
-                Navigator.of(sheetContext).pop();
-                unawaited(_editAnnotation(annotation));
-              },
-              onDelete: (annotation) {
-                Navigator.of(sheetContext).pop();
-                unawaited(_deleteAnnotation(annotation));
-              },
-              selectionMode: _annotationSelectionMode,
-              selectedIds: _selectedAnnotationIds,
-              onToggleSelectionMode: () {
-                _toggleAnnotationSelectionMode();
-                setSheetState(() {});
-              },
-              onToggleSelection: (id) {
-                _toggleAnnotationSelected(id);
-                setSheetState(() {});
-              },
-              onAddSelected: () async {
-                await _addSelectedAnnotationsToCollection();
-                if (context.mounted) setSheetState(() {});
-              },
-              tabIndex: _sidebarTab,
-              onTabChanged: (index) {
-                setState(() => _sidebarTab = index);
-                setSheetState(() {});
-              },
-              outline: _outline,
-              outlineLoading: _outlineLoading,
-              onOpenOutline: _openOutline,
-              onRemoveTag: (annotation, tag) {
-                Navigator.of(sheetContext).pop();
-                unawaited(_removeAnnotationTag(annotation, tag));
-              },
-              onContextMenu: (annotation, position) =>
-                  unawaited(_showAnnotationContextMenu(annotation, position)),
-              selectedId: _selectedAnnotationId,
-              onSelect: _selectAnnotation,
-              onShowActions: (annotation) =>
-                  unawaited(_showAnnotationActions(annotation)),
+              close: () => Navigator.of(sheetContext).pop(),
+              refresh: () => setSheetState(() {}),
             ),
           ),
         ),
@@ -2518,11 +2558,16 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   Widget build(BuildContext context) {
     final palette = _pdfDarkMode ? AppPalette.dark : context.palette;
     final strings = AppScope.of(context).strings;
-    final compactLayout = context.isCompactLayout;
+    final layout = context.layoutClass;
+    final expandedLayout = layout == LayoutClass.expanded;
     return Theme(
       data: _pdfDarkMode ? AppTheme.dark() : Theme.of(context),
       child: Scaffold(
+        key: _scaffoldKey,
         backgroundColor: palette.background,
+        endDrawer: layout == LayoutClass.medium
+            ? _inspectorDrawer(context)
+            : null,
         appBar: _zenMode
             ? null
             : AppBar(
@@ -2628,10 +2673,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                       if (!_sidebarInitialized) {
                         _sidebarInitialized = true;
                         if (!_hadReadingState) {
-                          // The inspector is docked for medium and expanded
-                          // windows and a sheet on phones, so rotation never
-                          // changes where it lives.
-                          _showAnnotations = !compactLayout;
+                          // Only expanded windows dock the inspector; medium
+                          // opens it as an end drawer and compact as a sheet.
+                          _showAnnotations = expandedLayout;
                         }
                       }
                       final maxSidebar = (constraints.maxWidth - 260).clamp(
@@ -2672,7 +2716,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                                 ],
                               ),
                             ),
-                            if (!_zenMode && !compactLayout) ...[
+                            if (!_zenMode && expandedLayout) ...[
                               CollapsibleSidebar(
                                 expanded: _showAnnotations,
                                 width: sidebarWidth,
@@ -2699,64 +2743,13 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                                 onReset: () =>
                                     setState(() => _sidebarWidth = 320),
                                 child: RepaintBoundary(
-                                  child: _ReviewAnnotationSidebar(
-                                    annotations: _annotations,
-                                    notes: _reviewNotes,
-                                    onOpenNoteRecord: _openNoteRecord,
+                                  child: _inspectorSidebar(
+                                    context,
                                     palette: palette,
                                     strings: strings,
-                                    onOpen: (annotation) {
-                                      if (!_controller.isReady) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  strings.reviewPdfLoading,
-                                                ),
-                                              ),
-                                            );
-                                        return;
-                                      }
-                                      unawaited(
-                                        _controller.goToPage(
-                                          pageNumber: annotation.pageNumber,
-                                        ),
-                                      );
-                                    },
-                                    onOpenNote: _openAnnotationNote,
-                                    onEditNote: _editAnnotation,
-                                    onDelete: _deleteAnnotation,
-                                    selectionMode: _annotationSelectionMode,
-                                    selectedIds: _selectedAnnotationIds,
-                                    onToggleSelectionMode:
-                                        _toggleAnnotationSelectionMode,
-                                    onToggleSelection:
-                                        _toggleAnnotationSelected,
-                                    onAddSelected:
-                                        _addSelectedAnnotationsToCollection,
-                                    tabIndex: _sidebarTab,
-                                    onTabChanged: (index) =>
-                                        setState(() => _sidebarTab = index),
-                                    outline: _outline,
-                                    outlineLoading: _outlineLoading,
-                                    onOpenOutline: _openOutline,
+                                    close: () {},
                                     onCollapse: () => setState(
                                       () => _showAnnotations = false,
-                                    ),
-                                    onRemoveTag: (annotation, tag) => unawaited(
-                                      _removeAnnotationTag(annotation, tag),
-                                    ),
-                                    onContextMenu: (annotation, position) =>
-                                        unawaited(
-                                          _showAnnotationContextMenu(
-                                            annotation,
-                                            position,
-                                          ),
-                                        ),
-                                    selectedId: _selectedAnnotationId,
-                                    onSelect: _selectAnnotation,
-                                    onShowActions: (annotation) => unawaited(
-                                      _showAnnotationActions(annotation),
                                     ),
                                   ),
                                 ),
