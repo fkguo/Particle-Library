@@ -1124,6 +1124,26 @@ class AppStrings {
     'blue' => _t('蓝色', 'Blue'),
     _ => _t('黄色', 'Yellow'),
   };
+  String get reviewFullScreen => _t('全屏阅读', 'Full-screen reading');
+  String get reviewExitFullScreen => _t('退出全屏', 'Exit full screen');
+  String get reviewRegionSelect => _t('框选区域', 'Select region');
+  String get reviewRegionSelectHint => _t(
+    '拖拽框选图片、公式或任意区域；Esc 取消。',
+    'Drag to select an image, formula, or any region; press Esc to cancel.',
+  );
+  String get reviewAnnotationRegion => _t('区域选择', 'Region selection');
+  String get reviewAnnotationsTab => _t('批注', 'Annotations');
+  String get reviewOutlineTab => _t('目录', 'Contents');
+  String get reviewOutlineEmpty =>
+      _t('此 PDF 没有目录。', 'This PDF has no outline.');
+  String get reviewOutlineLoading => _t('正在读取目录…', 'Loading outline…');
+  String get reviewOutlineOpen => _t('跳转到此目录项', 'Go to this outline item');
+  String get reviewPdfDarkMode => _t('PDF 深色模式', 'PDF dark mode');
+  String get reviewPdfLightMode => _t('PDF 浅色模式', 'PDF light mode');
+  String get notesAnchorsMarkdownHint => _t(
+    '正文中的链接只用于跳转；Evidence 读取上方 anchors，不会因 Markdown 链接改变而自动更新。',
+    'Links in the body are navigation only. Evidence reads the anchors above; editing a Markdown link does not update them.',
+  );
   String get reviewAnnotationSidebar => _t('批注侧栏', 'Annotation sidebar');
   String get reviewAnnotationNote => _t('批注备注', 'Annotation note');
   String get reviewAnnotationNoteHint => _t('可选，写一句提醒…', 'Optional note…');

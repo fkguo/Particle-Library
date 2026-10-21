@@ -1392,6 +1392,14 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                           ),
                       ],
                     ),
+                    const SizedBox(height: 3),
+                    Text(
+                      strings.notesAnchorsMarkdownHint,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: palette.textSecondary,
+                        fontSize: 10.5,
+                      ),
+                    ),
                   ],
                   if (tags.isNotEmpty) ...[
                     const SizedBox(height: Insets.s),

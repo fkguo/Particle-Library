@@ -14,6 +14,7 @@ import '../../data/review_annotation_notes.dart';
 import '../../data/review_annotations.dart';
 import '../../notes/notes_store.dart';
 import '../../notes/notes_models.dart';
+import '../common/resize_handle.dart';
 import '../common/snack_bars.dart';
 import '../notes/note_editor.dart';
 
@@ -45,6 +46,13 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   bool _addingHighlight = false;
   bool _highlightMode = false;
   bool _annotationSelectionMode = false;
+  bool _zenMode = false;
+  bool _pdfDarkMode = false;
+  bool _regionMode = false;
+  bool _outlineLoading = false;
+  int _sidebarTab = 0;
+  double _sidebarWidth = 320;
+  List<PdfOutlineNode> _outline = const <PdfOutlineNode>[];
   final Set<String> _selectedAnnotationIds = <String>{};
   String? _lastCollectionId;
   Timer? _autoHighlightTimer;
@@ -691,6 +699,75 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     _ => const Color(0xFFFFC107),
   };
 
+  Future<void> _loadOutline(PdfDocument document) async {
+    if (!mounted) return;
+    setState(() => _outlineLoading = true);
+    try {
+      final outline = await document.loadOutline();
+      if (!mounted) return;
+      setState(() {
+        _outline = outline;
+        _outlineLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _outline = const <PdfOutlineNode>[];
+        _outlineLoading = false;
+      });
+    }
+  }
+
+  void _openOutline(PdfOutlineNode node) {
+    if (!_controller.isReady || node.dest == null) return;
+    unawaited(_controller.goToDest(node.dest));
+  }
+
+  Future<void> _createRegionAnnotation(int pageNumber, Rect rect) async {
+    if (rect.width < 0.004 || rect.height < 0.004) return;
+    await _ready;
+    if (!mounted) return;
+    final notes = _notes;
+    if (notes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppScope.of(context).strings.notesUnavailable)),
+      );
+      return;
+    }
+    if (_addingHighlight) return;
+    setState(() => _addingHighlight = true);
+    try {
+      final created = await ReviewAnnotationNotes.create(
+        notes,
+        fileName: _fileName,
+        pageNumber: pageNumber,
+        rects: <Rect>[rect],
+        text: '',
+        color: _highlightColor,
+        reviewTitle: widget.title,
+      );
+      if (!mounted) return;
+      setState(() {
+        _annotations = [created, ..._annotations];
+        _regionMode = false;
+      });
+      _notifyNotesChanged();
+      _offerAddToCollection([created]);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${AppScope.of(context).strings.notesSaveFailed}: ${errorText(error, AppScope.of(context).strings)}',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _addingHighlight = false);
+    }
+  }
+
   void _paintAnnotations(Canvas canvas, Rect pageRect, PdfPage page) {
     for (final annotation in _annotations) {
       if (annotation.pageNumber != page.pageNumber) continue;
@@ -792,6 +869,18 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         );
       }
     }
+    if (_regionMode) {
+      widgets.add(
+        Positioned.fill(
+          child: _PdfRegionSelector(
+            pageNumber: page.pageNumber,
+            color: _annotationColor(_highlightColor),
+            onSelected: (rect) =>
+                unawaited(_createRegionAnnotation(page.pageNumber, rect)),
+          ),
+        ),
+      );
+    }
     return widgets;
   }
 
@@ -807,7 +896,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
             ListTile(
               title: Text(
                 annotation.text.trim().isEmpty
-                    ? strings.reviewAnnotationEmpty
+                    ? strings.reviewAnnotationRegion
                     : annotation.text,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -832,14 +921,15 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                 unawaited(_editNote(annotation));
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.open_with_outlined),
-              title: Text(strings.reviewAdjustRange),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                unawaited(_beginAdjustRange(annotation));
-              },
-            ),
+            if (annotation.text.trim().isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.open_with_outlined),
+                title: Text(strings.reviewAdjustRange),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(_beginAdjustRange(annotation));
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.delete_outline),
               title: Text(strings.commonDelete),
@@ -886,7 +976,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     }
   }
 
-  void _openAnnotationsSheet() {
+  void _openAnnotationsSheet({int tab = 0}) {
+    setState(() => _sidebarTab = tab);
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -923,6 +1014,14 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
               await _addSelectedAnnotationsToCollection();
               if (context.mounted) setSheetState(() {});
             },
+            tabIndex: _sidebarTab,
+            onTabChanged: (index) {
+              setState(() => _sidebarTab = index);
+              setSheetState(() {});
+            },
+            outline: _outline,
+            outlineLoading: _outlineLoading,
+            onOpenOutline: _openOutline,
           ),
         ),
       ),
@@ -936,236 +1035,388 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     final narrow = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       backgroundColor: palette.background,
-      appBar: AppBar(
-        toolbarHeight: narrow ? 48 : null,
-        titleSpacing: narrow ? 0 : null,
-        title: Text(
-          widget.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textScaler: MediaQuery.textScalerOf(context)
-              .clamp(maxScaleFactor: 1.3),
-        ),
-        actions: [
-          if (_editingRange != null) ...[
-            IconButton(
-              tooltip: strings.reviewSaveRange,
-              onPressed: _saving ? null : _saveAdjustedRange,
-              icon: const Icon(Icons.check),
-            ),
-            IconButton(
-              tooltip: strings.commonCancel,
-              onPressed: () {
-                _autoHighlightTimer?.cancel();
-                setState(() => _editingRange = null);
-                unawaited(
-                  _controller.textSelectionDelegate.clearTextSelection(),
-                );
-              },
-              icon: const Icon(Icons.close),
-            ),
-          ],
-          IconButton(
-            tooltip: _highlightMode
-                ? strings.reviewHighlightModeOn
-                : strings.reviewHighlight,
-            onPressed: _saving || _addingHighlight
-                ? null
-                : _toggleHighlightMode,
-            icon: _highlightGlyph(
-              _highlightMode ? Icons.border_color : Icons.highlight_alt,
-            ),
-          ),
-          if (!narrow) ...[
-            PopupMenuButton<String>(
-              tooltip: strings.reviewHighlightColor,
-              icon: _highlightGlyph(Icons.palette_outlined),
-              onSelected: (color) => setState(() => _highlightColor = color),
-              itemBuilder: (context) => [
-                for (final color in const ['yellow', 'green', 'pink', 'blue'])
-                  PopupMenuItem(
-                    value: color,
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: _annotationColor(color),
-                            borderRadius: BorderRadius.circular(3),
+      appBar: _zenMode
+          ? null
+          : AppBar(
+              toolbarHeight: narrow ? 48 : null,
+              titleSpacing: narrow ? 0 : null,
+              title: Text(
+                widget.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textScaler: MediaQuery.textScalerOf(context)
+                    .clamp(maxScaleFactor: 1.3),
+              ),
+              actions: [
+                IconButton(
+                  tooltip: _pdfDarkMode
+                      ? strings.reviewPdfLightMode
+                      : strings.reviewPdfDarkMode,
+                  onPressed: () => setState(() => _pdfDarkMode = !_pdfDarkMode),
+                  icon: Icon(
+                    _pdfDarkMode
+                        ? Icons.light_mode_outlined
+                        : Icons.dark_mode_outlined,
+                    size: 19,
+                  ),
+                ),
+                IconButton(
+                  tooltip: strings.reviewFullScreen,
+                  onPressed: () => setState(() => _zenMode = true),
+                  icon: const Icon(Icons.fullscreen, size: 20),
+                ),
+                IconButton(
+                  tooltip: strings.reviewOutlineTab,
+                  onPressed: () {
+                    if (narrow) {
+                      _openAnnotationsSheet(tab: 1);
+                    } else {
+                      setState(() {
+                        _showAnnotations = true;
+                        _sidebarTab = 1;
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.list_alt, size: 19),
+                ),
+                IconButton(
+                  tooltip: _regionMode
+                      ? strings.commonCancel
+                      : strings.reviewRegionSelect,
+                  onPressed: () {
+                    setState(() {
+                      _regionMode = !_regionMode;
+                      if (_regionMode) _highlightMode = false;
+                    });
+                  },
+                  icon: Icon(
+                    _regionMode ? Icons.close : Icons.crop_free,
+                    size: 19,
+                    color: _regionMode
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
+                ),
+                if (_editingRange != null) ...[
+                  IconButton(
+                    tooltip: strings.reviewSaveRange,
+                    onPressed: _saving ? null : _saveAdjustedRange,
+                    icon: const Icon(Icons.check),
+                  ),
+                  IconButton(
+                    tooltip: strings.commonCancel,
+                    onPressed: () {
+                      _autoHighlightTimer?.cancel();
+                      setState(() => _editingRange = null);
+                      unawaited(
+                        _controller.textSelectionDelegate.clearTextSelection(),
+                      );
+                    },
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+                IconButton(
+                  tooltip: _highlightMode
+                      ? strings.reviewHighlightModeOn
+                      : strings.reviewHighlight,
+                  onPressed: _saving || _addingHighlight
+                      ? null
+                      : _toggleHighlightMode,
+                  icon: _highlightGlyph(
+                    _highlightMode ? Icons.border_color : Icons.highlight_alt,
+                  ),
+                ),
+                if (!narrow) ...[
+                  PopupMenuButton<String>(
+                    tooltip: strings.reviewHighlightColor,
+                    icon: _highlightGlyph(Icons.palette_outlined),
+                    onSelected: (color) =>
+                        setState(() => _highlightColor = color),
+                    itemBuilder: (context) => [
+                      for (final color in const [
+                        'yellow',
+                        'green',
+                        'pink',
+                        'blue',
+                      ])
+                        PopupMenuItem(
+                          value: color,
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: _annotationColor(color),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(strings.reviewHighlightColorName(color)),
+                              if (color == _highlightColor) ...[
+                                const Spacer(),
+                                const Icon(Icons.check, size: 16),
+                              ],
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Text(strings.reviewHighlightColorName(color)),
-                        if (color == _highlightColor) ...[
-                          const Spacer(),
-                          const Icon(Icons.check, size: 16),
-                        ],
-                      ],
+                    ],
+                  ),
+                  IconButton(
+                    tooltip: strings.reviewAnnotationSidebar,
+                    onPressed: () {
+                      final size = MediaQuery.sizeOf(context);
+                      if (size.width < 700 || size.height < 500) {
+                        _openAnnotationsSheet();
+                      } else {
+                        setState(() => _showAnnotations = !_showAnnotations);
+                      }
+                    },
+                    icon: Badge.count(
+                      count: _annotations.length,
+                      isLabelVisible: _annotations.isNotEmpty,
+                      child: Icon(
+                        _showAnnotations
+                            ? Icons.view_sidebar
+                            : Icons.view_sidebar_outlined,
+                        size: 19,
+                      ),
                     ),
+                  ),
+                  IconButton(
+                    tooltip: strings.reviewOpenOfficial,
+                    icon: const Icon(Icons.open_in_new, size: 19),
+                    onPressed: _openExternally,
+                  ),
+                ] else
+                  PopupMenuButton<String>(
+                    tooltip: strings.commonMoreOptions,
+                    icon: const Icon(Icons.more_horiz, size: 20),
+                    onSelected: (value) {
+                      if (value.startsWith('color:')) {
+                        setState(() => _highlightColor = value.substring(6));
+                      } else if (value == 'sidebar') {
+                        _openAnnotationsSheet();
+                      } else if (value == 'official') {
+                        _openExternally();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      for (final color in const [
+                        'yellow',
+                        'green',
+                        'pink',
+                        'blue',
+                      ])
+                        PopupMenuItem(
+                          value: 'color:$color',
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: _annotationColor(color),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(strings.reviewHighlightColorName(color)),
+                              if (color == _highlightColor) ...[
+                                const Spacer(),
+                                const Icon(Icons.check, size: 16),
+                              ],
+                            ],
+                          ),
+                        ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'sidebar',
+                        child: Text(strings.reviewAnnotationSidebar),
+                      ),
+                      PopupMenuItem(
+                        value: 'official',
+                        child: Text(strings.reviewOpenOfficial),
+                      ),
+                    ],
                   ),
               ],
             ),
-            IconButton(
-              tooltip: strings.reviewAnnotationSidebar,
-              onPressed: () {
-                final size = MediaQuery.sizeOf(context);
-                if (size.width < 700 || size.height < 500) {
-                  _openAnnotationsSheet();
-                } else {
-                  setState(() => _showAnnotations = !_showAnnotations);
-                }
-              },
-              icon: Badge.count(
-                count: _annotations.length,
-                isLabelVisible: _annotations.isNotEmpty,
-                child: Icon(
-                  _showAnnotations
-                      ? Icons.view_sidebar
-                      : Icons.view_sidebar_outlined,
-                  size: 19,
+      body: Stack(
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (!_sidebarInitialized) {
+                _sidebarInitialized = true;
+                // A phone in landscape is wide but short; opening the 320 px
+                // sidebar there leaves too little room for the page. Tablets and
+                // desktops still get the inline sidebar.
+                _showAnnotations =
+                    constraints.maxWidth >= 700 && constraints.maxHeight >= 500;
+              }
+              final maxSidebar = (constraints.maxWidth - 260).clamp(
+                220.0,
+                560.0,
+              );
+              final sidebarWidth = _sidebarWidth.clamp(220.0, maxSidebar);
+              return SafeArea(
+                top: false,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: _pdfSurface()),
+                    if (_showAnnotations && !_zenMode) ...[
+                      CollapsibleSidePanel(
+                        width: sidebarWidth,
+                        handleOnLeft: true,
+                        tooltip: strings.reviewAnnotationSidebar,
+                        onDrag: (delta) => setState(() {
+                          _sidebarWidth = (_sidebarWidth - delta).clamp(
+                            220.0,
+                            maxSidebar,
+                          );
+                        }),
+                        onReset: () => setState(() => _sidebarWidth = 320),
+                        child: _ReviewAnnotationSidebar(
+                          annotations: _annotations,
+                          palette: palette,
+                          strings: strings,
+                          onOpen: (annotation) {
+                            if (!_controller.isReady) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(strings.reviewPdfLoading),
+                                ),
+                              );
+                              return;
+                            }
+                            unawaited(
+                              _controller.goToPage(
+                                pageNumber: annotation.pageNumber,
+                              ),
+                            );
+                          },
+                          onOpenNote: _openAnnotationNote,
+                          onEditNote: _editNote,
+                          onDelete: _deleteAnnotation,
+                          selectionMode: _annotationSelectionMode,
+                          selectedIds: _selectedAnnotationIds,
+                          onToggleSelectionMode: _toggleAnnotationSelectionMode,
+                          onToggleSelection: _toggleAnnotationSelected,
+                          onAddSelected: _addSelectedAnnotationsToCollection,
+                          tabIndex: _sidebarTab,
+                          onTabChanged: (index) =>
+                              setState(() => _sidebarTab = index),
+                          outline: _outline,
+                          outlineLoading: _outlineLoading,
+                          onOpenOutline: _openOutline,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            },
+          ),
+          if (_zenMode)
+            Positioned(
+              top: 10,
+              right: 10,
+              child: Material(
+                color: palette.surface.withValues(alpha: 0.94),
+                elevation: 3,
+                borderRadius: BorderRadius.circular(22),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: strings.commonBack,
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.arrow_back, size: 19),
+                    ),
+                    IconButton(
+                      tooltip: _pdfDarkMode
+                          ? strings.reviewPdfLightMode
+                          : strings.reviewPdfDarkMode,
+                      onPressed: () =>
+                          setState(() => _pdfDarkMode = !_pdfDarkMode),
+                      icon: Icon(
+                        _pdfDarkMode
+                            ? Icons.light_mode_outlined
+                            : Icons.dark_mode_outlined,
+                        size: 19,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: strings.reviewExitFullScreen,
+                      onPressed: () => setState(() => _zenMode = false),
+                      icon: const Icon(Icons.fullscreen_exit, size: 20),
+                    ),
+                  ],
                 ),
               ),
             ),
-            IconButton(
-              tooltip: strings.reviewOpenOfficial,
-              icon: const Icon(Icons.open_in_new, size: 19),
-              onPressed: _openExternally,
-            ),
-          ] else
-            PopupMenuButton<String>(
-              tooltip: strings.commonMoreOptions,
-              icon: const Icon(Icons.more_horiz, size: 20),
-              onSelected: (value) {
-                if (value.startsWith('color:')) {
-                  setState(() => _highlightColor = value.substring(6));
-                } else if (value == 'sidebar') {
-                  _openAnnotationsSheet();
-                } else if (value == 'official') {
-                  _openExternally();
-                }
-              },
-              itemBuilder: (context) => [
-                for (final color in const ['yellow', 'green', 'pink', 'blue'])
-                  PopupMenuItem(
-                    value: 'color:$color',
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: _annotationColor(color),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(strings.reviewHighlightColorName(color)),
-                        if (color == _highlightColor) ...[
-                          const Spacer(),
-                          const Icon(Icons.check, size: 16),
-                        ],
-                      ],
-                    ),
-                  ),
-                const PopupMenuDivider(),
-                PopupMenuItem(
-                  value: 'sidebar',
-                  child: Text(strings.reviewAnnotationSidebar),
-                ),
-                PopupMenuItem(
-                  value: 'official',
-                  child: Text(strings.reviewOpenOfficial),
-                ),
-              ],
-            ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          if (!_sidebarInitialized) {
-            _sidebarInitialized = true;
-            // A phone in landscape is wide but short; opening the 320 px
-            // sidebar there leaves too little room for the page. Tablets and
-            // desktops still get the inline sidebar.
-            _showAnnotations =
-                constraints.maxWidth >= 700 && constraints.maxHeight >= 500;
+    );
+  }
+
+  Widget _pdfSurface() {
+    Widget viewer = PdfViewer.file(
+      widget.path,
+      key: ValueKey<String>('pdf-${widget.path}-$_pdfEpoch'),
+      controller: _controller,
+      params: PdfViewerParams(
+        onViewerReady: (document, controller) {
+          _pdfRetryTimer?.cancel();
+          _pdfReady = true;
+          unawaited(_loadOutline(document));
+          if (widget.initialPage > 1) {
+            unawaited(controller.goToPage(pageNumber: widget.initialPage));
           }
-          final sidebarWidth = constraints.maxWidth >= 720
-              ? 320.0
-              : (constraints.maxWidth * 0.45).clamp(160.0, 320.0);
-          return SafeArea(
-            top: false,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: PdfViewer.file(
-                    widget.path,
-                    key: ValueKey<String>('pdf-${widget.path}-$_pdfEpoch'),
-                    controller: _controller,
-                    params: PdfViewerParams(
-                      onViewerReady: (document, controller) {
-                        _pdfRetryTimer?.cancel();
-                        _pdfReady = true;
-                        if (widget.initialPage > 1) {
-                          unawaited(
-                            controller.goToPage(pageNumber: widget.initialPage),
-                          );
-                        }
-                      },
-                      pagePaintCallbacks: [_paintAnnotations],
-                      pageOverlaysBuilder: _annotationOverlays,
-                      textSelectionParams: PdfTextSelectionParams(
-                        enabled: true,
-                        buildSelectionHandle: _buildSelectionHandle,
-                        onTextSelectionChange: _onTextSelectionChanged,
-                        enableSelectionHandles: true,
-                        onSelectionHandlePanStart: (_) =>
-                            _autoHighlightTimer?.cancel(),
-                      ),
-                      customizeContextMenuItems: _customizePdfContextMenu,
-                    ),
-                  ),
-                ),
-                if (_showAnnotations) ...[
-                  VerticalDivider(width: 1, color: palette.divider),
-                  SizedBox(
-                    width: sidebarWidth,
-                    child: _ReviewAnnotationSidebar(
-                      annotations: _annotations,
-                      palette: palette,
-                      strings: strings,
-                      onOpen: (annotation) {
-                        if (!_controller.isReady) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(strings.reviewPdfLoading)),
-                          );
-                          return;
-                        }
-                        unawaited(
-                          _controller.goToPage(
-                            pageNumber: annotation.pageNumber,
-                          ),
-                        );
-                      },
-                      onOpenNote: _openAnnotationNote,
-                      onEditNote: _editNote,
-                      onDelete: _deleteAnnotation,
-                      selectionMode: _annotationSelectionMode,
-                      selectedIds: _selectedAnnotationIds,
-                      onToggleSelectionMode: _toggleAnnotationSelectionMode,
-                      onToggleSelection: _toggleAnnotationSelected,
-                      onAddSelected: _addSelectedAnnotationsToCollection,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          );
         },
+        pagePaintCallbacks: [_paintAnnotations],
+        pageOverlaysBuilder: _annotationOverlays,
+        textSelectionParams: PdfTextSelectionParams(
+          enabled: !_regionMode,
+          buildSelectionHandle: _buildSelectionHandle,
+          onTextSelectionChange: _onTextSelectionChanged,
+          enableSelectionHandles: true,
+          onSelectionHandlePanStart: (_) => _autoHighlightTimer?.cancel(),
+        ),
+        customizeContextMenuItems: _customizePdfContextMenu,
       ),
     );
+    if (_pdfDarkMode) {
+      viewer = ColorFiltered(
+        colorFilter: const ColorFilter.matrix(<double>[
+          -1,
+          0,
+          0,
+          0,
+          255,
+          0,
+          -1,
+          0,
+          0,
+          255,
+          0,
+          0,
+          -1,
+          0,
+          255,
+          0,
+          0,
+          0,
+          1,
+          0,
+        ]),
+        child: viewer,
+      );
+    }
+    // The app-level SelectionArea must not own drag gestures inside the PDF;
+    // pdfrx implements its own text selection.
+    return SelectionContainer.disabled(child: viewer);
   }
 }
 
@@ -1183,6 +1434,11 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
     required this.onToggleSelectionMode,
     required this.onToggleSelection,
     required this.onAddSelected,
+    required this.tabIndex,
+    required this.onTabChanged,
+    required this.outline,
+    required this.outlineLoading,
+    required this.onOpenOutline,
   });
 
   final List<ReviewAnnotation> annotations;
@@ -1197,6 +1453,88 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
   final VoidCallback onToggleSelectionMode;
   final ValueChanged<String> onToggleSelection;
   final VoidCallback onAddSelected;
+  final int tabIndex;
+  final ValueChanged<int> onTabChanged;
+  final List<PdfOutlineNode> outline;
+  final bool outlineLoading;
+  final ValueChanged<PdfOutlineNode> onOpenOutline;
+
+  Widget _outlineList(BuildContext context) {
+    if (outlineLoading) {
+      return Center(
+        child: Text(
+          strings.reviewOutlineLoading,
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: palette.textSecondary),
+        ),
+      );
+    }
+    if (outline.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Text(
+            strings.reviewOutlineEmpty,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: palette.textSecondary),
+          ),
+        ),
+      );
+    }
+    final rows = <({PdfOutlineNode node, int depth})>[];
+    void walk(List<PdfOutlineNode> nodes, int depth) {
+      for (final node in nodes) {
+        rows.add((node: node, depth: depth));
+        walk(node.children, depth + 1);
+      }
+    }
+
+    walk(outline, 0);
+    return ListView.builder(
+      padding: const EdgeInsets.all(8),
+      itemCount: rows.length,
+      itemBuilder: (context, index) {
+        final row = rows[index];
+        final enabled = row.node.dest != null;
+        return InkWell(
+          onTap: enabled ? () => onOpenOutline(row.node) : null,
+          borderRadius: BorderRadius.circular(7),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(8.0 + row.depth * 14, 8, 8, 8),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.chevron_right,
+                  size: 15,
+                  color: enabled ? palette.textSecondary : palette.divider,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    row.node.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: enabled
+                          ? palette.textPrimary
+                          : palette.textSecondary,
+                    ),
+                  ),
+                ),
+                if (row.node.dest != null)
+                  Text(
+                    '${row.node.dest!.pageNumber}',
+                    style: Theme.of(context).textTheme.labelSmall
+                        ?.copyWith(color: palette.textSecondary),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1242,7 +1580,46 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
               ],
             ),
           ),
-          if (selectionMode)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => onTabChanged(0),
+                    child: Text(
+                      strings.reviewAnnotationsTab,
+                      style: TextStyle(
+                        fontWeight: tabIndex == 0
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: tabIndex == 0
+                            ? palette.textPrimary
+                            : palette.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => onTabChanged(1),
+                    child: Text(
+                      strings.reviewOutlineTab,
+                      style: TextStyle(
+                        fontWeight: tabIndex == 1
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: tabIndex == 1
+                            ? palette.textPrimary
+                            : palette.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (selectionMode && tabIndex == 0)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 12, 8),
               child: Row(
@@ -1263,7 +1640,9 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
             ),
           Divider(height: 1, color: palette.divider),
           Expanded(
-            child: ordered.isEmpty
+            child: tabIndex == 1
+                ? _outlineList(context)
+                : ordered.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(20),
@@ -1374,7 +1753,9 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                annotation.text,
+                                annotation.text.trim().isEmpty
+                                    ? strings.reviewAnnotationRegion
+                                    : annotation.text,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.bodySmall,
@@ -1445,4 +1826,103 @@ class _SelectionHandlePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _SelectionHandlePainter oldDelegate) =>
       oldDelegate.color != color || oldDelegate.state != state;
+}
+
+/// Drag-to-select overlay used for image/formula/region annotations.
+class _PdfRegionSelector extends StatefulWidget {
+  const _PdfRegionSelector({
+    required this.pageNumber,
+    required this.color,
+    required this.onSelected,
+  });
+
+  final int pageNumber;
+  final Color color;
+  final ValueChanged<Rect> onSelected;
+
+  @override
+  State<_PdfRegionSelector> createState() => _PdfRegionSelectorState();
+}
+
+class _PdfRegionSelectorState extends State<_PdfRegionSelector> {
+  Offset? _start;
+  Offset? _current;
+
+  Offset _clamp(Offset point, Size size) =>
+      Offset(point.dx.clamp(0.0, size.width), point.dy.clamp(0.0, size.height));
+
+  Rect? _draft(Size size) {
+    final start = _start;
+    final current = _current;
+    if (start == null || current == null) return null;
+    final rect = Rect.fromPoints(start, current);
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    return rect;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.biggest;
+        final draft = _draft(size);
+        return MouseRegion(
+          cursor: SystemMouseCursors.precise,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onPanStart: (details) {
+              final point = _clamp(details.localPosition, size);
+              setState(() {
+                _start = point;
+                _current = point;
+              });
+            },
+            onPanUpdate: (details) {
+              setState(() {
+                _current = _clamp(details.localPosition, size);
+              });
+            },
+            onPanEnd: (_) {
+              final start = _start;
+              final current = _current;
+              setState(() {
+                _start = null;
+                _current = null;
+              });
+              if (start == null || current == null) return;
+              final rect = Rect.fromPoints(start, current);
+              if (rect.width < 4 || rect.height < 4) return;
+              widget.onSelected(
+                Rect.fromLTRB(
+                  rect.left / size.width,
+                  rect.top / size.height,
+                  rect.right / size.width,
+                  rect.bottom / size.height,
+                ),
+              );
+            },
+            child: Stack(
+              children: [
+                const Positioned.fill(
+                  child: ColoredBox(color: Colors.transparent),
+                ),
+                if (draft != null)
+                  Positioned.fromRect(
+                    rect: draft,
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: widget.color.withValues(alpha: 0.18),
+                          border: Border.all(color: widget.color, width: 1.3),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
