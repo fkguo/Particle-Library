@@ -214,3 +214,50 @@ class ReviewAnnotationStore {
     }
   }
 }
+
+/// Merges per-fragment text-selection rectangles into contiguous spans for
+/// display. The stored fragment rectangles are still kept for exact range
+/// adjustment.
+List<Rect> mergeRectsForDisplay(List<Rect> rects) {
+  if (rects.length <= 1) return rects;
+  final ordered = [...rects]
+    ..sort((a, b) {
+      final top = a.top.compareTo(b.top);
+      return top != 0 ? top : a.left.compareTo(b.left);
+    });
+  final rows = <List<Rect>>[];
+  for (final rect in ordered) {
+    var placed = false;
+    for (final row in rows) {
+      final reference = row.first;
+      final overlap =
+          (rect.bottom < reference.bottom ? rect.bottom : reference.bottom) -
+          (rect.top > reference.top ? rect.top : reference.top);
+      final minHeight = rect.height < reference.height
+          ? rect.height
+          : reference.height;
+      if (overlap >= minHeight * 0.5) {
+        row.add(rect);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) rows.add(<Rect>[rect]);
+  }
+  final merged = <Rect>[];
+  for (final row in rows) {
+    row.sort((a, b) => a.left.compareTo(b.left));
+    var current = row.first;
+    for (final rect in row.skip(1)) {
+      final gap = rect.left - current.right;
+      if (gap <= 0.02) {
+        current = current.expandToInclude(rect);
+      } else {
+        merged.add(current);
+        current = rect;
+      }
+    }
+    merged.add(current);
+  }
+  return merged;
+}

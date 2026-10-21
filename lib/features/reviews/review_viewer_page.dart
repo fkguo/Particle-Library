@@ -1105,6 +1105,76 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     }
   }
 
+  bool _onPdfGeneralTap(
+    BuildContext context,
+    PdfViewerController controller,
+    PdfViewerGeneralTapHandlerDetails details,
+  ) {
+    if (details.type != PdfViewerGeneralTapType.secondaryTap ||
+        !_controller.isReady ||
+        !_controller.textSelectionDelegate.hasSelectedText) {
+      return false;
+    }
+    final renderBox = context.findRenderObject();
+    if (renderBox is! RenderBox) return false;
+    final global = renderBox.localToGlobal(details.localPosition);
+    unawaited(_showTextSelectionMenu(global));
+    return true;
+  }
+
+  Future<void> _showTextSelectionMenu(Offset globalPosition) async {
+    final overlay = Overlay.of(context).context.findRenderObject();
+    if (overlay is! RenderBox) return;
+    final strings = AppScope.of(context).strings;
+    final action = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        globalPosition & Size.zero,
+        Offset.zero & overlay.size,
+      ),
+      popUpAnimationStyle: AnimationStyle.noAnimation,
+      items: [
+        PopupMenuItem(
+          value: 'copy',
+          child: Row(
+            children: [
+              const Icon(Icons.copy, size: 17),
+              const SizedBox(width: 8),
+              Text(strings.commonCopy),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'highlight',
+          child: Row(
+            children: [
+              const Icon(Icons.highlight_alt, size: 17),
+              const SizedBox(width: 8),
+              Text(strings.reviewHighlight),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (!mounted || action == null) return;
+    if (action == 'highlight') {
+      await _highlightSelection();
+      return;
+    }
+    try {
+      final text = await _controller.textSelectionDelegate.getSelectedText();
+      if (text.trim().isEmpty) return;
+      await Clipboard.setData(ClipboardData(text: text));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(strings.commonCopied)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(strings.commonCopyFailed)));
+    }
+  }
+
   void _customizePdfContextMenu(
     PdfViewerContextMenuBuilderParams params,
     List<ContextMenuButtonItem> items,
@@ -1279,7 +1349,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       if (annotation.pageNumber != page.pageNumber) continue;
       final paint = Paint()
         ..color = _annotationColor(annotation.color).withValues(alpha: 0.38);
-      for (final rect in annotation.rects) {
+      for (final rect in mergeRectsForDisplay(annotation.rects)) {
         final target = Rect.fromLTWH(
           pageRect.left + rect.left * pageRect.width,
           pageRect.top + rect.top * pageRect.height,
@@ -1389,6 +1459,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
             child: PdfOverlayInteractionRegion(
               onTap: (_) {
                 _selectAnnotation(annotation);
+                unawaited(_beginAdjustRange(annotation));
                 return true;
               },
               onDoubleTap: (_) {
@@ -2703,6 +2774,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           onSelectionHandlePanStart: (_) => _autoHighlightTimer?.cancel(),
         ),
         customizeContextMenuItems: _customizePdfContextMenu,
+        onGeneralTap: _onPdfGeneralTap,
         onPageChanged: (page) {
           if (!mounted || page == null) return;
           setState(() => _currentPage = page);
@@ -3797,7 +3869,7 @@ class _PdfAnnotationScreenPainter extends CustomPainter {
         continue;
       }
       final page = controller.layout.pageLayouts[index];
-      for (final rect in annotation.rects) {
+      for (final rect in mergeRectsForDisplay(annotation.rects)) {
         final documentRect = Rect.fromLTWH(
           page.left + rect.left * page.width,
           page.top + rect.top * page.height,

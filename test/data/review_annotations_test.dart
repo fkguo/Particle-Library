@@ -49,6 +49,19 @@ void main() {
     expect(rect.height, greaterThan(0));
   });
 
+  test('word fragments merge into line spans for display', () {
+    final merged = mergeRectsForDisplay(const [
+      Rect.fromLTRB(0.1, 0.1, 0.2, 0.15),
+      Rect.fromLTRB(0.205, 0.1, 0.3, 0.15),
+      Rect.fromLTRB(0.1, 0.2, 0.2, 0.25),
+    ]);
+    expect(merged, hasLength(2));
+    expect(merged.first.left, 0.1);
+    expect(merged.first.right, 0.3);
+    expect(merged.first.top, 0.1);
+    expect(merged.last.top, 0.2);
+  });
+
   test('review annotations round-trip normalized rectangles', () async {
     final dir = await Directory.systemTemp.createTemp('review-annotations-');
     final store = ReviewAnnotationStore(File('${dir.path}/annotations.json'));
