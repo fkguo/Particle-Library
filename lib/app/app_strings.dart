@@ -189,6 +189,8 @@ class AppStrings {
   String get commonShowLess => _t('收起', 'Show less');
   String get commonViewAll => _t('查看全部', 'View all');
   String get commonOpen => _t('打开', 'Open');
+  String get commonUndo => _t('撤销', 'Undo');
+  String get commonRedo => _t('重做', 'Redo');
   String get commonGo => _t('跳转', 'Go');
   String get commonDetails => _t('详情', 'Details');
   String get commonCount => _t('数量', 'Count');
@@ -1132,6 +1134,15 @@ class AppStrings {
   String get reviewFullScreen => _t('全屏阅读', 'Full-screen reading');
   String get reviewExitFullScreen => _t('退出全屏', 'Exit full screen');
   String get reviewRegionSelect => _t('框选区域', 'Select region');
+  String get reviewRegionImageStale => _t(
+    '截图待刷新：当前图片对应旧区域。',
+    'Screenshot needs refresh: the image still matches the old region.',
+  );
+  String get reviewRegionRetryImage => _t('重新生成截图', 'Refresh screenshot');
+  String get reviewRegionRetrySucceeded =>
+      _t('区域截图已刷新', 'Region screenshot refreshed');
+  String get reviewRegionRetryFailed =>
+      _t('区域截图刷新失败', 'Could not refresh region screenshot');
   String get reviewRegionImageRefreshFailed => _t(
     '区域已移动，但截图刷新失败；当前仍显示旧截图。',
     'Region moved, but the screenshot could not be refreshed; the old image is still shown.',
@@ -1176,6 +1187,12 @@ class AppStrings {
   String get reviewFitWidth => _t('适宽', 'Fit width');
   String get reviewFitPage => _t('整页', 'Fit page');
   String get reviewSaveImage => _t('保存区域图片', 'Save region image');
+  String get reviewExportRegionMarkdown =>
+      _t('导出区域 Markdown + 图片', 'Export region Markdown + image');
+  String get reviewCopyImage => _t('复制区域图片', 'Copy region image');
+  String get reviewImageCopied => _t('区域图片已复制', 'Region image copied');
+  String get reviewImageCopyFailed =>
+      _t('区域图片复制失败', 'Could not copy region image');
   String get reviewImageSaved => _t('区域图片已保存', 'Region image saved');
   String get reviewImageSaveFailed =>
       _t('区域图片保存失败', 'Could not save region image');

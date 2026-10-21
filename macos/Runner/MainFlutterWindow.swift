@@ -76,6 +76,24 @@ class MainFlutterWindow: NSWindow {
       result(nil)
     }
 
+    let clipboardChannel = FlutterMethodChannel(
+      name: "pdg.clipboard",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    clipboardChannel.setMethodCallHandler { call, result in
+      guard call.method == "copyImage",
+            let args = call.arguments as? [String: Any],
+            let path = args["path"] as? String,
+            let image = NSImage(contentsOfFile: path) else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let pasteboard = NSPasteboard.general
+      pasteboard.clearContents()
+      let wrote = pasteboard.writeObjects([image])
+      result(wrote)
+    }
+
     // The zotero-inspire target picker is drawn inside Zotero's main window.
     // Bring Zotero forward before asking it to open the picker, then come back
     // to this window once the picker closes.

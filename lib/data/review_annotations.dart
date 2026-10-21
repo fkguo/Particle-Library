@@ -21,6 +21,7 @@ class ReviewAnnotation {
     required this.createdAt,
     this.noteId,
     this.imagePath,
+    this.imageStale = false,
     this.tags = const <String>[],
   });
 
@@ -39,6 +40,9 @@ class ReviewAnnotation {
   /// Rendered PNG for a region annotation, when available.
   final String? imagePath;
 
+  /// True when the region geometry changed but the PNG could not be refreshed.
+  final bool imageStale;
+
   /// Tags mirrored from the owning note.
   final List<String> tags;
 
@@ -54,6 +58,7 @@ class ReviewAnnotation {
     'color': color,
     'createdAt': createdAt.toUtc().toIso8601String(),
     if (imagePath != null) 'imagePath': imagePath,
+    if (imageStale) 'imageStale': true,
     'tags': tags,
   };
 
@@ -100,6 +105,7 @@ class ReviewAnnotation {
       createdAt: createdAt.toLocal(),
       noteId: data['noteId']?.toString(),
       imagePath: data['imagePath']?.toString(),
+      imageStale: data['imageStale'] == true,
       tags: [
         for (final tag in (data['tags'] as List? ?? const <Object?>[]))
           if (tag?.toString().trim().isNotEmpty ?? false) tag.toString().trim(),

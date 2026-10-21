@@ -151,6 +151,7 @@ void main() {
       reviewTitle: 'Review',
       tags: const ['important'],
       imagePath: '/tmp/region.png',
+      imageStale: true,
     );
     final updated = await ReviewAnnotationNotes.updateRange(
       notes,
@@ -161,6 +162,7 @@ void main() {
     expect(updated, isNotNull);
     expect(updated!.tags, ['important']);
     expect(updated.imagePath, '/tmp/region.png');
+    expect(updated.imageStale, isTrue);
     final loaded = await ReviewAnnotationNotes.load(
       notes,
       'review.pdf',
@@ -171,6 +173,7 @@ void main() {
     expect(loaded.single.color, 'blue');
     expect(loaded.single.tags, ['important']);
     expect(loaded.single.imagePath, '/tmp/region.png');
+    expect(loaded.single.imageStale, isTrue);
   });
 
   test('comment and range edits keep the human review title in body', () async {

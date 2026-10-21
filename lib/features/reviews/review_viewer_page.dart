@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -25,6 +26,8 @@ import '../common/snack_bars.dart';
 import '../notes/note_editor.dart';
 import '../notes/note_tag_field.dart';
 import '../notes/notes_format.dart';
+
+const MethodChannel _clipboardChannel = MethodChannel('pdg.clipboard');
 
 class ReviewViewerPage extends StatefulWidget implements ImmersivePage {
   const ReviewViewerPage({
@@ -71,6 +74,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   List<PdfOutlineNode> _outline = const <PdfOutlineNode>[];
   final Set<String> _selectedAnnotationIds = <String>{};
   final Map<String, int> _regionVersions = <String, int>{};
+  final List<_AnnotationHistoryEntry> _undoStack = <_AnnotationHistoryEntry>[];
+  final List<_AnnotationHistoryEntry> _redoStack = <_AnnotationHistoryEntry>[];
+  bool _applyingHistory = false;
   String? _lastCollectionId;
   Timer? _autoHighlightTimer;
   String _highlightColor = 'yellow';
@@ -424,6 +430,24 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         setState(() => _annotations = [...additions, ..._annotations]);
         _notifyNotesChanged();
         _offerAddToCollection(additions);
+        final noteIds = [
+          for (final annotation in additions)
+            if (annotation.noteId != null) annotation.noteId!,
+        ];
+        if (noteIds.isNotEmpty) {
+          _pushHistory(
+            () async {
+              for (final noteId in noteIds) {
+                await _deleteAnnotationForHistory(noteId);
+              }
+            },
+            () async {
+              for (final noteId in noteIds) {
+                await _restoreAnnotationForHistory(noteId);
+              }
+            },
+          );
+        }
       }
       if (failure != null && additions.length < selected.length) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -463,15 +487,102 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       final page = _controller.pages[annotation.pageNumber - 1];
       final pageText = await page.loadStructuredText();
       final quote = annotation.text.trim();
-      var start = quote.isEmpty ? -1 : pageText.fullText.indexOf(quote);
-      if (start < 0 && quote.isNotEmpty) {
-        start = pageText.fullText
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .indexOf(quote.replaceAll(RegExp(r'\s+'), ' '));
+      var start = -1;
+      var end = -1;
+      final text = pageText.fullText;
+      if (quote.isNotEmpty) {
+        double distanceAt(int index) {
+          if (index < 0 || index >= pageText.charRects.length) {
+            return double.infinity;
+          }
+          final rect = normalizePdfSelectionRect(
+            pageText.charRects[index],
+            page,
+          );
+          var best = double.infinity;
+          for (final saved in annotation.rects) {
+            final dx = rect.center.dx - saved.center.dx;
+            final dy = rect.center.dy - saved.center.dy;
+            final distance = dx * dx + dy * dy;
+            if (distance < best) best = distance;
+          }
+          return best;
+        }
+
+        int? closest(List<int> candidates) {
+          if (candidates.isEmpty) return null;
+          var best = candidates.first;
+          var bestDistance = distanceAt(best);
+          for (final candidate in candidates.skip(1)) {
+            final distance = distanceAt(candidate);
+            if (distance < bestDistance) {
+              bestDistance = distance;
+              best = candidate;
+            }
+          }
+          return best;
+        }
+
+        final exact = <int>[];
+        for (
+          var at = text.indexOf(quote);
+          at >= 0;
+          at = text.indexOf(quote, at + 1)
+        ) {
+          exact.add(at);
+        }
+        final exactStart = closest(exact);
+        if (exactStart != null) {
+          start = exactStart;
+          end = (start + quote.length - 1).clamp(0, text.length - 1);
+        } else {
+          // Build a normalized string and an index map back to the original
+          // text, so whitespace-collapsed matches keep the right offsets.
+          final normalized = StringBuffer();
+          final map = <int>[];
+          var lastSpace = false;
+          for (var i = 0; i < text.length; i++) {
+            final ch = text[i];
+            if (RegExp(r'\s').hasMatch(ch)) {
+              if (!lastSpace) {
+                normalized.write(' ');
+                map.add(i);
+                lastSpace = true;
+              }
+            } else {
+              normalized.write(ch);
+              map.add(i);
+              lastSpace = false;
+            }
+          }
+          final normalizedText = normalized.toString();
+          final normalizedQuote = quote.replaceAll(RegExp(r'\s+'), ' ');
+          final candidates = <int>[];
+          for (
+            var at = normalizedText.indexOf(normalizedQuote);
+            at >= 0;
+            at = normalizedText.indexOf(normalizedQuote, at + 1)
+          ) {
+            candidates.add(at);
+          }
+          final normalizedStart = closest([
+            for (final at in candidates) map[at],
+          ]);
+          if (normalizedStart != null) {
+            start = normalizedStart;
+            final normalizedPosition = candidates.firstWhere(
+              (at) => map[at] == normalizedStart,
+              orElse: () => 0,
+            );
+            final lastNormalized =
+                (normalizedPosition + normalizedQuote.length - 1).clamp(
+                  0,
+                  map.length - 1,
+                );
+            end = map[lastNormalized];
+          }
+        }
       }
-      var end = start < 0
-          ? -1
-          : (start + quote.length - 1).clamp(0, pageText.fullText.length - 1);
       if (start < 0 || pageText.charRects.isEmpty) {
         // Stored quotes can differ from extracted PDF text after line-break
         // normalization. Use the stored rectangles' first/last characters.
@@ -584,6 +695,22 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           _editingRange = null;
         });
         _notifyNotesChanged();
+        _pushHistory(
+          () => _updateRangeForHistory(
+            annotation.id,
+            annotation.rects,
+            annotation.text,
+            annotation.imagePath,
+            annotation.imageStale,
+          ),
+          () => _updateRangeForHistory(
+            updated.id,
+            updated.rects,
+            updated.text,
+            updated.imagePath,
+            updated.imageStale,
+          ),
+        );
       }
     } catch (error) {
       if (mounted) {
@@ -627,8 +754,16 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         tags: annotation.tags.where((item) => item != tag).toList(),
       );
       if (!mounted) return;
+      final oldTags = annotation.tags;
+      final newTags = annotation.tags
+          .where((item) => item != tag)
+          .toList(growable: false);
       await _loadAnnotations(notes);
       _notifyNotesChanged();
+      _pushHistory(
+        () => _updateDetailsForHistory(annotation.id, annotation.note, oldTags),
+        () => _updateDetailsForHistory(annotation.id, annotation.note, newTags),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -775,6 +910,16 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       if (!mounted) return;
       await _loadAnnotations(notes);
       _notifyNotesChanged();
+      final oldComment = annotation.note;
+      final oldTags = annotation.tags;
+      _pushHistory(
+        () => _updateDetailsForHistory(annotation.id, oldComment, oldTags),
+        () => _updateDetailsForHistory(
+          annotation.id,
+          result.comment,
+          result.tags,
+        ),
+      );
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -812,6 +957,69 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         SnackBar(
           content: Text(
             '${strings.reviewImageSaveFailed}: ${errorText(error, strings)}',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _exportRegionMarkdown(ReviewAnnotation annotation) async {
+    final source = annotation.imagePath;
+    if (source == null || annotation.imageStale) return;
+    final strings = AppScope.of(context).strings;
+    try {
+      final location = await getSaveLocation(
+        suggestedName: 'annotation-${annotation.id}.md',
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'Markdown', extensions: ['md']),
+        ],
+      );
+      if (location == null) return;
+      final mdPath = location.path.toLowerCase().endsWith('.md')
+          ? location.path
+          : '${location.path}.md';
+      final imagePath = mdPath.replaceFirst(RegExp(r'\.md$'), '.png');
+      await File(source).copy(imagePath);
+      final comment = annotation.note.trim();
+      final body = StringBuffer(
+        '![Region](${imagePath.split(RegExp(r'[\\/]')).last})\n',
+      );
+      if (comment.isNotEmpty) {
+        body
+          ..writeln()
+          ..writeln(comment);
+      }
+      await File(mdPath).writeAsString(body.toString(), flush: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(strings.reviewImageSaved)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${strings.reviewImageSaveFailed}: ${errorText(error, strings)}',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _copyRegionImage(ReviewAnnotation annotation) async {
+    final path = annotation.imagePath;
+    if (path == null || annotation.imageStale) return;
+    final strings = AppScope.of(context).strings;
+    try {
+      await _clipboardChannel.invokeMethod<bool>('copyImage', {'path': path});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(strings.reviewImageCopied)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${strings.reviewImageCopyFailed}: ${errorText(error, strings)}',
           ),
         ),
       );
@@ -856,6 +1064,13 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         ];
       });
       _notifyNotesChanged();
+      final noteId = annotation.noteId;
+      if (noteId != null) {
+        _pushHistory(
+          () => _restoreAnnotationForHistory(noteId),
+          () => _deleteAnnotationForHistory(noteId),
+        );
+      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -998,6 +1213,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     if (_addingHighlight) return;
     setState(() => _addingHighlight = true);
     try {
+      final imagePath = await _renderRegionImage(pageNumber, rect);
       final created = await ReviewAnnotationNotes.create(
         notes,
         fileName: _fileName,
@@ -1006,7 +1222,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         text: '',
         color: _highlightColor,
         reviewTitle: widget.title,
-        imagePath: await _renderRegionImage(pageNumber, rect),
+        imagePath: imagePath,
+        imageStale: imagePath == null,
       );
       if (!mounted) return;
       setState(() {
@@ -1015,6 +1232,13 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       });
       _notifyNotesChanged();
       _offerAddToCollection([created]);
+      final noteId = created.noteId;
+      if (noteId != null) {
+        _pushHistory(
+          () => _deleteAnnotationForHistory(noteId),
+          () => _restoreAnnotationForHistory(noteId),
+        );
+      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1179,6 +1403,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       createdAt: annotation.createdAt,
       noteId: annotation.noteId,
       imagePath: annotation.imagePath,
+      imageStale: annotation.imageStale,
       tags: annotation.tags,
     );
   }
@@ -1190,6 +1415,51 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           annotation.id == id ? _withRect(annotation, rect) : annotation,
       ];
     });
+  }
+
+  Future<void> _refreshRegionImage(ReviewAnnotation annotation) async {
+    final notes = _notes;
+    if (notes == null) return;
+    final rect = annotation.rects.first;
+    final strings = AppScope.of(context).strings;
+    final imagePath = await _renderRegionImage(annotation.pageNumber, rect);
+    if (!mounted) return;
+    if (imagePath == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(strings.reviewRegionRetryFailed)));
+      return;
+    }
+    try {
+      final updated = await ReviewAnnotationNotes.updateRange(
+        notes,
+        annotation,
+        rects: <Rect>[rect],
+        text: '',
+        imagePath: imagePath,
+        imageStale: false,
+      );
+      if (!mounted || updated == null) return;
+      setState(() {
+        _annotations = [
+          for (final item in _annotations)
+            if (item.id == updated.id) updated else item,
+        ];
+      });
+      _notifyNotesChanged();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(strings.reviewRegionRetrySucceeded)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${strings.reviewRegionRetryFailed}: ${errorText(error, strings)}',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _persistRegion(String id, Rect rect) async {
@@ -1209,6 +1479,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         rects: <Rect>[rect],
         text: '',
         imagePath: imagePath,
+        imageStale: imagePath == null,
       );
       if (!mounted || _regionVersions[id] != version) return;
       if (updated == null) return;
@@ -1228,6 +1499,22 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         ];
       });
       _notifyNotesChanged();
+      _pushHistory(
+        () => _updateRangeForHistory(
+          id,
+          annotation.rects,
+          annotation.text,
+          annotation.imagePath,
+          annotation.imageStale,
+        ),
+        () => _updateRangeForHistory(
+          id,
+          updated.rects,
+          updated.text,
+          updated.imagePath,
+          updated.imageStale,
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       await _loadAnnotations(notes);
@@ -1240,6 +1527,123 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         ),
       );
     }
+  }
+
+  void _pushHistory(
+    Future<void> Function() undo,
+    Future<void> Function() redo,
+  ) {
+    if (_applyingHistory) return;
+    _undoStack.add(_AnnotationHistoryEntry(undo: undo, redo: redo));
+    if (_undoStack.length > 50) _undoStack.removeAt(0);
+    _redoStack.clear();
+    setState(() {});
+  }
+
+  Future<void> _reloadAfterHistory() async {
+    final notes = _notes;
+    if (notes != null) await _loadAnnotations(notes);
+    if (mounted) _notifyNotesChanged();
+  }
+
+  Future<void> _undo() async {
+    if (_undoStack.isEmpty) return;
+    final entry = _undoStack.removeLast();
+    setState(() => _applyingHistory = true);
+    try {
+      await entry.undo();
+      _redoStack.add(entry);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${AppScope.of(context).strings.commonUndo}: ${errorText(error, AppScope.of(context).strings)}',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _applyingHistory = false);
+    }
+  }
+
+  Future<void> _redo() async {
+    if (_redoStack.isEmpty) return;
+    final entry = _redoStack.removeLast();
+    setState(() => _applyingHistory = true);
+    try {
+      await entry.redo();
+      _undoStack.add(entry);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${AppScope.of(context).strings.commonRedo}: ${errorText(error, AppScope.of(context).strings)}',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _applyingHistory = false);
+    }
+  }
+
+  Future<void> _restoreAnnotationForHistory(String? noteId) async {
+    final notes = _notes;
+    if (notes == null || noteId == null) return;
+    await notes.restore(noteId);
+    await _reloadAfterHistory();
+  }
+
+  Future<void> _deleteAnnotationForHistory(String? noteId) async {
+    final notes = _notes;
+    if (notes == null || noteId == null) return;
+    await notes.delete(noteId);
+    await _reloadAfterHistory();
+  }
+
+  Future<void> _updateDetailsForHistory(
+    String annotationId,
+    String comment,
+    List<String> tags,
+  ) async {
+    final notes = _notes;
+    if (notes == null) return;
+    final current = _annotations.firstWhere(
+      (annotation) => annotation.id == annotationId,
+    );
+    await ReviewAnnotationNotes.updateComment(
+      notes,
+      current,
+      comment,
+      tags: tags,
+    );
+    await _reloadAfterHistory();
+  }
+
+  Future<void> _updateRangeForHistory(
+    String annotationId,
+    List<Rect> rects,
+    String text,
+    String? imagePath,
+    bool imageStale,
+  ) async {
+    final notes = _notes;
+    if (notes == null) return;
+    final current = _annotations.firstWhere(
+      (annotation) => annotation.id == annotationId,
+    );
+    await ReviewAnnotationNotes.updateRange(
+      notes,
+      current,
+      rects: rects,
+      text: text,
+      imagePath: imagePath,
+      imageStale: imageStale,
+    );
+    await _reloadAfterHistory();
   }
 
   Future<void> _showAnnotationActions(ReviewAnnotation annotation) async {
@@ -1278,13 +1682,43 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                     ),
                   ),
                 ),
-              if (annotation.imagePath != null)
+              if (annotation.imageStale)
+                ListTile(
+                  leading: const Icon(Icons.refresh, color: Colors.orange),
+                  title: Text(strings.reviewRegionRetryImage),
+                  subtitle: Text(strings.reviewRegionImageStale),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    unawaited(_refreshRegionImage(annotation));
+                  },
+                ),
+              if (annotation.imagePath != null && !annotation.imageStale)
                 ListTile(
                   leading: const Icon(Icons.save_alt_outlined),
                   title: Text(strings.reviewSaveImage),
                   onTap: () {
                     Navigator.of(sheetContext).pop();
                     unawaited(_saveRegionImage(annotation));
+                  },
+                ),
+              if (defaultTargetPlatform == TargetPlatform.macOS &&
+                  annotation.imagePath != null &&
+                  !annotation.imageStale)
+                ListTile(
+                  leading: const Icon(Icons.copy_all_outlined),
+                  title: Text(strings.reviewCopyImage),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    unawaited(_copyRegionImage(annotation));
+                  },
+                ),
+              if (annotation.imagePath != null && !annotation.imageStale)
+                ListTile(
+                  leading: const Icon(Icons.description_outlined),
+                  title: Text(strings.reviewExportRegionMarkdown),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    unawaited(_exportRegionMarkdown(annotation));
                   },
                 ),
               ListTile(
@@ -1597,6 +2031,20 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                       .clamp(maxScaleFactor: 1.3),
                 ),
                 actions: [
+                  IconButton(
+                    tooltip: strings.commonUndo,
+                    onPressed: _undoStack.isEmpty
+                        ? null
+                        : () => unawaited(_undo()),
+                    icon: const Icon(Icons.undo, size: 19),
+                  ),
+                  IconButton(
+                    tooltip: strings.commonRedo,
+                    onPressed: _redoStack.isEmpty
+                        ? null
+                        : () => unawaited(_redo()),
+                    icon: const Icon(Icons.redo, size: 19),
+                  ),
                   IconButton(
                     tooltip: strings.reviewSearch,
                     onPressed: _toggleSearch,
@@ -2655,6 +3103,14 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
                                   ),
                                 ),
                               ],
+                              if (annotation.imageStale) ...[
+                                const SizedBox(height: 3),
+                                Text(
+                                  strings.reviewRegionImageStale,
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(color: Colors.orange),
+                                ),
+                              ],
                               const SizedBox(height: 3),
                               Text(
                                 annotation.note.trim().isEmpty
@@ -3073,4 +3529,11 @@ class _FilterMenuLabel extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AnnotationHistoryEntry {
+  const _AnnotationHistoryEntry({required this.undo, required this.redo});
+
+  final Future<void> Function() undo;
+  final Future<void> Function() redo;
 }

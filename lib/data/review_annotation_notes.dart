@@ -66,6 +66,7 @@ class ReviewAnnotationNotes {
         uuid: uuid,
         createdAt: record.createdAt,
         imagePath: record.imagePath,
+        imageStale: record.imageStale,
         tags: record.tags,
       );
     }
@@ -114,6 +115,7 @@ class ReviewAnnotationNotes {
     required String reviewTitle,
     String comment = '',
     String? imagePath,
+    bool imageStale = false,
     Iterable<String> tags = const <String>[],
   }) => _createNote(
     notes,
@@ -125,6 +127,7 @@ class ReviewAnnotationNotes {
     color: color,
     reviewTitle: reviewTitle,
     imagePath: imagePath,
+    imageStale: imageStale,
     tags: tags,
   );
 
@@ -202,6 +205,7 @@ class ReviewAnnotationNotes {
     required List<Rect> rects,
     required String text,
     String? imagePath,
+    bool? imageStale,
   }) async {
     final noteId = annotation.noteId;
     if (noteId == null) return null;
@@ -249,6 +253,8 @@ class ReviewAnnotationNotes {
                   ],
                   'quote': text,
                   'imagePath': ?imagePath,
+                  if (imageStale != null)
+                    'imageStale': imageStale ? true : null,
                 }
               : anchor.context,
         ),
@@ -281,6 +287,7 @@ class ReviewAnnotationNotes {
       createdAt: annotation.createdAt,
       noteId: annotation.noteId,
       imagePath: imagePath ?? annotation.imagePath,
+      imageStale: imageStale ?? annotation.imageStale,
       tags: note.tagNames,
     );
   }
@@ -305,6 +312,7 @@ class ReviewAnnotationNotes {
     String? uuid,
     DateTime? createdAt,
     String? imagePath,
+    bool imageStale = false,
     Iterable<String> tags = const <String>[],
   }) async {
     final id = _newAnnotationId(pageNumber);
@@ -332,6 +340,7 @@ class ReviewAnnotationNotes {
       'quote': text,
       'comment': comment,
       'imagePath': ?imagePath,
+      if (imageStale) 'imageStale': true,
     };
     final note = await notes.create(
       title: title,
@@ -358,6 +367,7 @@ class ReviewAnnotationNotes {
       createdAt: note.createdAt,
       noteId: note.id,
       imagePath: imagePath,
+      imageStale: imageStale,
       tags: note.tagNames,
     );
   }
@@ -401,6 +411,7 @@ class ReviewAnnotationNotes {
       createdAt: note.createdAt,
       noteId: note.id,
       imagePath: context['imagePath']?.toString(),
+      imageStale: context['imageStale'] == true,
       tags: note.tagNames,
     );
   }

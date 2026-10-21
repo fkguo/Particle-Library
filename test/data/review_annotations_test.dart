@@ -62,6 +62,7 @@ void main() {
       color: 'yellow',
       createdAt: DateTime(2026, 10, 18, 12),
       imagePath: '/tmp/region.png',
+      imageStale: true,
     );
     await store.save([annotation]);
     final loaded = await store.load();
@@ -70,6 +71,7 @@ void main() {
     expect(loaded.single.rects.single.left, closeTo(0.1, 1e-9));
     expect(loaded.single.note, 'remember this');
     expect(loaded.single.imagePath, '/tmp/region.png');
+    expect(loaded.single.imageStale, isTrue);
     await dir.delete(recursive: true);
   });
 }
