@@ -1110,10 +1110,12 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     PdfViewerController controller,
     PdfViewerGeneralTapHandlerDetails details,
   ) {
-    if (details.type != PdfViewerGeneralTapType.secondaryTap ||
-        !_controller.isReady ||
-        !_controller.textSelectionDelegate.hasSelectedText) {
+    if (details.type != PdfViewerGeneralTapType.secondaryTap) {
       return false;
+    }
+    if (!_controller.isReady ||
+        !_controller.textSelectionDelegate.hasSelectedText) {
+      return true; // Never fall through to the built-in Copy/Select All menu.
     }
     final renderBox = context.findRenderObject();
     if (renderBox is! RenderBox) return false;
@@ -1357,7 +1359,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           rect.height * pageRect.height,
         );
         canvas.drawRect(target, paint);
-        if (annotation.id == _selectedAnnotationId) {
+        if (annotation.id == _selectedAnnotationId &&
+            annotation.text.trim().isEmpty) {
           canvas.drawRect(
             target,
             Paint()
@@ -2772,6 +2775,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
               defaultTargetPlatform == TargetPlatform.android ||
               _editingRange != null,
           onSelectionHandlePanStart: (_) => _autoHighlightTimer?.cancel(),
+          onSelectionHandlePanEnd: (_) {
+            if (_editingRange != null) unawaited(_saveAdjustedRange());
+          },
         ),
         customizeContextMenuItems: _customizePdfContextMenu,
         onGeneralTap: _onPdfGeneralTap,
@@ -3888,7 +3894,7 @@ class _PdfAnnotationScreenPainter extends CustomPainter {
         if (local.isEmpty) continue;
         final color = colorOf(annotation.color);
         canvas.drawRect(local, Paint()..color = color.withValues(alpha: 0.34));
-        if (annotation.id == selectedId) {
+        if (annotation.id == selectedId && annotation.text.trim().isEmpty) {
           canvas.drawRect(
             local,
             Paint()
