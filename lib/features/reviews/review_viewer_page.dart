@@ -736,6 +736,13 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   }
 
   void _selectAnnotation(ReviewAnnotation annotation) {
+    if (_editingRange != null && _editingRange!.id != annotation.id) {
+      _autoHighlightTimer?.cancel();
+      setState(() => _editingRange = null);
+      if (_controller.isReady) {
+        unawaited(_controller.textSelectionDelegate.clearTextSelection());
+      }
+    }
     setState(() => _selectedAnnotationId = annotation.id);
     if (_controller.isReady &&
         (_currentPage ?? _controller.pageNumber) != annotation.pageNumber) {
@@ -1111,11 +1118,21 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     PdfViewerController controller,
     PdfViewerGeneralTapHandlerDetails details,
   ) {
+    if (details.type == PdfViewerGeneralTapType.tap) {
+      if (_editingRange != null) {
+        setState(() => _editingRange = null);
+        unawaited(_controller.textSelectionDelegate.clearTextSelection());
+      }
+      return false;
+    }
     if (details.type != PdfViewerGeneralTapType.secondaryTap) {
       return false;
     }
-    if (!_controller.isReady ||
-        !_controller.textSelectionDelegate.hasSelectedText) {
+    if (!_controller.isReady) return true;
+    final selected =
+        _controller.textSelectionDelegate.hasSelectedText ||
+        details.tapOn == PdfViewerPart.selectedText;
+    if (!selected) {
       return true; // Never fall through to the built-in Copy/Select All menu.
     }
     final renderBox = context.findRenderObject();
@@ -2390,20 +2407,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                           : null,
                     ),
                   ),
-                  if (_editingRange != null) ...[
-                    IconButton(
-                      tooltip: strings.commonClose,
-                      onPressed: () {
-                        _autoHighlightTimer?.cancel();
-                        setState(() => _editingRange = null);
-                        unawaited(
-                          _controller.textSelectionDelegate
-                              .clearTextSelection(),
-                        );
-                      },
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
                   IconButton(
                     tooltip: _highlightMode
                         ? strings.reviewHighlightModeOn
