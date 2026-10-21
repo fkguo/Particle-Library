@@ -279,7 +279,20 @@ void main() {
     expect(find.byType(TextField), findsWidgets);
     expect(tester.takeException(), isNull);
 
-    // Reopening the document restores the fit and zoom chosen earlier.
+    // Close the annotation editor, scroll the page and reopen: the reading
+    // position is restored together with the fit and zoom.
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pump(const Duration(milliseconds: 500));
+    final viewerRect = tester.getRect(find.byType(PdfViewer));
+    await tester.dragFrom(
+      viewerRect.bottomCenter - const Offset(0, 40),
+      const Offset(0, -220),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    final savedScrollTop = controller.visibleRect.top;
+    expect(savedScrollTop, greaterThan(0));
+
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
@@ -323,6 +336,7 @@ void main() {
       reopened.value.getMaxScaleOnAxis(),
       closeTo(chosenScale, chosenScale * 0.03),
     );
+    expect(reopened.visibleRect.top, closeTo(savedScrollTop, 60));
   });
 }
 

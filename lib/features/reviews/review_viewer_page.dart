@@ -83,6 +83,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   /// 'auto' | 'width' | 'page'; remembered per document.
   String _fitMode = 'auto';
   double? _restoredZoom;
+  Offset? _restoredScroll;
   bool _mobileTextSelection = false;
   bool _regionMode = false;
   bool _searchOpen = false;
@@ -160,6 +161,14 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       }
       final zoom = state['zoom'];
       if (zoom is num && zoom > 0) _restoredZoom = zoom.toDouble();
+      final scroll = state['scroll'];
+      if (scroll is List && scroll.length == 2) {
+        final x = scroll[0];
+        final y = scroll[1];
+        if (x is num && y is num) {
+          _restoredScroll = Offset(x.toDouble(), y.toDouble());
+        }
+      }
     }
     _ready = _loadAnnotations(scope.notes).then((_) {
       _reviewLog(
@@ -2259,6 +2268,18 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     _applyFit(page);
     final zoom = _restoredZoom;
     if (zoom != null) _applyZoom(zoom);
+    final scroll = _restoredScroll;
+    if (scroll != null) _restoreScroll(scroll);
+  }
+
+  /// Puts a saved document point back at the viewport origin, which restores
+  /// the reading position without depending on pdfrx internals.
+  void _restoreScroll(Offset documentPoint) {
+    if (!_controller.isReady) return;
+    final global = _controller.documentToGlobal(documentPoint);
+    if (global == null) return;
+    _controller.value = Matrix4.translationValues(-global.dx, -global.dy, 0)
+      ..multiply(_controller.value);
   }
 
   /// Applies [mode] and remembers it for this document.
@@ -2892,6 +2913,11 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         'fit': _fitMode,
         if (_controller.isReady && _controller.value.getMaxScaleOnAxis() > 0)
           'zoom': _controller.value.getMaxScaleOnAxis(),
+        if (_controller.isReady)
+          'scroll': [
+            _controller.visibleRect.left,
+            _controller.visibleRect.top,
+          ],
       }),
     );
   }
