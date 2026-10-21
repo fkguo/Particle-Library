@@ -74,6 +74,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   double _sidebarWidth = 320;
   List<PdfOutlineNode> _outline = const <PdfOutlineNode>[];
   final Set<String> _selectedAnnotationIds = <String>{};
+  String? _selectedAnnotationId;
   final Map<String, int> _regionVersions = <String, int>{};
   final List<_AnnotationHistoryEntry> _undoStack = <_AnnotationHistoryEntry>[];
   final List<_AnnotationHistoryEntry> _redoStack = <_AnnotationHistoryEntry>[];
@@ -151,6 +152,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           _annotations = annotations;
           final visible = {for (final annotation in annotations) annotation.id};
           _selectedAnnotationIds.removeWhere((id) => !visible.contains(id));
+          if (_selectedAnnotationId != null &&
+              !visible.contains(_selectedAnnotationId)) {
+            _selectedAnnotationId = null;
+          }
         });
         return;
       }
@@ -729,6 +734,14 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     }
   }
 
+  void _selectAnnotation(ReviewAnnotation annotation) {
+    setState(() => _selectedAnnotationId = annotation.id);
+    if (_controller.isReady &&
+        (_currentPage ?? _controller.pageNumber) != annotation.pageNumber) {
+      unawaited(_controller.goToPage(pageNumber: annotation.pageNumber));
+    }
+  }
+
   Future<void> _openAnnotationNote(ReviewAnnotation annotation) async {
     await _ready;
     if (!mounted) return;
@@ -1067,6 +1080,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         ];
       });
       _notifyNotesChanged();
+      if (_selectedAnnotationId == annotation.id) {
+        _selectedAnnotationId = null;
+      }
       final noteId = annotation.noteId;
       if (noteId != null) {
         _pushHistory(
@@ -1264,15 +1280,22 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       final paint = Paint()
         ..color = _annotationColor(annotation.color).withValues(alpha: 0.38);
       for (final rect in annotation.rects) {
-        canvas.drawRect(
-          Rect.fromLTWH(
-            pageRect.left + rect.left * pageRect.width,
-            pageRect.top + rect.top * pageRect.height,
-            rect.width * pageRect.width,
-            rect.height * pageRect.height,
-          ),
-          paint,
+        final target = Rect.fromLTWH(
+          pageRect.left + rect.left * pageRect.width,
+          pageRect.top + rect.top * pageRect.height,
+          rect.width * pageRect.width,
+          rect.height * pageRect.height,
         );
+        canvas.drawRect(target, paint);
+        if (annotation.id == _selectedAnnotationId) {
+          canvas.drawRect(
+            target,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2.2
+              ..color = _annotationColor(annotation.color),
+          );
+        }
       }
     }
   }
@@ -1341,7 +1364,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
               color: _annotationColor(annotation.color),
               onChanged: (next) => _updateRegionAnnotation(annotation.id, next),
               onEnd: (next) => unawaited(_persistRegion(annotation.id, next)),
-              onTap: () => unawaited(_showAnnotationActions(annotation)),
+              selected: _selectedAnnotationId == annotation.id,
+              onTap: () => _selectAnnotation(annotation),
+              onDoubleTap: () => unawaited(_editAnnotation(annotation)),
+              onLongPress: () => unawaited(_showAnnotationActions(annotation)),
               onContextMenu: (position) =>
                   unawaited(_showAnnotationContextMenu(annotation, position)),
             ),
@@ -1362,9 +1388,11 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
             height: height < 28 ? 28 : height,
             child: PdfOverlayInteractionRegion(
               onTap: (_) {
-                // Zotero-style direct selection: tapping a highlight selects
-                // its text and exposes the two range handles immediately.
-                unawaited(_beginAdjustRange(annotation));
+                _selectAnnotation(annotation);
+                return true;
+              },
+              onDoubleTap: (_) {
+                unawaited(_editAnnotation(annotation));
                 return true;
               },
               onSecondaryTap: (details) {
@@ -1666,6 +1694,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     ReviewAnnotation annotation,
     Offset globalPosition,
   ) async {
+    setState(() => _selectedAnnotationId = annotation.id);
     // pdfrx also owns a text-selection context menu. Clear its selection
     // before opening the annotation menu so the user does not get two menus.
     if (_controller.isReady) {
@@ -1693,6 +1722,17 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
             ],
           ),
         ),
+        if (annotation.text.trim().isNotEmpty)
+          PopupMenuItem(
+            value: 'range',
+            child: Row(
+              children: [
+                const Icon(Icons.open_with_outlined, size: 17),
+                const SizedBox(width: 8),
+                Text(strings.reviewAdjustRange),
+              ],
+            ),
+          ),
         PopupMenuItem(
           value: 'note',
           child: Row(
@@ -1771,6 +1811,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     switch (action) {
       case 'edit':
         await _editAnnotation(annotation);
+      case 'range':
+        await _beginAdjustRange(annotation);
       case 'note':
         await _openAnnotationNote(annotation);
       case 'page':
@@ -2146,6 +2188,12 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
               },
               onContextMenu: (annotation, position) =>
                   unawaited(_showAnnotationContextMenu(annotation, position)),
+              selectedId: _selectedAnnotationId,
+              onSelect: _selectAnnotation,
+              onAdjustRange: (annotation) =>
+                  unawaited(_beginAdjustRange(annotation)),
+              onShowActions: (annotation) =>
+                  unawaited(_showAnnotationActions(annotation)),
             ),
           ),
         ),
@@ -2515,6 +2563,14 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                                             position,
                                           ),
                                         ),
+                                    selectedId: _selectedAnnotationId,
+                                    onSelect: _selectAnnotation,
+                                    onAdjustRange: (annotation) => unawaited(
+                                      _beginAdjustRange(annotation),
+                                    ),
+                                    onShowActions: (annotation) => unawaited(
+                                      _showAnnotationActions(annotation),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -2599,6 +2655,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
               painter: _PdfAnnotationScreenPainter(
                 controller: _controller,
                 annotations: _annotations,
+                selectedId: _selectedAnnotationId,
                 overlayKey: _pdfOverlayKey,
                 colorOf: _annotationColor,
               ),
@@ -2711,6 +2768,10 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
     required this.onOpenOutline,
     required this.onRemoveTag,
     required this.onContextMenu,
+    required this.selectedId,
+    required this.onSelect,
+    required this.onAdjustRange,
+    required this.onShowActions,
   });
 
   final List<ReviewAnnotation> annotations;
@@ -2733,6 +2794,10 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
   final void Function(ReviewAnnotation annotation, String tag) onRemoveTag;
   final void Function(ReviewAnnotation annotation, Offset position)
   onContextMenu;
+  final String? selectedId;
+  final ValueChanged<ReviewAnnotation> onSelect;
+  final ValueChanged<ReviewAnnotation> onAdjustRange;
+  final ValueChanged<ReviewAnnotation> onShowActions;
 
   @override
   State<_ReviewAnnotationSidebar> createState() =>
@@ -2764,6 +2829,10 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
   void Function(ReviewAnnotation, String) get onRemoveTag => widget.onRemoveTag;
   void Function(ReviewAnnotation, Offset) get onContextMenu =>
       widget.onContextMenu;
+  String? get selectedId => widget.selectedId;
+  ValueChanged<ReviewAnnotation> get onSelect => widget.onSelect;
+  ValueChanged<ReviewAnnotation> get onAdjustRange => widget.onAdjustRange;
+  ValueChanged<ReviewAnnotation> get onShowActions => widget.onShowActions;
 
   @override
   void dispose() {
@@ -3136,9 +3205,18 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(8),
                           hoverColor: palette.accent.withValues(alpha: 0.08),
+                          onTapDown: selectionMode
+                              ? null
+                              : (_) => onSelect(annotation),
                           onTap: selectionMode
                               ? () => onToggleSelection(annotation.id)
+                              : () => onSelect(annotation),
+                          onDoubleTap: selectionMode
+                              ? null
                               : () => onEditNote(annotation),
+                          onLongPress: selectionMode
+                              ? null
+                              : () => onShowActions(annotation),
                           child: Container(
                             padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
                             decoration: BoxDecoration(
@@ -3496,7 +3574,10 @@ class _PdfRegionAdjustOverlay extends StatefulWidget {
     required this.onChanged,
     required this.onEnd,
     required this.onTap,
+    required this.onDoubleTap,
+    required this.onLongPress,
     required this.onContextMenu,
+    required this.selected,
   });
 
   final Rect rect;
@@ -3505,7 +3586,10 @@ class _PdfRegionAdjustOverlay extends StatefulWidget {
   final ValueChanged<Rect> onChanged;
   final ValueChanged<Rect> onEnd;
   final VoidCallback onTap;
+  final VoidCallback onDoubleTap;
+  final VoidCallback onLongPress;
   final ValueChanged<Offset> onContextMenu;
+  final bool selected;
 
   @override
   State<_PdfRegionAdjustOverlay> createState() =>
@@ -3601,7 +3685,9 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
       },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
+        onTapDown: (_) => widget.onTap(),
+        onDoubleTap: widget.onDoubleTap,
+        onLongPress: widget.onLongPress,
         onSecondaryTapDown: (details) =>
             widget.onContextMenu(details.globalPosition),
         onPanStart: (details) {
@@ -3650,30 +3736,31 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
                 ),
               ),
             ),
-            for (final alignment in const [
-              Alignment.topLeft,
-              Alignment.topCenter,
-              Alignment.topRight,
-              Alignment.centerLeft,
-              Alignment.centerRight,
-              Alignment.bottomLeft,
-              Alignment.bottomCenter,
-              Alignment.bottomRight,
-            ])
-              Align(
-                alignment: alignment,
-                child: IgnorePointer(
-                  child: Container(
-                    width: 9,
-                    height: 9,
-                    decoration: BoxDecoration(
-                      color: widget.color,
-                      border: Border.all(color: Colors.white, width: 1),
-                      borderRadius: BorderRadius.circular(2),
+            if (widget.selected)
+              for (final alignment in const [
+                Alignment.topLeft,
+                Alignment.topCenter,
+                Alignment.topRight,
+                Alignment.centerLeft,
+                Alignment.centerRight,
+                Alignment.bottomLeft,
+                Alignment.bottomCenter,
+                Alignment.bottomRight,
+              ])
+                Align(
+                  alignment: alignment,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: widget.color,
+                        border: Border.all(color: Colors.white, width: 1),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
                 ),
-              ),
           ],
         ),
       ),
@@ -3687,12 +3774,14 @@ class _PdfAnnotationScreenPainter extends CustomPainter {
   _PdfAnnotationScreenPainter({
     required this.controller,
     required this.annotations,
+    required this.selectedId,
     required this.overlayKey,
     required this.colorOf,
   }) : super(repaint: controller);
 
   final PdfViewerController controller;
   final List<ReviewAnnotation> annotations;
+  final String? selectedId;
   final GlobalKey overlayKey;
   final Color Function(String) colorOf;
 
@@ -3727,6 +3816,15 @@ class _PdfAnnotationScreenPainter extends CustomPainter {
         if (local.isEmpty) continue;
         final color = colorOf(annotation.color);
         canvas.drawRect(local, Paint()..color = color.withValues(alpha: 0.34));
+        if (annotation.id == selectedId) {
+          canvas.drawRect(
+            local,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2.2
+              ..color = color,
+          );
+        }
         if (annotation.text.trim().isEmpty) {
           canvas.drawRect(
             local,
