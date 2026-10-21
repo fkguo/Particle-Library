@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -1360,7 +1361,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       if (annotation.pageNumber != page.pageNumber) continue;
       final paint = Paint()
         ..color = _annotationColor(annotation.color).withValues(
-          alpha: annotation.id == _selectedAnnotationId ? 0.55 : 0.38,
+          alpha: annotation.id == _selectedAnnotationId ? 0.42 : 0.34,
         );
       for (final rect in mergeRectsForDisplay(annotation.rects)) {
         final target = Rect.fromLTWH(
@@ -3848,10 +3849,22 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
         onPanStart: (details) {
           final box = context.findRenderObject();
           if (box is! RenderBox) return;
+          final handle = _hitTest(details.localPosition, box.size);
+          // A finger drag on the region body is almost always an attempt to
+          // scroll the page, not to move the region. Keep touch movement
+          // available only through the explicit handles.
+          if (details.kind == PointerDeviceKind.touch &&
+              handle == _RegionHandle.move) {
+            _start = null;
+            _startLocal = null;
+            _latest = null;
+            _handle = _RegionHandle.move;
+            return;
+          }
           _start = widget.rect;
           _startLocal = details.localPosition;
           _latest = widget.rect;
-          _handle = _hitTest(details.localPosition, box.size);
+          _handle = handle;
           _cursor = _cursorFor(_handle);
         },
         onPanUpdate: (details) {
@@ -3974,7 +3987,7 @@ class _PdfAnnotationScreenPainter extends CustomPainter {
           local,
           Paint()
             ..color = color.withValues(
-              alpha: annotation.id == selectedId ? 0.55 : 0.34,
+              alpha: annotation.id == selectedId ? 0.42 : 0.30,
             ),
         );
         if (annotation.id == selectedId && annotation.text.trim().isEmpty) {

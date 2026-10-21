@@ -133,8 +133,23 @@ void main() {
     await tester.tapAt(global);
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(selectedKey), findsOneWidget);
+    final beforeTouch = tester.getRect(find.byKey(selectedKey));
+    final touch = await tester.startGesture(
+      tester.getCenter(find.byKey(selectedKey)),
+      kind: PointerDeviceKind.touch,
+    );
+    await touch.moveBy(const Offset(30, 24));
+    await touch.up();
+    await tester.pump(const Duration(milliseconds: 400));
+    final afterTouch = tester.getRect(find.byKey(selectedKey));
+    expect(afterTouch.topLeft, beforeTouch.topLeft);
+
     final beforeMove = tester.getRect(find.byKey(selectedKey));
-    await tester.drag(find.byKey(selectedKey), const Offset(-28, -22));
+    await tester.drag(
+      find.byKey(selectedKey),
+      const Offset(-28, -22),
+      kind: PointerDeviceKind.mouse,
+    );
     await tester.pump(const Duration(milliseconds: 500));
     final afterMove = tester.getRect(find.byKey(selectedKey));
     expect(afterMove.topLeft, isNot(beforeMove.topLeft));
@@ -143,6 +158,7 @@ void main() {
     await tester.dragFrom(
       beforeResize.bottomRight - const Offset(3, 3),
       const Offset(-22, -18),
+      kind: PointerDeviceKind.mouse,
     );
     await tester.pump(const Duration(milliseconds: 500));
     final afterResize = tester.getRect(find.byKey(selectedKey));
