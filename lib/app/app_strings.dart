@@ -1121,8 +1121,8 @@ class AppStrings {
   String get reviewHighlightColor => _t('高亮颜色', 'Highlight color');
   String get reviewAdjustRange => _t('调整高亮范围', 'Adjust highlight range');
   String get reviewAdjustRangeHint => _t(
-    '拖动两个圆形把手调整起止位置，然后点右上角勾保存。',
-    'Drag the two round handles to adjust the start and end, then tap the check button to save.',
+    '拖动两个圆形把手调整起止位置；松开后自动保存。',
+    'Drag the two round handles to adjust the start and end; changes save automatically when you release.',
   );
   String get reviewSaveRange => _t('保存高亮范围', 'Save highlight range');
   String reviewHighlightColorName(String color) => switch (color) {

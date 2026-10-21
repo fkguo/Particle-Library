@@ -2391,12 +2391,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                   ),
                   if (_editingRange != null) ...[
                     IconButton(
-                      tooltip: strings.reviewSaveRange,
-                      onPressed: _saving ? null : _saveAdjustedRange,
-                      icon: const Icon(Icons.check),
-                    ),
-                    IconButton(
-                      tooltip: strings.commonCancel,
+                      tooltip: strings.commonClose,
                       onPressed: () {
                         _autoHighlightTimer?.cancel();
                         setState(() => _editingRange = null);
@@ -2768,6 +2763,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         pageOverlaysBuilder: _annotationOverlays,
         textSelectionParams: PdfTextSelectionParams(
           enabled: !_regionMode,
+          showContextMenuAutomatically: false,
           buildSelectionHandle: _buildSelectionHandle,
           onTextSelectionChange: _onTextSelectionChanged,
           enableSelectionHandles:
