@@ -2438,7 +2438,11 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(child: _pdfSurfaceWithOverlay(context)),
+                            Expanded(
+                              child: RepaintBoundary(
+                                child: _pdfSurfaceWithOverlay(context),
+                              ),
+                            ),
                             if (_showAnnotations &&
                                 !_zenMode &&
                                 constraints.maxWidth >= 700 &&
@@ -2455,54 +2459,57 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                                 }),
                                 onReset: () =>
                                     setState(() => _sidebarWidth = 320),
-                                child: _ReviewAnnotationSidebar(
-                                  annotations: _annotations,
-                                  palette: palette,
-                                  strings: strings,
-                                  onOpen: (annotation) {
-                                    if (!_controller.isReady) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                strings.reviewPdfLoading,
+                                child: RepaintBoundary(
+                                  child: _ReviewAnnotationSidebar(
+                                    annotations: _annotations,
+                                    palette: palette,
+                                    strings: strings,
+                                    onOpen: (annotation) {
+                                      if (!_controller.isReady) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  strings.reviewPdfLoading,
+                                                ),
                                               ),
-                                            ),
-                                          );
-                                      return;
-                                    }
-                                    unawaited(
-                                      _controller.goToPage(
-                                        pageNumber: annotation.pageNumber,
-                                      ),
-                                    );
-                                  },
-                                  onOpenNote: _openAnnotationNote,
-                                  onEditNote: _editAnnotation,
-                                  onDelete: _deleteAnnotation,
-                                  selectionMode: _annotationSelectionMode,
-                                  selectedIds: _selectedAnnotationIds,
-                                  onToggleSelectionMode:
-                                      _toggleAnnotationSelectionMode,
-                                  onToggleSelection: _toggleAnnotationSelected,
-                                  onAddSelected:
-                                      _addSelectedAnnotationsToCollection,
-                                  tabIndex: _sidebarTab,
-                                  onTabChanged: (index) =>
-                                      setState(() => _sidebarTab = index),
-                                  outline: _outline,
-                                  outlineLoading: _outlineLoading,
-                                  onOpenOutline: _openOutline,
-                                  onRemoveTag: (annotation, tag) => unawaited(
-                                    _removeAnnotationTag(annotation, tag),
-                                  ),
-                                  onContextMenu: (annotation, position) =>
+                                            );
+                                        return;
+                                      }
                                       unawaited(
-                                        _showAnnotationContextMenu(
-                                          annotation,
-                                          position,
+                                        _controller.goToPage(
+                                          pageNumber: annotation.pageNumber,
                                         ),
-                                      ),
+                                      );
+                                    },
+                                    onOpenNote: _openAnnotationNote,
+                                    onEditNote: _editAnnotation,
+                                    onDelete: _deleteAnnotation,
+                                    selectionMode: _annotationSelectionMode,
+                                    selectedIds: _selectedAnnotationIds,
+                                    onToggleSelectionMode:
+                                        _toggleAnnotationSelectionMode,
+                                    onToggleSelection:
+                                        _toggleAnnotationSelected,
+                                    onAddSelected:
+                                        _addSelectedAnnotationsToCollection,
+                                    tabIndex: _sidebarTab,
+                                    onTabChanged: (index) =>
+                                        setState(() => _sidebarTab = index),
+                                    outline: _outline,
+                                    outlineLoading: _outlineLoading,
+                                    onOpenOutline: _openOutline,
+                                    onRemoveTag: (annotation, tag) => unawaited(
+                                      _removeAnnotationTag(annotation, tag),
+                                    ),
+                                    onContextMenu: (annotation, position) =>
+                                        unawaited(
+                                          _showAnnotationContextMenu(
+                                            annotation,
+                                            position,
+                                          ),
+                                        ),
+                                  ),
                                 ),
                               ),
                             ],
