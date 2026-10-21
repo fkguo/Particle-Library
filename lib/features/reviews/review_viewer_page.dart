@@ -1135,9 +1135,12 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     if (!selected) {
       return true; // Never fall through to the built-in Copy/Select All menu.
     }
-    final renderBox = context.findRenderObject();
-    if (renderBox is! RenderBox) return false;
-    final global = renderBox.localToGlobal(details.localPosition);
+    final global =
+        _controller.documentToGlobal(details.documentPosition) ??
+        (context.findRenderObject() as RenderBox?)?.localToGlobal(
+          details.localPosition,
+        );
+    if (global == null) return true;
     unawaited(_showTextSelectionMenu(global));
     return true;
   }
