@@ -39,13 +39,17 @@ class _RawFieldsPanelState extends State<RawFieldsPanel> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(_expanded ? Icons.expand_less : Icons.code,
-                size: 14, color: palette.textSecondary),
+            Icon(
+              _expanded ? Icons.expand_less : Icons.code,
+              size: 14,
+              color: palette.textSecondary,
+            ),
             const SizedBox(width: 4),
-            Text('$title · ${widget.fields.length}',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: palette.textSecondary,
-                    )),
+            Text(
+              '$title · ${widget.fields.length}',
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: palette.textSecondary),
+            ),
             if (!_expanded)
               IconButton(
                 tooltip: strings.commonCopyRaw,
@@ -85,16 +89,6 @@ class _RawFieldsPanelState extends State<RawFieldsPanel> {
           ),
           if (_expanded) ...[
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Text(
-                strings.rawRecordHint,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: palette.textSecondary),
-              ),
-            ),
-            Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               child: Column(
                 children: [
@@ -108,8 +102,9 @@ class _RawFieldsPanelState extends State<RawFieldsPanel> {
     );
   }
 
-  static String _allFields(List<RawField> fields) =>
-      fields.map((field) => '${field.qualifiedName}\t${_value(field)}').join('\n');
+  static String _allFields(List<RawField> fields) => fields
+      .map((field) => '${field.qualifiedName}\t${_value(field)}')
+      .join('\n');
 
   static String _value(RawField field) {
     if (field.value == null) return 'NULL';
@@ -127,9 +122,8 @@ class _RawRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final value = field.value;
-    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
-          fontFeatures: const [FontFeature.tabularFigures()],
-        );
+    final style = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -150,9 +144,11 @@ class _RawRow extends StatelessWidget {
             child: value == null
                 ? const _NullValue()
                 : value is String && value.isEmpty
-                    ? Text('""  (${AppScope.of(context).strings.emptyStringValue})',
-                        style: style?.copyWith(color: palette.textSecondary))
-                    : SelectableText(value.toString(), style: style),
+                ? Text(
+                    '""  (${AppScope.of(context).strings.emptyStringValue})',
+                    style: style?.copyWith(color: palette.textSecondary),
+                  )
+                : SelectableText(value.toString(), style: style),
           ),
         ],
       ),
@@ -166,11 +162,13 @@ class _NullValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    return Text('NULL',
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: palette.warning,
-              fontFamily: 'Menlo',
-              fontSize: 11.5,
-            ));
+    return Text(
+      'NULL',
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: palette.warning,
+        fontFamily: 'Menlo',
+        fontSize: 11.5,
+      ),
+    );
   }
 }

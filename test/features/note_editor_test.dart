@@ -6,6 +6,7 @@ import 'package:pdgapp/app/app_strings.dart';
 import 'package:pdgapp/app/app_theme.dart';
 import 'package:pdgapp/domain/labels.dart';
 import 'package:pdgapp/features/notes/note_editor.dart';
+import 'package:pdgapp/features/notes/notes_markdown_preview.dart';
 import 'package:pdgapp/notes/notes.dart';
 
 void main() {
@@ -37,6 +38,7 @@ void main() {
     VoidCallback? onDeleted,
     VoidCallback? onCancel,
     bool draft = false,
+    Size size = const Size(900, 700),
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -44,8 +46,8 @@ void main() {
         home: Scaffold(
           body: Center(
             child: SizedBox(
-              width: 900,
-              height: 700,
+              width: size.width,
+              height: size.height,
               child: NoteEditor(
                 store: store,
                 strings: const AppStrings(TextLang.en),
@@ -287,5 +289,136 @@ void main() {
 
     expect(deleted, isTrue);
     expect(await store.recent(), isEmpty);
+  });
+  testWidgets('phone header does not jump when the save status changes', (
+    tester,
+  ) async {
+    final note = await store.create(
+      title: 'Jump check',
+      bodyMarkdown: 'initial body',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 430,
+              height: 700,
+              child: NoteEditor(
+                store: store,
+                strings: const AppStrings(TextLang.en),
+                note: note,
+                changeSignal: changes,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final previewButton = find.byIcon(Icons.visibility_outlined);
+    final before = tester.getTopLeft(previewButton);
+
+    await tester.enterText(find.byType(TextField).at(1), 'edited body text');
+    await tester.pump();
+    expect(find.text('Unsaved changes'), findsOneWidget);
+    expect(tester.getTopLeft(previewButton), before);
+
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved'), findsWidgets);
+    // The status label and spinner change width, but the action row must not
+    // move: the status has its own line in the compact header.
+    expect(tester.getTopLeft(previewButton), before);
+  });
+
+
+  testWidgets('a landscape phone gives the body editor most of the height', (
+    tester,
+  ) async {
+    final note = await store.create(
+      title: 'Landscape note',
+      bodyMarkdown: 'first line\nsecond line\nthird line',
+    );
+    await pumpEditor(tester, note: note, size: const Size(952, 438));
+
+    final body = find.byType(TextField).at(1);
+    expect(tester.getSize(body).height, greaterThan(150));
+    // Secondary metadata is hidden when height is scarce; the body wins.
+    expect(find.text('Collections'), findsNothing);
+    expect(find.text('Anchors'), findsNothing);
+    expect(find.byType(NotesMarkdownPreview), findsNothing);
+    // Title and toolbar share one row, so the body gains the second row.
+    final titleCenter = tester.getCenter(find.byType(TextField).first);
+    final previewCenter = tester.getCenter(
+      find.byIcon(Icons.visibility_outlined),
+    );
+    expect((titleCenter.dy - previewCenter.dy).abs(), lessThan(6));
+  });
+
+  testWidgets('a keyboard-height landscape still leaves a usable editor', (
+    tester,
+  ) async {
+    final note = await store.create(
+      title: 'Tight',
+      bodyMarkdown: 'first line\nsecond line',
+    );
+    // 952x260 is what is left on a landscape phone with the keyboard open.
+    await pumpEditor(tester, note: note, size: const Size(952, 260));
+
+    final body = find.byType(TextField).at(1);
+    expect(tester.getSize(body).height, greaterThan(80));
+    // The toolbar and the tag field yield to the text field.
+    expect(find.byIcon(Icons.visibility_outlined), findsNothing);
+  });
+
+  testWidgets('shrinking for the keyboard keeps the same field elements', (
+    tester,
+  ) async {
+    final note = await store.create(
+      title: 'Focus check',
+      bodyMarkdown: 'body text',
+    );
+    await pumpEditor(tester, note: note, size: const Size(952, 438));
+    final titleElement = tester.element(find.byType(TextField).first);
+    final bodyElement = tester.element(find.byType(TextField).at(1));
+
+    // The keyboard opens and the page shrinks. Nothing may be recreated:
+    // recreating the text fields drops focus and closes the keyboard.
+    await pumpEditor(tester, note: note, size: const Size(952, 260));
+    expect(tester.element(find.byType(TextField).first), same(titleElement));
+    expect(tester.element(find.byType(TextField).at(1)), same(bodyElement));
+  });
+
+  testWidgets('a portrait keyboard resize keeps the body field focused', (
+    tester,
+  ) async {
+    final note = await store.create(
+      title: 'Portrait note',
+      bodyMarkdown: 'body text',
+      anchors: <NoteAnchorInput>[
+        NoteAnchorInput.pdgid(
+          'S032M',
+          snapshotHash: 'hash-1',
+          targetLabel: 'D0 (S032M)',
+        ),
+      ],
+    );
+    await pumpEditor(tester, note: note, size: const Size(430, 932));
+    final bodyFinder = find.byType(TextField).at(1);
+    final bodyElement = tester.element(bodyFinder);
+    final focusNode = tester.widget<TextField>(bodyFinder).focusNode!;
+    await tester.tap(bodyFinder);
+    await tester.pump();
+    expect(focusNode.hasFocus, isTrue);
+
+    // The keyboard takes the available height below the 480 dp threshold; the
+    // anchors block has to disappear without moving the body field.
+    await pumpEditor(tester, note: note, size: const Size(430, 460));
+    expect(tester.element(find.byType(TextField).at(1)), same(bodyElement));
+    expect(focusNode.hasFocus, isTrue);
+    expect(find.text('Anchors'), findsNothing);
   });
 }

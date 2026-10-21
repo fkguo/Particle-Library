@@ -77,6 +77,12 @@ class ReviewAnnotationNotes {
     }
   }
 
+  /// All notes anchored to [fileName], including annotation notes. The
+  /// inspector's Notes tab lists these; the Annotations tab projects the
+  /// subset that carries page geometry.
+  static Future<List<NoteRecord>> notesFor(NotesStore notes, String fileName) =>
+      notes.notesForTarget(NoteTargetKinds.review, _reviewKey(fileName));
+
   static Future<List<ReviewAnnotation>> load(
     NotesStore notes,
     String fileName, {

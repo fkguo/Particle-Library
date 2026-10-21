@@ -1,8 +1,9 @@
+import '../core/app_paths.dart';
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 /// One highlight/note attached to a cached review PDF.
@@ -137,7 +138,7 @@ class ReviewAnnotationStore {
   final File file;
 
   static Future<ReviewAnnotationStore> open() async {
-    final support = await getApplicationSupportDirectory();
+    final support = await appSupportDirectory();
     final target = File('${support.path}/ParticleDesk/review_annotations.json');
     return ReviewAnnotationStore(target);
   }

@@ -57,7 +57,10 @@ class _DecayCatalogState extends State<DecayCatalog> {
       map.putIfAbsent(parent, () => []).add(row);
     }
     for (final list in map.values) {
-      list.sort((a, b) => a.sort != b.sort ? a.sort.compareTo(b.sort) : a.id.compareTo(b.id));
+      list.sort(
+        (a, b) =>
+            a.sort != b.sort ? a.sort.compareTo(b.sort) : a.id.compareTo(b.id),
+      );
     }
     return map;
   }
@@ -77,15 +80,14 @@ class _DecayCatalogState extends State<DecayCatalog> {
   @override
   Widget build(BuildContext context) {
     final strings = AppScope.of(context).strings;
-    final palette = context.palette;
     final children = _children();
     final query = _filter.text.trim().toLowerCase();
     final byId = {for (final row in widget.decays) row.id: row};
     final filtered = query.isEmpty
         ? const <Entry>[]
         : widget.decays
-            .where((row) => row.description.toLowerCase().contains(query))
-            .toList(growable: false);
+              .where((row) => row.description.toLowerCase().contains(query))
+              .toList(growable: false);
     final roots = children[widget.parent.id] ?? const <Entry>[];
     final visibleRoots = roots.take(_visibleLimit).toList(growable: false);
     return Column(
@@ -109,13 +111,19 @@ class _DecayCatalogState extends State<DecayCatalog> {
               const SizedBox(width: Insets.s),
               IconButton(
                 tooltip: _flat ? strings.decayTree : strings.decayFlat,
-                icon: Icon(_flat ? Icons.account_tree_outlined : Icons.view_list_outlined),
+                icon: Icon(
+                  _flat
+                      ? Icons.account_tree_outlined
+                      : Icons.view_list_outlined,
+                ),
                 onPressed: () => setState(() => _flat = !_flat),
               ),
               IconButton(
                 tooltip: strings.decayExpandAll,
                 icon: const Icon(Icons.unfold_more, size: 19),
-                onPressed: () => setState(() => _expanded.addAll(widget.decays.map((row) => row.id))),
+                onPressed: () => setState(
+                  () => _expanded.addAll(widget.decays.map((row) => row.id)),
+                ),
               ),
               IconButton(
                 tooltip: strings.decayCollapseAll,
@@ -129,17 +137,9 @@ class _DecayCatalogState extends State<DecayCatalog> {
           padding: const EdgeInsets.fromLTRB(Insets.l, 0, Insets.l, Insets.s),
           child: Row(
             children: [
-              MetaChip('${widget.decays.length} ${strings.decayModeCount}',
-                  tone: BadgeTone.info),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  strings.decayCatalogHint,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: palette.textSecondary),
-                ),
+              MetaChip(
+                '${widget.decays.length} ${strings.decayModeCount}',
+                tone: BadgeTone.info,
               ),
             ],
           ),
@@ -148,7 +148,10 @@ class _DecayCatalogState extends State<DecayCatalog> {
           EmptyPanel(message: strings.particleNoDecays, icon: Icons.call_split)
         else if (query.isNotEmpty)
           if (filtered.isEmpty)
-            EmptyPanel(message: strings.decayNoModesMatch, icon: Icons.search_off)
+            EmptyPanel(
+              message: strings.decayNoModesMatch,
+              icon: Icons.search_off,
+            )
           else ...[
             for (final row in filtered.take(_visibleLimit))
               _DecayTile(
@@ -188,7 +191,11 @@ class _DecayCatalogState extends State<DecayCatalog> {
     );
   }
 
-  List<Widget> _buildTree(Entry row, Map<int, List<Entry>> children, int depth) {
+  List<Widget> _buildTree(
+    Entry row,
+    Map<int, List<Entry>> children,
+    int depth,
+  ) {
     final childList = children[row.id] ?? const <Entry>[];
     final isExpanded = _flat || _expanded.contains(row.id);
     return [
@@ -203,16 +210,17 @@ class _DecayCatalogState extends State<DecayCatalog> {
         onToggle: childList.isEmpty
             ? null
             : () => setState(() {
-                  if (_expanded.contains(row.id)) {
-                    _expanded.remove(row.id);
-                  } else {
-                    _expanded.add(row.id);
-                  }
-                }),
+                if (_expanded.contains(row.id)) {
+                  _expanded.remove(row.id);
+                } else {
+                  _expanded.add(row.id);
+                }
+              }),
         onOpen: () => AppNav.openPdgid(context, row.pdgid),
       ),
       if (isExpanded)
-        for (final child in childList) ..._buildTree(child, children, depth + 1),
+        for (final child in childList)
+          ..._buildTree(child, children, depth + 1),
     ];
   }
 }
@@ -252,7 +260,11 @@ class _DecayTile extends StatelessWidget {
         onTap: onOpen,
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-              Insets.l + (depth * 14.0).clamp(0, 56), 7, Insets.m, 7),
+            Insets.l + (depth * 14.0).clamp(0, 56),
+            7,
+            Insets.m,
+            7,
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -261,10 +273,17 @@ class _DecayTile extends StatelessWidget {
                 child: hasChildren
                     ? IconButton(
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                        tooltip: expanded ? strings.commonShowLess : strings.commonShowMore,
-                        icon: Icon(expanded ? Icons.expand_more : Icons.chevron_right,
-                            size: 18),
+                        constraints: const BoxConstraints(
+                          minWidth: 28,
+                          minHeight: 28,
+                        ),
+                        tooltip: expanded
+                            ? strings.commonShowLess
+                            : strings.commonShowMore,
+                        icon: Icon(
+                          expanded ? Icons.expand_more : Icons.chevron_right,
+                          size: 18,
+                        ),
                         onPressed: onToggle,
                       )
                     : Icon(Icons.circle, size: 4, color: palette.textSecondary),
@@ -281,34 +300,41 @@ class _DecayTile extends StatelessWidget {
                           path.map((row) => row.description).join(' › '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: palette.textSecondary, fontSize: 11),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: palette.textSecondary,
+                                fontSize: 11,
+                              ),
                         ),
                       ),
-                    DescriptionText(entry.description,
-                        maxLines: 3,
-                        style: Theme.of(context).textTheme.bodyMedium),
+                    DescriptionText(
+                      entry.description,
+                      maxLines: 3,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                     const SizedBox(height: 3),
                     Wrap(
                       spacing: 6,
                       runSpacing: 3,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        MetaChip(type.label(strings.lang),
-                            tone: isBranchingRatioType(entry.dataType)
-                                ? BadgeTone.accent
-                                : BadgeTone.neutral),
-                        if (entry.modeNumber != null) MetaChip('mode ${entry.modeNumber}'),
-                        if (entry.flags.isNotEmpty) MetaChip('flags ${entry.flags}'),
+                        MetaChip(
+                          type.label(strings.lang),
+                          tone: isBranchingRatioType(entry.dataType)
+                              ? BadgeTone.accent
+                              : BadgeTone.neutral,
+                        ),
+                        if (entry.modeNumber != null)
+                          MetaChip('mode ${entry.modeNumber}'),
+                        if (entry.flags.isNotEmpty)
+                          MetaChip('flags ${entry.flags}'),
                         _SummaryInline(selection: selection, strings: strings),
                         if (measurementCount > 0)
-                          Text(strings.measurementCount(measurementCount),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: palette.textSecondary)),
+                          Text(
+                            strings.measurementCount(measurementCount),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: palette.textSecondary),
+                          ),
                       ],
                     ),
                   ],
@@ -335,7 +361,10 @@ class _SummaryInline extends StatelessWidget {
       return MetaChip(strings.seriesNoSummary, tone: BadgeTone.warning);
     }
     if (selection.isAmbiguous) {
-      return MetaChip(strings.candidateCount(selection.count), tone: BadgeTone.warning);
+      return MetaChip(
+        strings.candidateCount(selection.count),
+        tone: BadgeTone.warning,
+      );
     }
     final quantity = DisplayQuantity.fromSummary(selection.preferred!);
     return DisplayValueView(quantity, fontSize: 13);

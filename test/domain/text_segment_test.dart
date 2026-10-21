@@ -361,4 +361,30 @@ void main() {
     expect(plain, isNot(contains('K0S')));
     expect(plain, isNot(contains('K*(892)-')));
   });
+  test('measurement uncertainties are typeset with pm', () {
+    final segments = segmentPdgText(
+      'The mass difference is 185.54+-0.06 MeV',
+    );
+    expect(segments.where((s) => s.latex != null).map((s) => s.latex), [
+      r'185.54 \pm 0.06',
+    ]);
+    expect(segments.first.text, 'The mass difference is ');
+    expect(segments.last.text, ' MeV');
+  });
+
+  test('a chained uncertainty keeps its order and parentheses', () {
+    final segments = segmentPdgText('(-0.71+-0.96+-0.19) MeV.');
+    expect(segments.map((s) => s.text ?? s.latex), [
+      '(',
+      r'-0.71 \pm 0.96 \pm 0.19',
+      ') MeV.',
+    ]);
+  });
+
+  test('bare signs and detector names are not measurement values', () {
+    for (final source in ['run 5+ and 6-', 'CLEO-c 2020', '1.2 + 3.4']) {
+      final segments = segmentPdgText(source);
+      expect(segments.every((s) => s.latex == null), isTrue, reason: source);
+    }
+  });
 }

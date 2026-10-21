@@ -645,12 +645,6 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
             ),
           ),
           const SizedBox(height: Insets.s),
-          Text(
-            strings.inspireSearchOnlineNote,
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: palette.textSecondary),
-          ),
-          const SizedBox(height: Insets.s),
           Row(
             children: [
               Expanded(

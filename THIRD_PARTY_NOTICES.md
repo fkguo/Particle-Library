@@ -1,5 +1,7 @@
 # Third-party notices
 
+Last reviewed: 2026-10-22
+
 Particle Library's application code is licensed under the Mozilla Public
 License 2.0 (MPL-2.0) in [LICENSE](LICENSE). That license does **not** apply to
 the PDG data, the PDG review PDFs, or third-party packages. Their terms are summarized below.

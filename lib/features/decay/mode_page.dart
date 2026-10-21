@@ -243,7 +243,7 @@ class _ModeBody extends StatelessWidget {
                   ),
                 if (view.isMultiStage)
                   MetaChip(
-                    strings.decayMultiStageNote,
+                    strings.decayMultiStageBadge,
                     tone: BadgeTone.warning,
                   ),
               ],
@@ -273,19 +273,9 @@ class _ModeBody extends StatelessWidget {
                 icon: Icons.info_outline,
                 tone: BadgeTone.warning,
                 text: strings.decayNoOutgoingNote,
-              )
-            else if (view.isMultiStage)
-              _Notice(
-                icon: Icons.alt_route,
-                tone: BadgeTone.warning,
-                text: strings.decayMultiStageNote,
               ),
             const SizedBox(height: Insets.m),
-            SectionHeading(
-              strings.decayStructure,
-              key: structureKey,
-              subtitle: strings.decayStageNote,
-            ),
+            SectionHeading(strings.decayStructure, key: structureKey),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Insets.l),
               child: _TokenSequence(view: view),
@@ -301,11 +291,7 @@ class _ModeBody extends StatelessWidget {
               ),
             ),
             const SizedBox(height: Insets.m),
-            SectionHeading(
-              strings.decayRelatedQuantities,
-              key: relatedKey,
-              subtitle: strings.decayRelatedHint,
-            ),
+            SectionHeading(strings.decayRelatedQuantities, key: relatedKey),
             if (view.related.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: Insets.l),
@@ -348,11 +334,7 @@ class _ModeBody extends StatelessWidget {
               ),
             if (view.children.isNotEmpty) ...[
               const SizedBox(height: Insets.m),
-              SectionHeading(
-                strings.decayDirectoryChildren,
-                key: childrenKey,
-                subtitle: strings.decayStageNote,
-              ),
+              SectionHeading(strings.decayDirectoryChildren, key: childrenKey),
               for (final child in view.children)
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -376,7 +358,6 @@ class _ModeBody extends StatelessWidget {
             SectionHeading(
               strings.seriesHistory,
               key: historyKey,
-              subtitle: detailed ? strings.seriesHistoryHint : null,
               trailing: TrendChartButton(data: trend, title: entry.description),
             ),
             Padding(

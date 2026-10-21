@@ -199,8 +199,22 @@ CatalogGroup _group(CatalogGroupKind kind) {
 /// Topic/section roots have no particle identity row. PDG's flag column can
 /// still say `M` (e.g. "V(cb) and V(ub) CKM Matrix Elements"), so particle
 /// category membership requires an actual particle row.
+/// PDG Live places a few topic tables in a different category than the
+/// snapshot's category flag. Overrides are keyed by PDG ID so they stay
+/// explicit and auditable.
+const Map<String, ParticleCategory> catalogCategoryOverrides = {
+  // CKM matrix elements are listed under Quarks on PDG Live; the snapshot
+  // carries a meson flag on this row.
+  'S052': ParticleCategory.quark,
+};
+
 ParticleCategory catalogCategoryForRoot(CatalogRoot root) {
-  if (root.particleCount == 0) return ParticleCategory.unknown;
+  final override = catalogCategoryOverrides[root.entry.pdgid];
+  if (override != null) return override;
+  // The flags name the PDG category for every root, including sections that
+  // have no particle identities of their own (Searches, Neutrino Properties,
+  // ADMIXTURE sections). A particle-count guard used to send all of those to
+  // "uncategorized", which emptied the Searches chip and hid real sections.
   return categoryFromFlags(root.entry.flags)?.category ??
       ParticleCategory.unknown;
 }

@@ -68,4 +68,36 @@ void main() {
     // subtraction collapses it to a sliver.
     expect(tester.getSize(field).height, greaterThan(150));
   });
+
+  testWidgets('a landscape phone page body spans the full width', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(952, 440);
+    tester.view.devicePixelRatio = 1;
+    // iPhone landscape: notch/corner safe area on the left and right.
+    tester.view.padding = const FakeViewPadding(
+      left: 62,
+      right: 62,
+      top: 0,
+      bottom: 21,
+    );
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: const PageScaffold(
+          maxWidth: double.infinity,
+          title: Text('Wide'),
+          body: SizedBox.expand(key: Key('page-body')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final rect = tester.getRect(find.byKey(const Key('page-body')));
+    // No side gutter: the page body uses the full screen width.
+    expect(rect.left, 0);
+    expect(rect.width, 952);
+  });
 }

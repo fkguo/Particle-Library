@@ -35,10 +35,17 @@ void main() {
     bool notesAvailable = true,
     Object? storeError,
     double wideBreakpoint = 700,
+    double textScale = 1,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
         home: Scaffold(
           body: NotesWorkspace(
             store: notesAvailable ? store : null,
@@ -95,6 +102,66 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('Evidence'), findsWidgets);
+  });
+
+  testWidgets('rotating a phone keeps the note list scroll position', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (var i = 0; i < 30; i++) {
+      await store.create(title: 'Scroll note $i', bodyMarkdown: 'body $i');
+    }
+    await pumpWorkspace(tester);
+
+    final scrollable = find
+        .descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.drag(scrollable, const Offset(0, -320));
+    await tester.pumpAndSettle();
+    final before = tester.state<ScrollableState>(scrollable).position.pixels;
+    expect(before, greaterThan(0));
+
+    // Rotation must not recreate the list: the same scrollable keeps its
+    // offset while the chrome switches to its dense form.
+    tester.view.physicalSize = const Size(932, 430);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final after = tester
+        .state<ScrollableState>(
+          find
+              .descendant(
+                of: find.byType(ListView),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
+        .position
+        .pixels;
+    expect(after, closeTo(before, 0.5));
+
+    tester.view.physicalSize = const Size(430, 932);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(
+      tester
+          .state<ScrollableState>(
+            find
+                .descendant(
+                  of: find.byType(ListView),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          )
+          .position
+          .pixels,
+      closeTo(before, 0.5),
+    );
   });
 
   testWidgets('lists recent notes, searches CJK text and opens the editor', (
@@ -486,5 +553,26 @@ void main() {
     );
     expect(find.text('disk unavailable'), findsOneWidget);
     expect(find.text('New note'), findsNothing);
+  });
+
+  testWidgets('New note stays compact at the largest text scale', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await pumpWorkspace(tester, textScale: 2);
+
+    expect(tester.takeException(), isNull);
+    final button = find.widgetWithText(FilledButton, 'New note');
+    expect(button, findsOneWidget);
+    // The 34 dp floor plus 1.3x clamped label: well under a 48 dp bar.
+    expect(tester.getSize(button).height, lessThan(48));
+
+    await pumpWorkspace(tester);
+    expect(
+      tester.getSize(find.widgetWithText(FilledButton, 'New note')).height,
+      lessThan(40),
+    );
   });
 }

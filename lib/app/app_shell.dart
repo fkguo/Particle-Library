@@ -311,6 +311,8 @@ class _AppShellState extends State<AppShell> {
                             color: palette.surface,
                             child: SafeArea(
                               bottom: false,
+                              left: false,
+                              right: false,
                               child: Container(
                                 height: compact ? 48 : 64,
                                 padding: EdgeInsets.symmetric(
@@ -498,6 +500,8 @@ class _AppShellState extends State<AppShell> {
                         child: SafeArea(
                           top: false,
                           bottom: false,
+                          left: false,
+                          right: false,
                           child: MediaQuery.removePadding(
                             context: context,
                             removeTop: !hideChrome,
@@ -591,6 +595,8 @@ class _CompactNavigationBar extends StatelessWidget {
       color: palette.surface,
       child: SafeArea(
         top: false,
+        left: false,
+        right: false,
         child: Container(
           height: barHeight,
           decoration: BoxDecoration(

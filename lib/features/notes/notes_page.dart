@@ -8,6 +8,7 @@ import 'package:file_selector/file_selector.dart';
 import '../../app/app_scope.dart';
 import '../../app/error_text.dart';
 import '../../app/app_strings.dart';
+import '../../app/layout.dart';
 import '../../app/app_theme.dart';
 import '../../domain/display.dart';
 import '../../notes/notes.dart';
@@ -1367,282 +1368,279 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
 
   @override
   Widget build(BuildContext context) {
-    final strings = widget.strings;
-    final palette = context.palette;
     if (widget.store == null) return _unavailable(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final short = constraints.maxHeight < 560;
-        final landscapeBar = short && constraints.maxWidth >= 640;
-        final wide = constraints.maxWidth >= widget.wideBreakpoint && !short;
-        final showRail = constraints.maxWidth >= 1280;
-        final header = Padding(
-          padding: EdgeInsets.fromLTRB(
-            Insets.l,
-            short ? Insets.xs : Insets.l,
-            Insets.l,
-            short ? 0 : Insets.s,
+        final layout = AppLayout.ofSize(MediaQuery.sizeOf(context));
+        final wide = layout != LayoutClass.compact;
+        // The collection rail needs a wide column even on a short window: a
+        // 1400x900 desktop window is medium by shortest side but has room.
+        final showRail =
+            layout == LayoutClass.expanded ||
+            (wide && constraints.maxWidth >= 1200);
+        // Denseness tightens the chrome. It must never choose a different
+        // widget tree: rotating a phone keeps every widget identity, so the
+        // list keeps its scroll offset and its element state.
+        final dense = constraints.maxHeight < 560;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (wide) _header(context, wide: true, dense: false),
+            Expanded(
+              child: wide
+                  ? _wideBody(context, constraints, showRail: showRail)
+                  : _compactBody(context, dense: dense),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Compact layout: identical structure in portrait and landscape.
+  Widget _compactBody(BuildContext context, {required bool dense}) {
+    if (_showEvidence) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _compactChrome(context, dense: dense),
+          Expanded(
+            child: KeyedSubtree(
+              key: const ValueKey<String>('notes-evidence-pane'),
+              child: _evidencePane(context),
+            ),
           ),
-          child: Flex(
-            direction: wide ? Axis.horizontal : Axis.vertical,
-            crossAxisAlignment: wide
-                ? CrossAxisAlignment.center
-                : CrossAxisAlignment.start,
+        ],
+      );
+    }
+    return ListView(
+      key: const PageStorageKey<String>('notes-phone-scroll'),
+      padding: EdgeInsets.zero,
+      children: [
+        _compactChrome(context, dense: dense),
+        _listPane(context, wide: false, showSearch: false, embedded: true),
+      ],
+    );
+  }
+
+  Widget _compactChrome(BuildContext context, {required bool dense}) {
+    if (dense) return _landscapeToolbar(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _header(context, wide: false, dense: false),
+        _viewBar(context),
+        _searchField(context),
+      ],
+    );
+  }
+
+  Widget _wideBody(
+    BuildContext context,
+    BoxConstraints constraints, {
+    required bool showRail,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _viewBar(context),
+        Expanded(
+          child: showRail
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _collectionRail(context),
+                    Expanded(
+                      child: _wideContent(context, constraints, hasRail: true),
+                    ),
+                  ],
+                )
+              : IndexedStack(
+                  index: _showEvidence ? 1 : 0,
+                  children: [
+                    _wideContent(context, constraints, hasRail: false),
+                    _evidencePane(context),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _header(
+    BuildContext context, {
+    required bool wide,
+    required bool dense,
+  }) {
+    final strings = widget.strings;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        Insets.l,
+        dense ? Insets.xs : Insets.l,
+        Insets.l,
+        dense ? 0 : Insets.s,
+      ),
+      child: Flex(
+        direction: wide ? Axis.horizontal : Axis.vertical,
+        crossAxisAlignment: wide
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
+        children: [
+          if (!dense)
+            Flexible(
+              flex: wide ? 1 : 0,
+              fit: wide ? FlexFit.tight : FlexFit.loose,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    strings.notesTitle,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          SizedBox(width: wide ? Insets.s : 0, height: wide ? 0 : Insets.s),
+          Wrap(
+            spacing: Insets.s,
+            runSpacing: Insets.s,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              if (!short)
-                Flexible(
-                  flex: wide ? 1 : 0,
-                  fit: wide ? FlexFit.tight : FlexFit.loose,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        strings.notesTitle,
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.3,
-                            ),
-                      ),
-                      if (wide && !short)
-                        Text(
-                          strings.notesLocalOnly,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: palette.textSecondary),
-                        ),
-                    ],
+              if (wide)
+                IconButton(
+                  tooltip: _listVisible
+                      ? strings.sidebarHide
+                      : strings.sidebarShow,
+                  onPressed: () => setState(() => _listVisible = !_listVisible),
+                  icon: Icon(
+                    _listVisible
+                        ? Icons.vertical_split
+                        : Icons.vertical_split_outlined,
+                    size: 20,
                   ),
                 ),
-              SizedBox(width: wide ? Insets.s : 0, height: wide ? 0 : Insets.s),
-              Wrap(
-                spacing: Insets.s,
-                runSpacing: Insets.s,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  if (wide)
-                    IconButton(
-                      tooltip: _listVisible
-                          ? strings.sidebarHide
-                          : strings.sidebarShow,
-                      onPressed: () =>
-                          setState(() => _listVisible = !_listVisible),
-                      icon: Icon(
-                        _listVisible
-                            ? Icons.vertical_split
-                            : Icons.vertical_split_outlined,
-                        size: 20,
-                      ),
-                    ),
-                  IconButton(
-                    tooltip: _multiSelect
-                        ? strings.notesClearSelection
-                        : strings.notesSelectNotes,
-                    onPressed: _toggleMultiSelect,
-                    icon: Icon(
-                      _multiSelect ? Icons.close : Icons.checklist,
-                      size: 20,
-                    ),
+              IconButton(
+                tooltip: _multiSelect
+                    ? strings.notesClearSelection
+                    : strings.notesSelectNotes,
+                onPressed: _toggleMultiSelect,
+                icon: Icon(
+                  _multiSelect ? Icons.close : Icons.checklist,
+                  size: 20,
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: () => _newNote(wide: wide),
+                style: FilledButton.styleFrom(
+                  // Compact chrome: 34 dp floor instead of 40. The label is
+                  // clamped to 1.3x text scale and ellipsised, so the largest
+                  // system font cannot make the button overflow the header.
+                  minimumSize: const Size(0, 34),
+                  padding: const EdgeInsets.symmetric(horizontal: Insets.s),
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(
+                  strings.notesNew,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textScaler: MediaQuery.textScalerOf(context)
+                      .clamp(maxScaleFactor: 1.3),
+                ),
+              ),
+              IconButton(
+                tooltip: strings.notesTagsManage,
+                onPressed: _openTagManager,
+                icon: const Icon(Icons.sell_outlined, size: 20),
+              ),
+              IconButton(
+                tooltip: strings.notesTrash,
+                onPressed: _openTrash,
+                icon: const Icon(Icons.delete_outline, size: 20),
+              ),
+              PopupMenuButton<String>(
+                tooltip: strings.notesCopyCiteKeys,
+                icon: const Icon(Icons.format_quote, size: 20),
+                onSelected: (value) {
+                  switch (value) {
+                    case 'citekeys':
+                      _copyCiteKeys();
+                    case 'bibtex':
+                      _copyBibtex();
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'citekeys',
+                    child: Text(strings.notesCopyCiteKeys),
                   ),
-                  FilledButton.icon(
-                    onPressed: () => _newNote(wide: wide),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 40),
-                      padding: const EdgeInsets.symmetric(horizontal: Insets.m),
-                    ),
-                    icon: const Icon(Icons.add_rounded, size: 20),
-                    label: Text(strings.notesNew),
+                  PopupMenuItem(
+                    value: 'bibtex',
+                    child: Text(strings.notesCopyBibtex),
                   ),
-                  IconButton(
-                    tooltip: strings.notesTagsManage,
-                    onPressed: _openTagManager,
-                    icon: const Icon(Icons.sell_outlined, size: 20),
+                ],
+              ),
+              PopupMenuButton<String>(
+                tooltip: strings.notesExportAll,
+                icon: const Icon(Icons.import_export, size: 20),
+                onSelected: (value) {
+                  switch (value) {
+                    case 'json':
+                      _exportJsonFile();
+                    case 'markdown':
+                      _exportMarkdownFile();
+                    case 'scope-markdown':
+                      _exportScopeMarkdown();
+                    case 'import':
+                      _importJsonFile();
+                    case 'copy':
+                      _exportAll();
+                    case 'citekeys':
+                      _copyCiteKeys();
+                    case 'bibtex':
+                      _copyBibtex();
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'json',
+                    child: Text(strings.notesExportJsonFile),
                   ),
-                  IconButton(
-                    tooltip: strings.notesTrash,
-                    onPressed: _openTrash,
-                    icon: const Icon(Icons.delete_outline, size: 20),
+                  PopupMenuItem(
+                    value: 'markdown',
+                    child: Text(strings.notesExportMarkdownFile),
                   ),
-                  PopupMenuButton<String>(
-                    tooltip: strings.notesCopyCiteKeys,
-                    icon: const Icon(Icons.format_quote, size: 20),
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'citekeys':
-                          _copyCiteKeys();
-                        case 'bibtex':
-                          _copyBibtex();
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'citekeys',
-                        child: Text(strings.notesCopyCiteKeys),
-                      ),
-                      PopupMenuItem(
-                        value: 'bibtex',
-                        child: Text(strings.notesCopyBibtex),
-                      ),
-                    ],
+                  PopupMenuItem(
+                    value: 'scope-markdown',
+                    child: Text(strings.notesExportScopeMarkdown),
                   ),
-                  PopupMenuButton<String>(
-                    tooltip: strings.notesExportAll,
-                    icon: const Icon(Icons.import_export, size: 20),
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'json':
-                          _exportJsonFile();
-                        case 'markdown':
-                          _exportMarkdownFile();
-                        case 'scope-markdown':
-                          _exportScopeMarkdown();
-                        case 'import':
-                          _importJsonFile();
-                        case 'copy':
-                          _exportAll();
-                        case 'citekeys':
-                          _copyCiteKeys();
-                        case 'bibtex':
-                          _copyBibtex();
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'json',
-                        child: Text(strings.notesExportJsonFile),
-                      ),
-                      PopupMenuItem(
-                        value: 'markdown',
-                        child: Text(strings.notesExportMarkdownFile),
-                      ),
-                      PopupMenuItem(
-                        value: 'scope-markdown',
-                        child: Text(strings.notesExportScopeMarkdown),
-                      ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: 'import',
-                        child: Text(strings.notesImportJsonFile),
-                      ),
-                      PopupMenuItem(
-                        value: 'copy',
-                        child: Text(strings.notesExportAll),
-                      ),
-                      PopupMenuItem(
-                        value: 'citekeys',
-                        child: Text(strings.notesCopyCiteKeys),
-                      ),
-                      PopupMenuItem(
-                        value: 'bibtex',
-                        child: Text(strings.notesCopyBibtex),
-                      ),
-                    ],
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: 'import',
+                    child: Text(strings.notesImportJsonFile),
+                  ),
+                  PopupMenuItem(
+                    value: 'copy',
+                    child: Text(strings.notesExportAll),
+                  ),
+                  PopupMenuItem(
+                    value: 'citekeys',
+                    child: Text(strings.notesCopyCiteKeys),
+                  ),
+                  PopupMenuItem(
+                    value: 'bibtex',
+                    child: Text(strings.notesCopyBibtex),
                   ),
                 ],
               ),
             ],
           ),
-        );
-        if (landscapeBar) {
-          if (_showEvidence) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _landscapeToolbar(context),
-                Expanded(child: _evidencePane(context)),
-              ],
-            );
-          }
-          return ListView(
-            key: const PageStorageKey<String>('notes-phone-scroll'),
-            padding: EdgeInsets.zero,
-            children: [
-              _landscapeToolbar(context),
-              _listPane(
-                context,
-                wide: false,
-                showSearch: false,
-                embedded: true,
-              ),
-            ],
-          );
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (wide) header,
-            Expanded(
-              child: wide
-                  ? (showRail
-                        ? Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _collectionRail(context),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    _viewBar(context),
-                                    Expanded(
-                                      child: _wideContent(
-                                        context,
-                                        constraints,
-                                        hasRail: true,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _viewBar(context),
-                              Expanded(
-                                child: IndexedStack(
-                                  index: _showEvidence ? 1 : 0,
-                                  children: [
-                                    _wideContent(
-                                      context,
-                                      constraints,
-                                      hasRail: false,
-                                    ),
-                                    _evidencePane(context),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ))
-                  : _showEvidence
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        header,
-                        _viewBar(context),
-                        _searchField(context),
-                        Expanded(child: _evidencePane(context)),
-                      ],
-                    )
-                  : ListView(
-                      key: const PageStorageKey<String>('notes-phone-scroll'),
-                      padding: EdgeInsets.zero,
-                      children: [
-                        header,
-                        _viewBar(context),
-                        _searchField(context),
-                        _listPane(
-                          context,
-                          wide: false,
-                          showSearch: false,
-                          embedded: true,
-                        ),
-                      ],
-                    ),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
   }
 

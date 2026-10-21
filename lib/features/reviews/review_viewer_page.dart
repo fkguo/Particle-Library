@@ -1,3 +1,5 @@
+import '../../core/app_paths.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -7,13 +9,13 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_scope.dart';
 import '../../app/error_text.dart';
 import '../../app/app_strings.dart';
+import '../../app/layout.dart';
 import '../../app/immersive_page.dart';
 import '../../app/app_theme.dart';
 import '../../app/navigation.dart';
@@ -29,6 +31,9 @@ import '../notes/note_tag_field.dart';
 import '../notes/notes_format.dart';
 
 const MethodChannel _clipboardChannel = MethodChannel('pdg.clipboard');
+
+/// Page spacing used by pdfrx; the fit-width math above depends on it.
+const double _pdfPageMargin = 8;
 
 class ReviewViewerPage extends StatefulWidget
     implements ImmersivePage, NoGlobalSelection {
@@ -50,6 +55,10 @@ class ReviewViewerPage extends StatefulWidget
 }
 
 class _ReviewViewerPageState extends State<ReviewViewerPage> {
+  void _reviewLog(String message) {
+    if (kDebugMode) debugPrint(message);
+  }
+
   final PdfViewerController _controller = PdfViewerController();
   PdfTextSearcher? _searcher;
   UserStore? _userStore;
@@ -58,12 +67,14 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   final GlobalKey _pdfOverlayKey = GlobalKey();
   NotesStore? _notes;
   List<ReviewAnnotation> _annotations = const <ReviewAnnotation>[];
+  List<NoteRecord> _reviewNotes = const <NoteRecord>[];
   bool _showAnnotations = true;
   bool _sidebarInitialized = false;
   bool _hadReadingState = false;
   bool _saving = false;
   bool _addingHighlight = false;
   bool _highlightMode = false;
+  bool _annotateMode = false;
   bool _annotationSelectionMode = false;
   bool _zenMode = false;
   bool _pdfDarkMode = false;
@@ -124,7 +135,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     if (_started) return;
     _started = true;
     _openWatch.start();
-    debugPrint('REVIEW open: didChangeDependencies');
+    _reviewLog('REVIEW open: didChangeDependencies');
     final scope = AppScope.of(context);
     _userStore = scope.store;
     final state = scope.store.reviewState(_fileName);
@@ -140,7 +151,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       _pdfDarkMode = state['dark'] == true;
     }
     _ready = _loadAnnotations(scope.notes).then((_) {
-      debugPrint(
+      _reviewLog(
         'REVIEW open: annotations ${_openWatch.elapsedMilliseconds}ms',
       );
     });
@@ -150,7 +161,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     // frame rendering, so healthy loads never trigger it.
     _pdfRetryTimer = Timer(const Duration(seconds: 3), () {
       if (mounted && !_pdfReady) {
-        debugPrint('REVIEW open: retrying stuck PDF viewer');
+        _reviewLog('REVIEW open: retrying stuck PDF viewer');
         setState(() => _pdfEpoch++);
       }
     });
@@ -166,9 +177,14 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           _fileName,
           reviewTitle: widget.title,
         );
+        final reviewNotes = await ReviewAnnotationNotes.notesFor(
+          notes,
+          _fileName,
+        );
         if (!mounted) return;
         setState(() {
           _annotations = annotations;
+          _reviewNotes = reviewNotes;
           final visible = {for (final annotation in annotations) annotation.id};
           _selectedAnnotationIds.removeWhere((id) => !visible.contains(id));
           if (_selectedAnnotationId != null &&
@@ -186,6 +202,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           for (final annotation in annotations)
             if (annotation.fileName == _fileName) annotation,
         ];
+        _reviewNotes = const <NoteRecord>[];
       });
     } catch (error) {
       if (!mounted) return;
@@ -772,6 +789,13 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     }
   }
 
+  Future<void> _openNoteRecord(NoteRecord note) async {
+    await AppNav.push<void>(context, NoteEditorPage(note: note));
+    if (!mounted) return;
+    final notes = _notes;
+    if (notes != null) await _loadAnnotations(notes);
+  }
+
   Future<void> _openAnnotationNote(ReviewAnnotation annotation) async {
     await _ready;
     if (!mounted) return;
@@ -1223,7 +1247,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         codec.dispose();
         buffer.dispose();
         if (png == null) return null;
-        final support = await getApplicationSupportDirectory();
+        final support = await appSupportDirectory();
         final directory = Directory(
           '${support.path}/ParticleDesk/review_regions',
         );
@@ -2221,22 +2245,192 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     }
     if (!mounted) return;
     final page = _controller.pageNumber ?? pageNumber;
-    final matrix = _controller.calcMatrixFitWidthForPage(pageNumber: page);
-    if (matrix != null) _controller.value = matrix;
+    _fitWidthInSafeArea(page);
   }
 
   void _fitPage(String mode) {
     if (!_controller.isReady) return;
     final page = _controller.pageNumber ?? _currentPage ?? 1;
-    final matrix = mode == 'width'
-        ? _controller.calcMatrixFitWidthForPage(pageNumber: page)
-        : _controller.calcMatrixForFit(pageNumber: page);
+    if (mode == 'width') {
+      _fitWidthInSafeArea(page);
+      return;
+    }
+    final matrix = _controller.calcMatrixForFit(pageNumber: page);
     if (matrix != null) _controller.value = matrix;
   }
 
-  bool _annotationSheetOnly(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    return size.width < 700 || size.height < 500;
+  /// Fit-width that respects the horizontal safe area.
+  ///
+  /// The viewer itself is full-bleed, so pinch-zoom can still put the page
+  /// under the notch; only the resting fit leaves the notch clear. Scaling the
+  /// stock fit matrix is enough: it spans the full view width, so shrinking it
+  /// by `usable / viewWidth` and shifting it right by the left inset lands the
+  /// page exactly between the insets without touching pdfrx internals.
+  void _fitWidthInSafeArea(int pageNumber) {
+    if (!_controller.isReady) return;
+    final view = _controller.viewSize;
+    final base = _controller.calcMatrixFitWidthForPage(pageNumber: pageNumber);
+    if (base == null || view.width <= 0) return;
+    final insets = MediaQuery.paddingOf(context);
+    final usable = view.width - insets.left - insets.right;
+    final baseWidth = view.width - 2 * _pdfPageMargin;
+    if (usable <= 0 || baseWidth <= 0) {
+      _controller.value = base;
+      return;
+    }
+    final scale = usable / baseWidth;
+    final dx = insets.left - _pdfPageMargin * scale;
+    final dy = (1 - scale) * view.height / 2;
+    _controller.value = Matrix4.translationValues(dx, dy, 0)
+      ..multiply(Matrix4.diagonal3Values(scale, scale, 1))
+      ..multiply(base);
+  }
+
+  /// Compact windows get the inspector as a sheet; medium and expanded
+  /// windows dock it. Rotation cannot change this class.
+  bool _annotationSheetOnly(BuildContext context) => context.isCompactLayout;
+
+  void _toggleAnnotateMode() {
+    setState(() {
+      _annotateMode = !_annotateMode;
+      if (!_annotateMode) {
+        // Leaving annotate mode always returns to plain reading.
+        _highlightMode = false;
+        _regionMode = false;
+        _autoHighlightTimer?.cancel();
+      }
+    });
+  }
+
+  void _onReaderMenu(String value) {
+    switch (value) {
+      case 'undo':
+        unawaited(_undo());
+      case 'redo':
+        unawaited(_redo());
+      case 'fit-width':
+        _fitPage('width');
+      case 'fit-page':
+        _fitPage('page');
+      case 'dark':
+        setState(() => _pdfDarkMode = !_pdfDarkMode);
+      case 'zen':
+        setState(() => _zenMode = true);
+      case 'outline':
+        if (_annotationSheetOnly(context)) {
+          _openAnnotationsSheet(tab: 1);
+        } else {
+          setState(() {
+            _showAnnotations = true;
+            _sidebarTab = 1;
+          });
+        }
+      case 'inspector':
+        if (_annotationSheetOnly(context)) {
+          _openAnnotationsSheet();
+        } else {
+          setState(() => _showAnnotations = !_showAnnotations);
+        }
+      case 'official':
+        _openExternally();
+    }
+  }
+
+  /// Contextual annotation strip. It is the only place annotation tools live,
+  /// so reading mode stays free of them and the top bar keeps one row.
+  Widget _annotateStrip(BuildContext context) {
+    final strings = AppScope.of(context).strings;
+    final palette = context.palette;
+    return Material(
+      color: palette.surface,
+      child: SafeArea(
+        top: false,
+        left: false,
+        right: false,
+        child: Container(
+          height: 52,
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: palette.divider)),
+          ),
+          child: Row(
+            children: [
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: _highlightMode
+                    ? strings.reviewHighlightModeOn
+                    : strings.reviewHighlight,
+                isSelected: _highlightMode,
+                onPressed: _saving || _addingHighlight
+                    ? null
+                    : () => unawaited(_highlightButtonPressed()),
+                icon: _highlightGlyph(
+                  _highlightMode ? Icons.border_color : Icons.highlight_alt,
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: strings.reviewHighlightColor,
+                icon: _highlightGlyph(Icons.palette_outlined),
+                onSelected: (color) => setState(() => _highlightColor = color),
+                itemBuilder: (context) => [
+                  for (final color in const ['yellow', 'green', 'pink', 'blue'])
+                    PopupMenuItem(
+                      value: color,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: _annotationColor(color),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(strings.reviewHighlightColorName(color)),
+                          if (color == _highlightColor) ...[
+                            const Spacer(),
+                            const Icon(Icons.check, size: 16),
+                          ],
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              IconButton(
+                tooltip: _regionMode
+                    ? strings.commonCancel
+                    : strings.reviewRegionSelect,
+                isSelected: _regionMode,
+                onPressed: () => setState(() {
+                  _regionMode = !_regionMode;
+                  if (_regionMode) _highlightMode = false;
+                }),
+                icon: Icon(
+                  _regionMode ? Icons.close : Icons.crop_free,
+                  size: 20,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: strings.commonUndo,
+                onPressed: _undoStack.isEmpty ? null : () => unawaited(_undo()),
+                icon: const Icon(Icons.undo, size: 20),
+              ),
+              IconButton(
+                tooltip: strings.commonRedo,
+                onPressed: _redoStack.isEmpty ? null : () => unawaited(_redo()),
+                icon: const Icon(Icons.redo, size: 20),
+              ),
+              TextButton(
+                onPressed: _toggleAnnotateMode,
+                child: Text(strings.commonDone),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _openAnnotationsSheet({int tab = 0}) {
@@ -2249,9 +2443,16 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         data: _pdfDarkMode ? AppTheme.dark() : Theme.of(context),
         child: StatefulBuilder(
           builder: (context, setSheetState) => SizedBox(
-            height: MediaQuery.sizeOf(context).height * 0.65,
+            // The sheet is the inspector host on phones; it needs most of the
+            // height now that it carries Contents, Annotations and Notes.
+            height: MediaQuery.sizeOf(context).height * 0.85,
             child: _ReviewAnnotationSidebar(
               annotations: _annotations,
+              notes: _reviewNotes,
+              onOpenNoteRecord: (note) {
+                Navigator.of(sheetContext).pop();
+                unawaited(_openNoteRecord(note));
+              },
               palette: _pdfDarkMode ? AppPalette.dark : context.palette,
               strings: AppScope.of(context).strings,
               onOpen: (annotation) {
@@ -2317,8 +2518,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   Widget build(BuildContext context) {
     final palette = _pdfDarkMode ? AppPalette.dark : context.palette;
     final strings = AppScope.of(context).strings;
-    final narrow = MediaQuery.sizeOf(context).width < 600;
-    final sheetOnly = _annotationSheetOnly(context);
+    final compactLayout = context.isCompactLayout;
     return Theme(
       data: _pdfDarkMode ? AppTheme.dark() : Theme.of(context),
       child: Scaffold(
@@ -2326,8 +2526,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         appBar: _zenMode
             ? null
             : AppBar(
-                toolbarHeight: narrow ? 48 : null,
-                titleSpacing: narrow ? 0 : null,
+                toolbarHeight: 52,
+                titleSpacing: 0,
                 title: Text(
                   widget.title,
                   maxLines: 1,
@@ -2335,28 +2535,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                   textScaler: MediaQuery.textScalerOf(context)
                       .clamp(maxScaleFactor: 1.3),
                 ),
+                // One row: page, search, annotate mode, everything else in
+                // the overflow. Annotation tools live in the annotate strip.
                 actions: [
-                  if (!narrow) ...[
-                    IconButton(
-                      tooltip: strings.commonUndo,
-                      onPressed: _undoStack.isEmpty
-                          ? null
-                          : () => unawaited(_undo()),
-                      icon: const Icon(Icons.undo, size: 19),
-                    ),
-                    IconButton(
-                      tooltip: strings.commonRedo,
-                      onPressed: _redoStack.isEmpty
-                          ? null
-                          : () => unawaited(_redo()),
-                      icon: const Icon(Icons.redo, size: 19),
-                    ),
-                  ],
-                  IconButton(
-                    tooltip: strings.reviewSearch,
-                    onPressed: _toggleSearch,
-                    icon: const Icon(Icons.search, size: 19),
-                  ),
                   TextButton(
                     onPressed: () => unawaited(_openPageDialog()),
                     child: Text(
@@ -2364,267 +2545,78 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                       style: Theme.of(context).textTheme.labelMedium,
                     ),
                   ),
-                  if (!narrow) ...[
-                    PopupMenuButton<String>(
-                      tooltip: strings.reviewFitWidth,
-                      icon: const Icon(Icons.fit_screen, size: 19),
-                      onSelected: _fitPage,
-                      itemBuilder: (context) => [
-                        PopupMenuItem(
-                          value: 'width',
-                          child: Text(strings.reviewFitWidth),
-                        ),
-                        PopupMenuItem(
-                          value: 'page',
-                          child: Text(strings.reviewFitPage),
-                        ),
-                      ],
-                    ),
-                    IconButton(
-                      tooltip: _pdfDarkMode
-                          ? strings.reviewPdfLightMode
-                          : strings.reviewPdfDarkMode,
-                      onPressed: () =>
-                          setState(() => _pdfDarkMode = !_pdfDarkMode),
-                      icon: Icon(
-                        _pdfDarkMode
-                            ? Icons.light_mode_outlined
-                            : Icons.dark_mode_outlined,
-                        size: 19,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: strings.reviewFullScreen,
-                      onPressed: () => setState(() => _zenMode = true),
-                      icon: const Icon(Icons.open_in_full, size: 20),
-                    ),
-                    IconButton(
-                      tooltip: strings.reviewOutlineTab,
-                      onPressed: () {
-                        if (sheetOnly) {
-                          _openAnnotationsSheet(tab: 1);
-                        } else {
-                          setState(() {
-                            _showAnnotations = true;
-                            _sidebarTab = 1;
-                          });
-                        }
-                      },
-                      icon: const Icon(Icons.list_alt, size: 19),
-                    ),
-                    IconButton(
-                      tooltip: _regionMode
-                          ? strings.commonCancel
-                          : strings.reviewRegionSelect,
-                      onPressed: () {
-                        setState(() {
-                          _regionMode = !_regionMode;
-                          if (_regionMode) _highlightMode = false;
-                        });
-                      },
-                      icon: Icon(
-                        _regionMode ? Icons.close : Icons.crop_free,
-                        size: 19,
-                        color: _regionMode
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
-                      ),
-                    ),
-                  ],
-                  if (narrow) ...[
-                    IconButton(
-                      tooltip: _regionMode
-                          ? strings.commonCancel
-                          : strings.reviewRegionSelect,
-                      onPressed: () {
-                        setState(() {
-                          _regionMode = !_regionMode;
-                          if (_regionMode) _highlightMode = false;
-                        });
-                      },
-                      icon: Icon(
-                        _regionMode ? Icons.close : Icons.crop_free,
-                        size: 19,
-                        color: _regionMode
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: strings.reviewFullScreen,
-                      onPressed: () => setState(() => _zenMode = true),
-                      icon: const Icon(Icons.open_in_full, size: 20),
-                    ),
-                  ],
                   IconButton(
-                    tooltip: _highlightMode
-                        ? strings.reviewHighlightModeOn
-                        : strings.reviewHighlight,
-                    onPressed: _saving || _addingHighlight
-                        ? null
-                        : () => unawaited(_highlightButtonPressed()),
-                    icon: _highlightGlyph(
-                      _highlightMode ? Icons.border_color : Icons.highlight_alt,
-                    ),
+                    tooltip: strings.reviewSearch,
+                    onPressed: _toggleSearch,
+                    icon: const Icon(Icons.search, size: 20),
                   ),
-                  if (!narrow) ...[
-                    PopupMenuButton<String>(
-                      tooltip: strings.reviewHighlightColor,
-                      icon: _highlightGlyph(Icons.palette_outlined),
-                      onSelected: (color) =>
-                          setState(() => _highlightColor = color),
-                      itemBuilder: (context) => [
-                        for (final color in const [
-                          'yellow',
-                          'green',
-                          'pink',
-                          'blue',
-                        ])
-                          PopupMenuItem(
-                            value: color,
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 12,
-                                  height: 12,
-                                  decoration: BoxDecoration(
-                                    color: _annotationColor(color),
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(strings.reviewHighlightColorName(color)),
-                                if (color == _highlightColor) ...[
-                                  const Spacer(),
-                                  const Icon(Icons.check, size: 16),
-                                ],
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                    IconButton(
-                      tooltip: strings.reviewAnnotationSidebar,
-                      onPressed: () {
-                        if (sheetOnly) {
-                          _openAnnotationsSheet();
-                        } else {
-                          setState(() => _showAnnotations = !_showAnnotations);
-                        }
-                      },
-                      icon: Badge.count(
-                        count: _annotations.length,
-                        isLabelVisible: _annotations.isNotEmpty,
+                  IconButton(
+                    tooltip: _annotateMode
+                        ? strings.reviewAnnotateModeExit
+                        : strings.reviewAnnotateMode,
+                    isSelected: _annotateMode,
+                    onPressed: _toggleAnnotateMode,
+                    icon: const Icon(Icons.draw_outlined, size: 20),
+                    selectedIcon: const Icon(Icons.draw, size: 20),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: strings.commonMoreOptions,
+                    icon: const Icon(Icons.more_vert, size: 20),
+                    onSelected: _onReaderMenu,
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'undo',
+                        enabled: _undoStack.isNotEmpty,
+                        child: Text(strings.commonUndo),
+                      ),
+                      PopupMenuItem(
+                        value: 'redo',
+                        enabled: _redoStack.isNotEmpty,
+                        child: Text(strings.commonRedo),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'fit-width',
+                        child: Text(strings.reviewFitWidth),
+                      ),
+                      PopupMenuItem(
+                        value: 'fit-page',
+                        child: Text(strings.reviewFitPage),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'outline',
+                        child: Text(strings.reviewOutlineTab),
+                      ),
+                      PopupMenuItem(
+                        value: 'inspector',
+                        child: Text(strings.reviewAnnotationSidebar),
+                      ),
+                      PopupMenuItem(
+                        value: 'dark',
+                        // Icon only: sun/moon carries the state without a label.
                         child: Icon(
-                          _showAnnotations
-                              ? Icons.view_sidebar
-                              : Icons.view_sidebar_outlined,
-                          size: 19,
+                          _pdfDarkMode
+                              ? Icons.light_mode_outlined
+                              : Icons.dark_mode_outlined,
+                          size: 20,
                         ),
                       ),
-                    ),
-                    IconButton(
-                      tooltip: strings.reviewOpenOfficial,
-                      icon: const Icon(Icons.open_in_new, size: 19),
-                      onPressed: _openExternally,
-                    ),
-                  ] else
-                    PopupMenuButton<String>(
-                      tooltip: strings.commonMoreOptions,
-                      icon: const Icon(Icons.more_horiz, size: 20),
-                      onSelected: (value) {
-                        if (value.startsWith('color:')) {
-                          setState(() => _highlightColor = value.substring(6));
-                        } else if (value == 'sidebar') {
-                          _openAnnotationsSheet();
-                        } else if (value == 'official') {
-                          _openExternally();
-                        } else if (value == 'undo') {
-                          unawaited(_undo());
-                        } else if (value == 'redo') {
-                          unawaited(_redo());
-                        } else if (value == 'fit-width' ||
-                            value == 'fit-page') {
-                          _fitPage(value == 'fit-width' ? 'width' : 'page');
-                        } else if (value == 'dark') {
-                          setState(() => _pdfDarkMode = !_pdfDarkMode);
-                        } else if (value == 'outline') {
-                          _openAnnotationsSheet(tab: 1);
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        PopupMenuItem(
-                          value: 'undo',
-                          enabled: _undoStack.isNotEmpty,
-                          child: Text(strings.commonUndo),
-                        ),
-                        PopupMenuItem(
-                          value: 'redo',
-                          enabled: _redoStack.isNotEmpty,
-                          child: Text(strings.commonRedo),
-                        ),
-                        PopupMenuItem(
-                          value: 'fit-width',
-                          child: Text(strings.reviewFitWidth),
-                        ),
-                        PopupMenuItem(
-                          value: 'fit-page',
-                          child: Text(strings.reviewFitPage),
-                        ),
-                        PopupMenuItem(
-                          value: 'dark',
-                          child: Icon(
-                            _pdfDarkMode
-                                ? Icons.light_mode_outlined
-                                : Icons.dark_mode_outlined,
-                            size: 20,
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: 'outline',
-                          child: Text(strings.reviewOutlineTab),
-                        ),
-                        const PopupMenuDivider(),
-                        for (final color in const [
-                          'yellow',
-                          'green',
-                          'pink',
-                          'blue',
-                        ])
-                          PopupMenuItem(
-                            value: 'color:$color',
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 12,
-                                  height: 12,
-                                  decoration: BoxDecoration(
-                                    color: _annotationColor(color),
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(strings.reviewHighlightColorName(color)),
-                                if (color == _highlightColor) ...[
-                                  const Spacer(),
-                                  const Icon(Icons.check, size: 16),
-                                ],
-                              ],
-                            ),
-                          ),
-                        const PopupMenuDivider(),
-                        PopupMenuItem(
-                          value: 'sidebar',
-                          child: Text(strings.reviewAnnotationSidebar),
-                        ),
-                        PopupMenuItem(
-                          value: 'official',
-                          child: Text(strings.reviewOpenOfficial),
-                        ),
-                      ],
-                    ),
+                      PopupMenuItem(
+                        value: 'zen',
+                        child: Text(strings.reviewFullScreen),
+                      ),
+                      PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'official',
+                        child: Text(strings.reviewOpenOfficial),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 4),
                 ],
               ),
+
         body: Column(
           children: [
             if (_searchOpen) _searchBar(context),
@@ -2636,12 +2628,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                       if (!_sidebarInitialized) {
                         _sidebarInitialized = true;
                         if (!_hadReadingState) {
-                          // A phone in landscape is wide but short; opening the 320 px
-                          // sidebar there leaves too little room for the page. Tablets and
-                          // desktops still get the inline sidebar.
-                          _showAnnotations =
-                              constraints.maxWidth >= 700 &&
-                              constraints.maxHeight >= 500;
+                          // The inspector is docked for medium and expanded
+                          // windows and a sheet on phones, so rotation never
+                          // changes where it lives.
+                          _showAnnotations = !compactLayout;
                         }
                       }
                       final maxSidebar = (constraints.maxWidth - 260).clamp(
@@ -2654,6 +2644,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                       );
                       return SafeArea(
                         top: false,
+                        left: false,
+                        right: false,
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -2680,25 +2672,37 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                                 ],
                               ),
                             ),
-                            if (_showAnnotations &&
-                                !_zenMode &&
-                                constraints.maxWidth >= 700 &&
-                                constraints.maxHeight >= 500) ...[
-                              CollapsibleSidePanel(
+                            if (!_zenMode && !compactLayout) ...[
+                              CollapsibleSidebar(
+                                expanded: _showAnnotations,
                                 width: sidebarWidth,
                                 handleOnLeft: true,
+                                expandIcon: Icons.keyboard_double_arrow_left,
+                                railIcon: Icons.list_alt,
+                                railTooltip: strings.sidebarShow,
                                 tooltip: strings.reviewAnnotationSidebar,
+                                onExpand: () =>
+                                    setState(() => _showAnnotations = true),
                                 onDrag: (delta) => setState(() {
-                                  _sidebarWidth = (_sidebarWidth - delta).clamp(
+                                  final next = (_sidebarWidth - delta).clamp(
                                     220.0,
                                     maxSidebar,
                                   );
+                                  // Dragging past the minimum collapses to the
+                                  // rail, like the Notes/Search sidebars.
+                                  if (delta > 0 && next <= 222) {
+                                    _showAnnotations = false;
+                                    return;
+                                  }
+                                  _sidebarWidth = next;
                                 }),
                                 onReset: () =>
                                     setState(() => _sidebarWidth = 320),
                                 child: RepaintBoundary(
                                   child: _ReviewAnnotationSidebar(
                                     annotations: _annotations,
+                                    notes: _reviewNotes,
+                                    onOpenNoteRecord: _openNoteRecord,
                                     palette: palette,
                                     strings: strings,
                                     onOpen: (annotation) {
@@ -2736,6 +2740,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                                     outline: _outline,
                                     outlineLoading: _outlineLoading,
                                     onOpenOutline: _openOutline,
+                                    onCollapse: () => setState(
+                                      () => _showAnnotations = false,
+                                    ),
                                     onRemoveTag: (annotation, tag) => unawaited(
                                       _removeAnnotationTag(annotation, tag),
                                     ),
@@ -2766,6 +2773,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                       right: 0,
                       bottom: 0,
                       child: SafeArea(
+                        left: false,
+                        right: false,
                         minimum: const EdgeInsets.only(bottom: 12),
                         child: Center(
                           child: Material(
@@ -2813,6 +2822,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                 ],
               ),
             ),
+            if (_annotateMode && !_zenMode) _annotateStrip(context),
           ],
         ),
       ),
@@ -2862,7 +2872,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         HardwareKeyboard.instance.isControlPressed;
     final secondaryClick = event.buttons == kSecondaryMouseButton;
     if (!controlClick && !secondaryClick) return;
-    debugPrint(
+    _reviewLog(
       'REVIEW menu: pointer buttons=${event.buttons} '
       'control=${HardwareKeyboard.instance.isControlPressed} '
       'secondary=$secondaryClick',
@@ -2956,7 +2966,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   }
 
   Widget _pdfSurface(BuildContext context) {
-    debugPrint(
+    _reviewLog(
       'REVIEW open: build path=${widget.path} exists=${File(widget.path).existsSync()}',
     );
     final documentRef = _pdfDocumentRef ??= PdfDocumentRefFile(widget.path);
@@ -2968,11 +2978,12 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         key: ValueKey<String>('pdf-${widget.path}-$_pdfEpoch'),
         controller: _controller,
         params: PdfViewerParams(
+          margin: _pdfPageMargin,
           backgroundColor: _pdfDarkMode
               ? Colors.white
               : context.palette.background,
           errorBannerBuilder: (context, error, stack, ref) {
-            debugPrint('REVIEW open: PDF error $error');
+            _reviewLog('REVIEW open: PDF error $error');
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -2983,7 +2994,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           onViewerReady: (document, controller) {
             _pdfRetryTimer?.cancel();
             _pdfReady = true;
-            debugPrint(
+            _reviewLog(
               'REVIEW open: viewer ready ${_openWatch.elapsedMilliseconds}ms',
             );
             _searcher ??= PdfTextSearcher(_controller);
@@ -3077,6 +3088,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
 class _ReviewAnnotationSidebar extends StatefulWidget {
   const _ReviewAnnotationSidebar({
     required this.annotations,
+    required this.notes,
+    required this.onOpenNoteRecord,
     required this.palette,
     required this.strings,
     required this.onOpen,
@@ -3088,6 +3101,7 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
     required this.onToggleSelectionMode,
     required this.onToggleSelection,
     required this.onAddSelected,
+    this.onCollapse,
     required this.tabIndex,
     required this.onTabChanged,
     required this.outline,
@@ -3101,6 +3115,8 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
   });
 
   final List<ReviewAnnotation> annotations;
+  final List<NoteRecord> notes;
+  final ValueChanged<NoteRecord> onOpenNoteRecord;
   final AppPalette palette;
   final AppStrings strings;
   final ValueChanged<ReviewAnnotation> onOpen;
@@ -3112,6 +3128,7 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
   final VoidCallback onToggleSelectionMode;
   final ValueChanged<String> onToggleSelection;
   final VoidCallback onAddSelected;
+  final VoidCallback? onCollapse;
   final int tabIndex;
   final ValueChanged<int> onTabChanged;
   final List<PdfOutlineNode> outline;
@@ -3135,6 +3152,8 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
   String? _tagFilter;
 
   List<ReviewAnnotation> get annotations => widget.annotations;
+  List<NoteRecord> get notes => widget.notes;
+  ValueChanged<NoteRecord> get onOpenNoteRecord => widget.onOpenNoteRecord;
   AppPalette get palette => widget.palette;
   AppStrings get strings => widget.strings;
   ValueChanged<ReviewAnnotation> get onOpen => widget.onOpen;
@@ -3146,6 +3165,7 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
   VoidCallback get onToggleSelectionMode => widget.onToggleSelectionMode;
   ValueChanged<String> get onToggleSelection => widget.onToggleSelection;
   VoidCallback get onAddSelected => widget.onAddSelected;
+  VoidCallback? get onCollapse => widget.onCollapse;
   int get tabIndex => widget.tabIndex;
   ValueChanged<int> get onTabChanged => widget.onTabChanged;
   List<PdfOutlineNode> get outline => widget.outline;
@@ -3198,6 +3218,91 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
       _filterController.text.trim().isNotEmpty ||
       _colorFilter != null ||
       _tagFilter != null;
+
+  Widget _notesList(BuildContext context) {
+    if (notes.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Text(
+            strings.reviewNotesEmpty,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: palette.textSecondary),
+          ),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.all(8),
+      itemCount: notes.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 4),
+      itemBuilder: (context, index) {
+        final note = notes[index];
+        final page = _notePage(note);
+        return InkWell(
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: palette.accent.withValues(alpha: 0.08),
+          onTap: () => onOpenNoteRecord(note),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: palette.divider),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        note.title.trim().isEmpty
+                            ? strings.reviewNotesTab
+                            : note.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    if (page != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        'p.$page',
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: palette.textSecondary),
+                      ),
+                    ],
+                  ],
+                ),
+                if (note.bodyPlain.trim().isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    note.bodyPlain.trim(),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: palette.textSecondary),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  int? _notePage(NoteRecord note) {
+    for (final anchor in note.anchors) {
+      if (anchor.targetKind != NoteTargetKinds.review) continue;
+      final page = anchor.context?['pageNumber'];
+      if (page is int) return page;
+      if (page is num) return page.toInt();
+    }
+    return null;
+  }
 
   Widget _outlineList(BuildContext context) {
     if (outlineLoading) {
@@ -3319,190 +3424,207 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
                     size: 18,
                   ),
                 ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => onTabChanged(0),
-                    child: Text(
-                      strings.reviewAnnotationsTab,
-                      style: TextStyle(
-                        fontWeight: tabIndex == 0
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                        color: tabIndex == 0
-                            ? palette.textPrimary
-                            : palette.textSecondary,
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => onTabChanged(1),
-                    child: Text(
-                      strings.reviewOutlineTab,
-                      style: TextStyle(
-                        fontWeight: tabIndex == 1
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                        color: tabIndex == 1
-                            ? palette.textPrimary
-                            : palette.textSecondary,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-            child: TextField(
-              controller: _filterController,
-              style: Theme.of(context).textTheme.bodySmall,
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: strings.reviewFilterHint,
-                prefixIcon: const Icon(Icons.filter_alt_outlined, size: 16),
-                prefixIconConstraints: const BoxConstraints(
-                  minWidth: 28,
-                  minHeight: 20,
-                ),
-                suffixIcon: _hasFilter
-                    ? IconButton(
-                        tooltip: strings.reviewFilterClear,
-                        onPressed: () => setState(() {
-                          _filterController.clear();
-                          _colorFilter = null;
-                          _tagFilter = null;
-                        }),
-                        icon: const Icon(Icons.close, size: 16),
-                      )
-                    : null,
-                border: const OutlineInputBorder(),
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: PopupMenuButton<String>(
-                    tooltip: strings.reviewFilterColor,
-                    popUpAnimationStyle: AnimationStyle.noAnimation,
-                    onSelected: (value) => setState(
-                      () => _colorFilter = value == 'all' ? null : value,
-                    ),
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'all',
-                        child: Text(strings.reviewFilterAllColors),
-                      ),
-                      for (final color in const [
-                        'yellow',
-                        'green',
-                        'pink',
-                        'blue',
-                      ])
-                        PopupMenuItem(
-                          value: color,
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 10,
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  color: _annotationColorForLabel(color),
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                              const SizedBox(width: 7),
-                              Text(strings.reviewHighlightColorName(color)),
-                            ],
-                          ),
-                        ),
-                    ],
-                    child: _FilterMenuLabel(
-                      icon: Icons.palette_outlined,
-                      label: _colorFilter == null
-                          ? strings.reviewFilterColor
-                          : strings.reviewHighlightColorName(_colorFilter!),
-                      active: _colorFilter != null,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: PopupMenuButton<String>(
-                    tooltip: strings.reviewFilterTag,
-                    popUpAnimationStyle: AnimationStyle.noAnimation,
-                    onSelected: (value) => setState(
-                      () => _tagFilter = value == 'all' ? null : value,
-                    ),
-                    itemBuilder: (context) {
-                      final tags = {
-                        for (final annotation in annotations)
-                          ...annotation.tags,
-                      }.toList()..sort();
-                      return [
-                        PopupMenuItem(
-                          value: 'all',
-                          child: Text(strings.reviewFilterAllTags),
-                        ),
-                        for (final tag in tags)
-                          PopupMenuItem(value: tag, child: Text(tag)),
-                      ];
-                    },
-                    child: _FilterMenuLabel(
-                      icon: Icons.sell_outlined,
-                      label: _tagFilter ?? strings.reviewFilterTag,
-                      active: _tagFilter != null,
-                    ),
-                  ),
-                ),
-                if (_hasFilter)
+                if (onCollapse != null)
                   IconButton(
-                    tooltip: strings.reviewFilterClear,
-                    onPressed: () => setState(() {
-                      _filterController.clear();
-                      _colorFilter = null;
-                      _tagFilter = null;
-                    }),
-                    icon: const Icon(Icons.close, size: 18),
+                    tooltip: strings.sidebarHide,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: onCollapse,
+                    // Docked on the right: collapsing moves the panel towards
+                    // the right edge, matching the rail chevron.
+                    icon: const Icon(
+                      Icons.keyboard_double_arrow_right,
+                      size: 18,
+                    ),
                   ),
               ],
             ),
           ),
-          if (selectionMode && tabIndex == 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+            child: Row(
+              children: [
+                for (final tab in const [
+                  (0, 'annotations'),
+                  (1, 'contents'),
+                  (2, 'notes'),
+                ])
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => onTabChanged(tab.$1),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 34),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        switch (tab.$2) {
+                          'contents' => strings.reviewOutlineTab,
+                          'notes' => strings.reviewNotesTab,
+                          _ => strings.reviewAnnotationsTab,
+                        },
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: tabIndex == tab.$1
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                          color: tabIndex == tab.$1
+                              ? palette.textPrimary
+                              : palette.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (tabIndex == 0) ...[
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 12, 8),
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+              child: TextField(
+                controller: _filterController,
+                style: Theme.of(context).textTheme.bodySmall,
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: strings.reviewFilterHint,
+                  prefixIcon: const Icon(Icons.filter_alt_outlined, size: 16),
+                  prefixIconConstraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 20,
+                  ),
+                  suffixIcon: _hasFilter
+                      ? IconButton(
+                          tooltip: strings.reviewFilterClear,
+                          onPressed: () => setState(() {
+                            _filterController.clear();
+                            _colorFilter = null;
+                            _tagFilter = null;
+                          }),
+                          icon: const Icon(Icons.close, size: 16),
+                        )
+                      : null,
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      strings.reviewSelectedHighlights(selectedIds.length),
-                      style: Theme.of(context).textTheme.bodySmall
-                          ?.copyWith(color: palette.textSecondary),
+                    child: PopupMenuButton<String>(
+                      tooltip: strings.reviewFilterColor,
+                      popUpAnimationStyle: AnimationStyle.noAnimation,
+                      onSelected: (value) => setState(
+                        () => _colorFilter = value == 'all' ? null : value,
+                      ),
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'all',
+                          child: Text(strings.reviewFilterAllColors),
+                        ),
+                        for (final color in const [
+                          'yellow',
+                          'green',
+                          'pink',
+                          'blue',
+                        ])
+                          PopupMenuItem(
+                            value: color,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    color: _annotationColorForLabel(color),
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                                const SizedBox(width: 7),
+                                Text(strings.reviewHighlightColorName(color)),
+                              ],
+                            ),
+                          ),
+                      ],
+                      child: _FilterMenuLabel(
+                        icon: Icons.palette_outlined,
+                        label: _colorFilter == null
+                            ? strings.reviewFilterColor
+                            : strings.reviewHighlightColorName(_colorFilter!),
+                        active: _colorFilter != null,
+                      ),
                     ),
                   ),
-                  TextButton(
-                    onPressed: selectedIds.isEmpty ? null : onAddSelected,
-                    child: Text(strings.reviewAddSelectedHighlights),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: PopupMenuButton<String>(
+                      tooltip: strings.reviewFilterTag,
+                      popUpAnimationStyle: AnimationStyle.noAnimation,
+                      onSelected: (value) => setState(
+                        () => _tagFilter = value == 'all' ? null : value,
+                      ),
+                      itemBuilder: (context) {
+                        final tags = {
+                          for (final annotation in annotations)
+                            ...annotation.tags,
+                        }.toList()..sort();
+                        return [
+                          PopupMenuItem(
+                            value: 'all',
+                            child: Text(strings.reviewFilterAllTags),
+                          ),
+                          for (final tag in tags)
+                            PopupMenuItem(value: tag, child: Text(tag)),
+                        ];
+                      },
+                      child: _FilterMenuLabel(
+                        icon: Icons.sell_outlined,
+                        label: _tagFilter ?? strings.reviewFilterTag,
+                        active: _tagFilter != null,
+                      ),
+                    ),
                   ),
+                  if (_hasFilter)
+                    IconButton(
+                      tooltip: strings.reviewFilterClear,
+                      onPressed: () => setState(() {
+                        _filterController.clear();
+                        _colorFilter = null;
+                        _tagFilter = null;
+                      }),
+                      icon: const Icon(Icons.close, size: 18),
+                    ),
                 ],
               ),
             ),
+            if (selectionMode && tabIndex == 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 12, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        strings.reviewSelectedHighlights(selectedIds.length),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: palette.textSecondary),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: selectedIds.isEmpty ? null : onAddSelected,
+                      child: Text(strings.reviewAddSelectedHighlights),
+                    ),
+                  ],
+                ),
+              ),
+          ],
           Divider(height: 1, color: palette.divider),
           Expanded(
-            child: tabIndex == 1
+            child: tabIndex == 2
+                ? _notesList(context)
+                : tabIndex == 1
                 ? _outlineList(context)
                 : ordered.isEmpty
                 ? Center(
@@ -4087,6 +4209,11 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
   Offset? _startLocal;
   Rect? _latest;
   _RegionHandle _handle = _RegionHandle.move;
+  // The pan recognizer only reports after its slop, by which time the pointer
+  // has already left the 16 px handle band. The handle and the origin are
+  // therefore taken from the pointer-down event.
+  Offset? _downLocal;
+  _RegionHandle? _downHandle;
   MouseCursor _cursor = SystemMouseCursors.move;
 
   _RegionHandle _hitTest(Offset point, Size size) {
@@ -4178,10 +4305,17 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
         onLongPress: widget.onLongPress,
         onSecondaryTapDown: (details) =>
             widget.onContextMenu(details.globalPosition),
+        onPanDown: (details) {
+          final box = context.findRenderObject();
+          if (box is! RenderBox) return;
+          _downLocal = details.localPosition;
+          _downHandle = _hitTest(details.localPosition, box.size);
+        },
         onPanStart: (details) {
           final box = context.findRenderObject();
           if (box is! RenderBox) return;
-          final handle = _hitTest(details.localPosition, box.size);
+          final handle =
+              _downHandle ?? _hitTest(details.localPosition, box.size);
           // A finger drag on the region body is almost always an attempt to
           // scroll the page, not to move the region. Keep touch movement
           // available only through the explicit handles.
@@ -4194,7 +4328,7 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
             return;
           }
           _start = widget.rect;
-          _startLocal = details.localPosition;
+          _startLocal = _downLocal ?? details.localPosition;
           _latest = widget.rect;
           _handle = handle;
           _cursor = _cursorFor(_handle);
@@ -4211,6 +4345,8 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
           _start = null;
           _startLocal = null;
           _latest = null;
+          _downLocal = null;
+          _downHandle = null;
           _handle = _RegionHandle.move;
           _cursor = SystemMouseCursors.move;
           if (latest != null) widget.onEnd(latest);
@@ -4219,6 +4355,8 @@ class _PdfRegionAdjustOverlayState extends State<_PdfRegionAdjustOverlay> {
           _start = null;
           _startLocal = null;
           _latest = null;
+          _downLocal = null;
+          _downHandle = null;
           _handle = _RegionHandle.move;
           _cursor = SystemMouseCursors.move;
         },

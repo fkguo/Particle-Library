@@ -3,12 +3,12 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../core/contract.dart';
 import '../core/errors.dart';
 import '../core/app_paths.dart';
+import '../app/boot_trace.dart';
 
 class PreparedSnapshot {
   const PreparedSnapshot({
@@ -42,9 +42,8 @@ class SnapshotStore {
     'PDG_SNAPSHOT_PATH',
   );
 
-  Future<PreparedSnapshot> prepare() async {
-    final watch = Stopwatch()..start();
-    debugPrint('SNAPSHOT prepare start');
+  Future<PreparedSnapshot> prepare({BootTrace? trace}) async {
+    trace?.mark('prepare');
     if (_pathOverride.isNotEmpty) {
       final file = File(_pathOverride);
       if (!await file.exists()) {
@@ -71,11 +70,12 @@ class SnapshotStore {
 
     Directory dir;
     try {
-      debugPrint('SNAPSHOT path start ${watch.elapsedMilliseconds}ms');
+      trace?.mark('path-start');
       final support = await appSupportDirectory();
-      debugPrint('SNAPSHOT path got ${watch.elapsedMilliseconds}ms');
+      trace?.mark('path');
       dir = Directory('${support.path}/ParticleDesk');
-      if (!await dir.exists()) await dir.create(recursive: true);
+      // create(recursive: true) is a no-op when the directory exists.
+      await dir.create(recursive: true);
     } catch (error) {
       throw AppException(
         AppErrorCode.storageUnavailable,
@@ -84,17 +84,16 @@ class SnapshotStore {
       );
     }
 
-    debugPrint('SNAPSHOT dir ${watch.elapsedMilliseconds}ms');
+    trace?.mark('dir');
     final target = File('${dir.path}/${SnapshotContract.fileName}');
-    if (await target.exists()) {
-      final correctSize =
-          await target.length() == SnapshotContract.expectedSizeBytes;
-      debugPrint('SNAPSHOT exists size=$correctSize');
+    // A single stat replaces exists() + length() on the launch path.
+    final targetStat = await target.stat();
+    trace?.mark('stat');
+    if (targetStat.type != FileSystemEntityType.notFound) {
+      final correctSize = targetStat.size == SnapshotContract.expectedSizeBytes;
       if (correctSize) {
-        final cached = await _cachedVerifiedHash(target);
-        debugPrint(
-          'SNAPSHOT cached=${cached != null} ${watch.elapsedMilliseconds}ms',
-        );
+        final cached = await _cachedVerifiedHash(target, targetStat);
+        trace?.mark('stamp');
         if (cached == SnapshotContract.expectedSha256) {
           return PreparedSnapshot(
             path: target.path,
@@ -103,8 +102,9 @@ class SnapshotStore {
           );
         }
       }
-      debugPrint('SNAPSHOT hashing');
+      trace?.mark('hash-start');
       final digest = correctSize ? await _hashFile(target) : null;
+      trace?.mark('hash');
       if (digest == SnapshotContract.expectedSha256) {
         await _writeVerificationStamp(target, digest!);
         return PreparedSnapshot(
@@ -125,9 +125,11 @@ class SnapshotStore {
       }
     }
 
-    debugPrint('SNAPSHOT copying bundled asset');
+    trace?.mark('copy-start');
     final bytes = await _loadAsset();
+    trace?.mark('asset');
     final digest = await Isolate.run(() => sha256.convert(bytes).toString());
+    trace?.mark('verify');
     if (digest != SnapshotContract.expectedSha256) {
       throw AppException(
         AppErrorCode.snapshotMismatch,
@@ -150,6 +152,7 @@ class SnapshotStore {
       );
     }
     await _writeVerificationStamp(target, digest);
+    trace?.mark('install');
     return PreparedSnapshot(
       path: target.path,
       sha256: digest,
@@ -159,13 +162,12 @@ class SnapshotStore {
 
   File _stampFile(File target) => File('${target.path}.verified.json');
 
-  Future<String?> _cachedVerifiedHash(File target) async {
+  Future<String?> _cachedVerifiedHash(File target, FileStat stat) async {
     try {
-      final stamp = _stampFile(target);
-      if (!await stamp.exists()) return null;
-      final decoded = jsonDecode(await stamp.readAsString());
+      // A missing stamp throws and is treated as "not verified yet", so the
+      // launch path does not pay a separate exists() call.
+      final decoded = jsonDecode(await _stampFile(target).readAsString());
       if (decoded is! Map) return null;
-      final stat = await target.stat();
       if (decoded['size'] != stat.size ||
           decoded['modifiedMs'] != stat.modified.millisecondsSinceEpoch) {
         return null;

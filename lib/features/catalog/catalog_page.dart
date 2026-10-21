@@ -56,7 +56,12 @@ class _CatalogPageState extends State<CatalogPage> {
         }),
         builder: (context, roots) {
           final query = _filter.text.trim().toLowerCase();
-          final categoryRoots = roots
+          // PDG keeps a few section rows with nothing under them; a tile for
+          // those opens an empty page, so they are not listed.
+          final visibleRoots = roots
+              .where((root) => root.hasContent)
+              .toList(growable: false);
+          final categoryRoots = visibleRoots
               .where((root) {
                 if (_category == null) return true;
                 return catalogCategoryForRoot(root) == _category;
@@ -82,7 +87,7 @@ class _CatalogPageState extends State<CatalogPage> {
               })
               .toList(growable: false);
           final counts = <ParticleCategory, int>{};
-          for (final root in roots) {
+          for (final root in visibleRoots) {
             final category = catalogCategoryForRoot(root);
             counts[category] = (counts[category] ?? 0) + 1;
           }
@@ -113,7 +118,9 @@ class _CatalogPageState extends State<CatalogPage> {
                   runSpacing: 4,
                   children: [
                     FilterChip(
-                      label: Text('${strings.commonAll} · ${roots.length}'),
+                      label: Text(
+                        '${strings.commonAll} · ${visibleRoots.length}',
+                      ),
                       selected: _category == null,
                       onSelected: (_) => setState(() {
                         _category = null;
@@ -131,16 +138,17 @@ class _CatalogPageState extends State<CatalogPage> {
                           _subcategory = null;
                         }),
                       ),
-                    FilterChip(
-                      label: Text(
-                        '${strings.catalogUncategorized} · ${counts[ParticleCategory.unknown] ?? 0}',
+                    if ((counts[ParticleCategory.unknown] ?? 0) > 0)
+                      FilterChip(
+                        label: Text(
+                          '${strings.catalogUncategorized} · ${counts[ParticleCategory.unknown] ?? 0}',
+                        ),
+                        selected: _category == ParticleCategory.unknown,
+                        onSelected: (_) => setState(() {
+                          _category = ParticleCategory.unknown;
+                          _subcategory = null;
+                        }),
                       ),
-                      selected: _category == ParticleCategory.unknown,
-                      onSelected: (_) => setState(() {
-                        _category = ParticleCategory.unknown;
-                        _subcategory = null;
-                      }),
-                    ),
                     if (_category != null &&
                         _category != ParticleCategory.unknown)
                       OutlinedButton.icon(
@@ -197,7 +205,7 @@ class _CatalogPageState extends State<CatalogPage> {
                   Insets.s,
                 ),
                 child: Text(
-                  '${strings.catalogRoots}: ${filtered.length} / ${roots.length} · ${strings.commonSnapshot} PDG 2026',
+                  '${strings.catalogRoots}: ${filtered.length} / ${visibleRoots.length} · ${strings.commonSnapshot} PDG 2026',
                   style: Theme.of(context).textTheme.bodySmall
                       ?.copyWith(color: palette.textSecondary),
                 ),

@@ -9,6 +9,7 @@ import 'app_strings.dart';
 import 'app_theme.dart';
 import '../domain/labels.dart';
 import 'bootstrap.dart';
+import 'boot_trace.dart';
 import 'debug_bridge.dart';
 import 'debug_hooks.dart';
 import 'boot_screen.dart';
@@ -31,6 +32,7 @@ class _PdgAppState extends State<PdgApp> with WidgetsBindingObserver {
   bool _loading = true;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   bool _debugBridgeRegistered = false;
+  final BootTrace _bootTrace = BootTrace('ui');
 
   @override
   void initState() {
@@ -53,6 +55,7 @@ class _PdgAppState extends State<PdgApp> with WidgetsBindingObserver {
 
   Future<void> _boot() async {
     final preview = UserStore.previewSettings();
+    _bootTrace.mark('start');
     setState(() {
       _loading = true;
       _error = null;
@@ -72,10 +75,15 @@ class _PdgAppState extends State<PdgApp> with WidgetsBindingObserver {
         });
       }
       final services = await servicesFuture;
+      _bootTrace.mark('services');
       if (!mounted) return;
       setState(() {
         _services = services;
         _loading = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _bootTrace.mark('first-frame');
+        _bootTrace.dump();
       });
       debugThemeHook = (value) => services.settings.setTheme(value);
       debugStateHook = () =>

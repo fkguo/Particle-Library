@@ -732,7 +732,55 @@ List<PdgTextSegment> _segmentPdgTextUncached(String original) {
     index++;
   }
   flushPlain(source.length);
-  return segments;
+  return _withMeasurements(segments);
+}
+
+/// Measurement values such as `185.54+-0.06` and `-0.71+-0.96+-0.19` are
+/// written with ASCII `+-` in the database. Typesetting them as `\pm` keeps
+/// the uncertainty readable instead of leaving an operator that looks like a
+/// typo. Only plain runs are touched, so an already converted expression is
+/// never rewritten.
+final RegExp _measurementPattern = RegExp(
+  r'(?<![\w.])-?\d+(?:\.\d+)?(?:\s*(?:\+-|±)\s*\d+(?:\.\d+)?)+(?![\w.])',
+);
+
+List<PdgTextSegment> _withMeasurements(List<PdgTextSegment> segments) {
+  var changed = false;
+  final result = <PdgTextSegment>[];
+  for (final segment in segments) {
+    final text = segment.text;
+    if (text == null) {
+      result.add(segment);
+      continue;
+    }
+    var cursor = 0;
+    for (final match in _measurementPattern.allMatches(text)) {
+      changed = true;
+      if (match.start > cursor) {
+        result.add(PdgTextSegment.plain(text.substring(cursor, match.start)));
+      }
+      result.add(PdgTextSegment.math(_measurementLatex(match.group(0)!)));
+      cursor = match.end;
+    }
+    if (cursor < text.length) {
+      result.add(PdgTextSegment.plain(text.substring(cursor)));
+    }
+  }
+  return changed ? result : segments;
+}
+
+String _measurementLatex(String source) {
+  final normalized = source.replaceAll('±', '+-').replaceAll(
+    RegExp(r'\s+'),
+    '',
+  );
+  final parts = normalized.split('+-');
+  final buffer = StringBuffer(parts.first);
+  for (var i = 1; i < parts.length; i++) {
+    buffer.write(r' \pm ');
+    buffer.write(parts[i]);
+  }
+  return buffer.toString();
 }
 
 /// Converts complete subexpressions separated by top-level operators. This is

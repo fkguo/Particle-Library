@@ -4,9 +4,9 @@ import 'package:pdgapp/domain/models.dart';
 import 'package:pdgapp/data/pdg_database.dart';
 import 'package:pdgapp/features/catalog/catalog_groups.dart';
 
-Entry entry(String description, String flags) => Entry({
+Entry entry(String description, String flags, {String pdgid = 'X'}) => Entry({
   'id': description.hashCode,
-  'pdgid': 'X',
+  'pdgid': pdgid,
   'description': description,
   'flags': flags,
   'data_type': 'PART',
@@ -47,7 +47,7 @@ void main() {
     expect(kind('Lambda_b()0', 'B'), CatalogGroupKind.baryonBottom);
   });
 
-  test('topic-only roots are not classified as particles', () {
+  test('topic-only roots follow their category but stay out of subgroups', () {
     final vcb = CatalogRoot(
       entry('V(cb) and V(ub) CKM Matrix Elements', 'M'),
       0,
@@ -58,8 +58,10 @@ void main() {
       0,
       0,
     );
-    expect(catalogCategoryForRoot(vcb), ParticleCategory.unknown);
-    expect(catalogCategoryForRoot(spectroscopy), ParticleCategory.unknown);
+    // Category comes from the flags, exactly as the entry page shows it.
+    expect(catalogCategoryForRoot(vcb), ParticleCategory.meson);
+    expect(catalogCategoryForRoot(spectroscopy), ParticleCategory.meson);
+    // Without particle identities they never join a meson/baryon subgroup.
     expect(catalogGroupForRoot(vcb), isNull);
     expect(catalogGroupForRoot(spectroscopy), isNull);
 
@@ -115,5 +117,42 @@ void main() {
     expect(catalogGroups(ParticleCategory.meson).length, 10);
     expect(catalogGroups(ParticleCategory.baryon).length, 10);
     expect(catalogGroups(ParticleCategory.lepton), isEmpty);
+  });
+
+  test('sections without particle identities still follow their flags', () {
+    // These roots have no particle rows; their flags still name the category.
+    expect(
+      catalogCategoryForRoot(CatalogRoot(entry('Neutrino Properties', 'L'), 12, 0)),
+      ParticleCategory.lepton,
+    );
+    expect(
+      catalogCategoryForRoot(CatalogRoot(entry('Extra Dimensions', 'S'), 8, 0)),
+      ParticleCategory.search,
+    );
+    expect(
+      catalogCategoryForRoot(CatalogRoot(entry('Charmonium', 'M'), 0, 0)),
+      ParticleCategory.meson,
+    );
+    // Only a root without any category flag is uncategorised.
+    expect(
+      catalogCategoryForRoot(CatalogRoot(entry('Miscellaneous', ''), 2, 0)),
+      ParticleCategory.unknown,
+    );
+  });
+
+  test('CKM matrix elements follow PDG Live and sit under Quarks', () {
+    final ckm = CatalogRoot(
+      entry('V(cb) and V(ub) CKM Matrix Elements', 'M', pdgid: 'S052'),
+      0,
+      0,
+    );
+    expect(catalogCategoryForRoot(ckm), ParticleCategory.quark);
+    // The override is keyed by PDG ID, not by the description.
+    final other = CatalogRoot(
+      entry('V(cb) and V(ub) CKM Matrix Elements', 'M'),
+      0,
+      0,
+    );
+    expect(catalogCategoryForRoot(other), ParticleCategory.meson);
   });
 }

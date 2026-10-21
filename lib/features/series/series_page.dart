@@ -270,7 +270,6 @@ class _SeriesBody extends StatelessWidget {
             if (view.definitionTexts.isNotEmpty)
               SectionCard(
                 title: strings.seriesDefinition,
-                subtitle: detailed ? strings.seriesDefinitionTextHint : null,
                 child: _TextBlocks(texts: view.definitionTexts),
               ),
             const SizedBox(height: Insets.m),
@@ -299,7 +298,6 @@ class _SeriesBody extends StatelessWidget {
             SectionHeading(
               strings.seriesHistory,
               key: _historyKey,
-              subtitle: detailed ? strings.seriesHistoryHint : null,
               trailing: TrendChartButton(data: trend, title: entry.description),
             ),
             Padding(

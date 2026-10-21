@@ -233,7 +233,12 @@ class PdgDatabase {
     final rows = await executor.select('''
       SELECT r.*,
              (SELECT COUNT(*) FROM pdgid c WHERE c.parent_id = r.id) AS child_count,
-             (SELECT COUNT(*) FROM pdgparticle p WHERE p.pdgid_id = r.id) AS particle_count
+             (SELECT COUNT(*) FROM pdgparticle p WHERE p.pdgid_id = r.id) AS particle_count,
+             (EXISTS (SELECT 1 FROM pdgid c WHERE c.parent_id = r.id)
+               OR EXISTS (SELECT 1 FROM pdgparticle p WHERE p.pdgid_id = r.id)
+               OR EXISTS (SELECT 1 FROM pdgtext t WHERE t.pdgid_id = r.id)
+               OR EXISTS (SELECT 1 FROM pdgmeasurement m WHERE m.pdgid_id = r.id)
+               OR EXISTS (SELECT 1 FROM pdgdecay d WHERE d.pdgid_id = r.id)) AS has_content
         FROM pdgid r
        WHERE r.parent_id IS NULL
        ORDER BY r.sort, r.id
@@ -244,6 +249,7 @@ class PdgDatabase {
           Entry(row),
           asInt(row['child_count']) ?? 0,
           asInt(row['particle_count']) ?? 0,
+          hasContent: (asInt(row['has_content']) ?? 0) != 0,
         ),
     ];
   }
@@ -1510,11 +1516,21 @@ class PdgDatabase {
 }
 
 class CatalogRoot {
-  const CatalogRoot(this.entry, this.childCount, this.particleCount);
+  const CatalogRoot(
+    this.entry,
+    this.childCount,
+    this.particleCount, {
+    this.hasContent = true,
+  });
 
   final Entry entry;
   final int childCount;
   final int particleCount;
+
+  /// False for PDG section rows that carry nothing at all (no children,
+  /// particles, texts, measurements or decays). The catalog hides those
+  /// instead of showing a tile that opens an empty page.
+  final bool hasContent;
 }
 
 class ReferenceWithCount {

@@ -1,5 +1,7 @@
 # Licensing notes
 
+Last updated: 2026-10-22
+
 ## Application code
 
 Particle Library application code is licensed under **MPL-2.0**. MPL is

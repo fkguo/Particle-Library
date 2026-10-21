@@ -655,7 +655,6 @@ class _PropertiesTabState extends State<_PropertiesTab> {
   Widget build(BuildContext context) {
     final view = widget.view;
     final strings = AppScope.of(context).strings;
-    final palette = context.palette;
     if (view.properties.isEmpty) {
       return EmptyPanel(
         message: strings.particleNoProperties,
@@ -694,14 +693,6 @@ class _PropertiesTabState extends State<_PropertiesTab> {
               const SizedBox(width: Insets.s),
               MetaChip('${view.properties.length}', tone: BadgeTone.info),
             ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Insets.l, 0, Insets.l, Insets.s),
-          child: Text(
-            strings.particlePropertyDirectoryHint,
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: palette.textSecondary),
           ),
         ),
         if (filterActive) ...[

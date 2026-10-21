@@ -93,6 +93,7 @@ class AppStrings {
   String get commonBack => _t('返回', 'Back');
   String get commonForward => _t('前进', 'Forward');
   String get commonClose => _t('关闭', 'Close');
+  String get commonDone => _t('完成', 'Done');
   String get commonCancel => _t('取消', 'Cancel');
   String get notesDiscardDraft => _t('放弃草稿', 'Discard draft');
   String get notesDiscardDraftBody => _t(
@@ -502,6 +503,7 @@ class AppStrings {
       _t('单举项（表示存在未列出的产物）', 'Inclusive item (unlisted products may exist)');
   String get decayTextToken =>
       _t('文本/条件/记号，不能当作粒子', 'Text, condition or punctuation; not a particle');
+  String get decayMultiStageBadge => _t('多阶段', 'Multi-stage');
   String get decayMultiStageNote => _t(
     '原文包含多个阶段箭头；这里按原始顺序展示，不把不同阶段的产物合并成一个末态。',
     'The source contains several stage arrows; tokens are shown in source order and stages are not merged into one final state.',
@@ -1152,6 +1154,13 @@ class AppStrings {
   String get reviewAnnotationRegion => _t('区域选择', 'Region selection');
   String get reviewAnnotationsTab => _t('批注', 'Annotations');
   String get reviewOutlineTab => _t('目录', 'Contents');
+  String get reviewNotesTab => _t('笔记', 'Notes');
+  String get reviewAnnotateMode => _t('批注模式', 'Annotate');
+  String get reviewAnnotateModeExit => _t('退出批注模式', 'Exit annotate mode');
+  String get reviewNotesEmpty => _t(
+    '这个文档还没有笔记。高亮或批注后会出现在这里。',
+    'No notes for this document yet. Highlights and comments appear here.',
+  );
   String get reviewOutlineEmpty =>
       _t('此 PDF 没有目录。', 'This PDF has no outline.');
   String get reviewOutlineLoading => _t('正在读取目录…', 'Loading outline…');

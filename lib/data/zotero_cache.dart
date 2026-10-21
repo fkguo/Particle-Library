@@ -1,8 +1,8 @@
+import '../core/app_paths.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-
-import 'package:path_provider/path_provider.dart';
 
 import 'zotero_bridge.dart';
 
@@ -74,7 +74,7 @@ class ZoteroCacheIndex {
   }
 
   static Future<File> defaultFile() async {
-    final support = await getApplicationSupportDirectory();
+    final support = await appSupportDirectory();
     return File('${support.path}/ParticleDesk/zotero_index.json');
   }
 

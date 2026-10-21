@@ -87,6 +87,41 @@ void main() {
     }
     final page = controller.layout.pageLayouts.first;
     await tester.pump(const Duration(milliseconds: 400));
+
+    // The reader has one inspector with Contents, Annotations and Notes tabs.
+    expect(find.text('Annotations'), findsWidgets);
+    expect(find.text('Contents'), findsWidgets);
+    await tester.tap(find.text('Notes').last);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('Hybrid page line 10'), findsWidgets);
+    await tester.tap(find.text('Annotations').first);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // The inspector collapses to a rail and reopens from it, like the other
+    // sidebars in the app.
+    await tester.tap(find.byIcon(Icons.keyboard_double_arrow_right).last);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Annotations'), findsNothing);
+    await tester.tap(find.byIcon(Icons.keyboard_double_arrow_left));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Annotations'), findsWidgets);
+
+    // Annotate mode adds one contextual strip and shrinks the page viewport;
+    // leaving it restores full-height reading.
+    final readingViewport = tester.getRect(find.byType(PdfViewer));
+    await tester.tap(find.byIcon(Icons.draw_outlined));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Done'), findsOneWidget);
+    final annotateViewport = tester.getRect(find.byType(PdfViewer));
+    expect(annotateViewport.height, lessThan(readingViewport.height));
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Done'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Done'), findsNothing);
+    expect(
+      tester.getRect(find.byType(PdfViewer)).height,
+      closeTo(readingViewport.height, 1),
+    );
     final hitKey = Key('region-hit-${region.id}');
     final hitCenter = tester.getCenter(find.byKey(hitKey));
     final beforeUnselectedDrag = await ReviewAnnotationNotes.load(

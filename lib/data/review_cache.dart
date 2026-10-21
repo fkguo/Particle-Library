@@ -1,7 +1,7 @@
+import '../core/app_paths.dart';
+
 import 'dart:async';
 import 'dart:io';
-
-import 'package:path_provider/path_provider.dart';
 
 class ReviewCacheException implements Exception {
   const ReviewCacheException(this.message);
@@ -27,7 +27,7 @@ class ReviewCache {
 
   static Future<ReviewCache> open() async {
     try {
-      final support = await getApplicationSupportDirectory();
+      final support = await appSupportDirectory();
       final root = Directory('${support.path}/ParticleDesk/reviews/$_edition');
       await root.create(recursive: true);
       return ReviewCache(root);

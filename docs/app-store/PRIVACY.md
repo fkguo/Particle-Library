@@ -1,6 +1,6 @@
 # Particle Library — Privacy Policy
 
-Last updated: 2026-10-19
+Last updated: 2026-10-22
 
 Particle Library is a free, offline reader for the Particle Data Group (PDG)
 Review of Particle Physics. It is not an official PDG application.

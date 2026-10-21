@@ -80,6 +80,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   late final TextEditingController _tagController;
   late final FocusNode _titleFocus;
   late final FocusNode _bodyFocus;
+  late final FocusNode _tagFocus;
   late final List<NoteAnchorInput> _draftAnchors;
 
   NoteRecord? _record;
@@ -133,6 +134,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     _tagController = TextEditingController(text: _savedTags.join(', '));
     _titleFocus = FocusNode();
     _bodyFocus = FocusNode();
+    _tagFocus = FocusNode();
     _lastSignature = _dirtySignature;
     _titleController.addListener(_onChanged);
     _bodyController.addListener(_onChanged);
@@ -163,6 +165,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     _tagController.dispose();
     _titleFocus.dispose();
     _bodyFocus.dispose();
+    _tagFocus.dispose();
     super.dispose();
   }
 
@@ -357,7 +360,10 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     if (signature == _lastSignature) return;
     _lastSignature = signature;
     _autosaveTimer?.cancel();
-    if (!_saving && mounted) {
+    // The text fields repaint themselves; rebuilding the editor (toolbar,
+    // status, anchors) on every keystroke made typing on a phone jitter.
+    // Only the stage transition needs a rebuild.
+    if (!_saving && mounted && _stage != _SaveStage.pending) {
       setState(() => _stage = _SaveStage.pending);
     }
     _scheduleAutosave();
@@ -1186,12 +1192,116 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // The window height is not the room the editor gets: the app bar, the
+        // keyboard and the page chrome take their share. A landscape phone has
+        // ~440 dp of window, so decide from the space actually available.
+        final height = constraints.maxHeight;
+        // The Scaffold has already consumed the keyboard inset (it resized
+        // this box), so the available height is the only keyboard signal left.
+        // 300 dp is below a landscape phone with the keyboard up and well
+        // above the candidate-bar jitter, so it does not oscillate.
+        return _buildEditor(
+          context,
+          tight: height < 480,
+          veryTight: height < 300,
+        );
+      },
+    );
+  }
+
+  Widget _titleField(BuildContext context, {required bool dense}) {
+    final strings = widget.strings;
+    return TextField(
+      controller: _titleController,
+      focusNode: _titleFocus,
+      maxLines: 1,
+      style: dense
+          ? Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w600)
+          : Theme.of(context).textTheme.headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w600, height: 1.25),
+      textInputAction: TextInputAction.next,
+      decoration: InputDecoration(
+        hintText: strings.notesTitleHint,
+        border: InputBorder.none,
+        filled: false,
+        isDense: dense,
+        contentPadding: EdgeInsets.zero,
+      ),
+    );
+  }
+
+  /// Secondary editor actions for the one-row landscape header.
+  Widget _editorOverflow(BuildContext context) {
+    final strings = widget.strings;
+    final hasCite =
+        widget.onCopyCiteKeys != null || widget.onCopyBibtex != null;
+    return PopupMenuButton<String>(
+      tooltip: strings.commonMoreOptions,
+      icon: const Icon(Icons.more_vert, size: 20),
+      onSelected: (value) {
+        switch (value) {
+          case 'pdg':
+            unawaited(_openPdgLookup());
+          case 'related':
+            unawaited(_showRelatedNotes());
+          case 'markdown':
+            unawaited(_copyMarkdown());
+          case 'citekeys':
+            unawaited(_copyReference(bibtex: false));
+          case 'bibtex':
+            unawaited(_copyReference(bibtex: true));
+          case 'delete':
+            unawaited(_confirmDelete());
+          case 'discard':
+            unawaited(_cancelDraft());
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(value: 'pdg', child: Text(strings.notesPdgLookup)),
+        if (_record != null && _record!.anchors.isNotEmpty)
+          PopupMenuItem(value: 'related', child: Text(strings.notesRelated)),
+        if (_record != null && hasCite) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            value: 'markdown',
+            child: Text(strings.notesCopyMarkdown),
+          ),
+          PopupMenuItem(
+            value: 'citekeys',
+            child: Text(strings.notesCopyCiteKeys),
+          ),
+          PopupMenuItem(value: 'bibtex', child: Text(strings.notesCopyBibtex)),
+        ] else if (_record != null)
+          PopupMenuItem(
+            value: 'markdown',
+            child: Text(strings.notesCopyMarkdown),
+          ),
+        if (_record != null) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem(value: 'delete', child: Text(strings.notesDelete)),
+        ],
+        if (widget.draft && widget.onCancel != null)
+          PopupMenuItem(
+            value: 'discard',
+            child: Text(strings.notesDiscardDraft),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEditor(
+    BuildContext context, {
+    required bool tight,
+    required bool veryTight,
+  }) {
     final palette = context.palette;
     final strings = widget.strings;
     final tags = parseNoteTags(_tagController.text);
     final anchors = _record?.anchors ?? const <NoteAnchor>[];
     final scope = AppScope.maybeOf(context);
-    final tight = MediaQuery.sizeOf(context).height < 420;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         Insets.l,
@@ -1205,6 +1315,9 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
           LayoutBuilder(
             builder: (context, headerConstraints) {
               final compactHeader = headerConstraints.maxWidth < 620;
+              // Landscape: title and toolbar share one row so the body keeps
+              // the vertical space a second row would cost.
+              final singleRow = tight && !compactHeader;
               final status = _StatusIndicator(
                 stage: _stage,
                 error: _saveError,
@@ -1321,42 +1434,91 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                     icon: const Icon(Icons.close, size: 19),
                   ),
               ];
-              if (compactHeader) {
-                return Align(
-                  alignment: Alignment.centerLeft,
-                  child: Wrap(
-                    spacing: 0,
-                    runSpacing: 0,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [status, ...actions],
-                  ),
+              if (singleRow) {
+                // The title keeps the same position whether the tools are
+                // shown or hidden: moving it would rebuild the field and
+                // close the keyboard.
+                return Row(
+                  children: [
+                    Visibility(
+                      visible: !veryTight,
+                      maintainState: true,
+                      child: status,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: _titleField(context, dense: true)),
+                    Visibility(
+                      visible: !veryTight,
+                      maintainState: true,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: _previewOnly
+                                ? strings.notesWrite
+                                : strings.notesPreview,
+                            onPressed: () =>
+                                setState(() => _previewOnly = !_previewOnly),
+                            icon: Icon(
+                              _previewOnly
+                                  ? Icons.edit_note_outlined
+                                  : Icons.visibility_outlined,
+                              size: 19,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: strings.notesLinkNote,
+                            onPressed: _linkAnotherNote,
+                            icon: const Icon(Icons.add_link, size: 19),
+                          ),
+                          _editorOverflow(context),
+                        ],
+                      ),
+                    ),
+                  ],
                 );
               }
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [status, ...actions],
+              final header = compactHeader
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        status,
+                        Wrap(
+                          spacing: 0,
+                          runSpacing: 0,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: actions,
+                        ),
+                      ],
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [status, ...actions],
+                    );
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Visibility(
+                    visible: !veryTight,
+                    maintainState: true,
+                    child: header,
+                  ),
+                  _titleField(context, dense: false),
+                ],
               );
             },
           ),
-          TextField(
-            controller: _titleController,
-            focusNode: _titleFocus,
-            style: Theme.of(context).textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w600, height: 1.25),
-            textInputAction: TextInputAction.next,
-            decoration: InputDecoration(
-              hintText: strings.notesTitleHint,
-              border: InputBorder.none,
-              filled: false,
-              contentPadding: EdgeInsets.zero,
-            ),
-          ),
-          if (!tight &&
-              (anchors.isNotEmpty ||
-                  _draftAnchors.isNotEmpty ||
-                  _quickAnchors.isNotEmpty ||
-                  tags.isNotEmpty))
-            Padding(
+          Visibility(
+            visible:
+                !tight &&
+                (anchors.isNotEmpty ||
+                    _draftAnchors.isNotEmpty ||
+                    _quickAnchors.isNotEmpty ||
+                    tags.isNotEmpty),
+            maintainState: true,
+            child: Padding(
               padding: const EdgeInsets.only(top: Insets.s),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1423,14 +1585,6 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      strings.notesAnchorsMarkdownHint,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: palette.textSecondary,
-                        fontSize: 10.5,
-                      ),
-                    ),
                   ],
                   if (tags.isNotEmpty) ...[
                     const SizedBox(height: Insets.s),
@@ -1464,9 +1618,10 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                 ],
               ),
             ),
-          const SizedBox(height: Insets.s),
+          ),
+          SizedBox(height: tight ? 2 : Insets.s),
           Divider(height: 1, color: palette.divider),
-          const SizedBox(height: Insets.s),
+          SizedBox(height: tight ? 2 : Insets.s),
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1474,7 +1629,10 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      final wide = constraints.maxWidth >= 640;
+                      // Short landscape shows the editor alone: side-by-side
+                      // preview there leaves neither pane usable. The preview
+                      // toggle still switches the whole body to preview.
+                      final wide = constraints.maxWidth >= 640 && !tight;
                       final editor = TextField(
                         controller: _bodyController,
                         focusNode: _bodyFocus,
@@ -1538,11 +1696,13 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
               ],
             ),
           ),
-          const SizedBox(height: Insets.s),
+          SizedBox(height: tight ? 2 : Insets.s),
           Divider(height: 1, color: palette.divider),
-          const SizedBox(height: Insets.s),
-          if (!tight)
-            Wrap(
+          SizedBox(height: tight ? 2 : Insets.s),
+          Visibility(
+            visible: !tight,
+            maintainState: true,
+            child: Wrap(
               spacing: 6,
               runSpacing: 4,
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -1572,11 +1732,21 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                   ),
               ],
             ),
-          NoteTagField(
-            controller: _tagController,
-            knownTags: _knownTags,
-            strings: widget.strings,
-            onChanged: _onChanged,
+          ),
+          // Hide the tag field only when it cannot own focus: while the body
+          // is being typed in a short landscape window it would otherwise
+          // leave the text area a few pixels tall. It stays mounted, and it is
+          // never hidden while focused (that would drop the input connection).
+          Visibility(
+            visible: !veryTight || _tagFocus.hasFocus,
+            maintainState: true,
+            child: NoteTagField(
+              controller: _tagController,
+              knownTags: _knownTags,
+              strings: widget.strings,
+              onChanged: _onChanged,
+              focusNode: _tagFocus,
+            ),
           ),
         ],
       ),
@@ -1752,14 +1922,16 @@ class _StatusIndicator extends StatelessWidget {
     final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (stage == _SaveStage.saving)
-          const SizedBox(
-            width: 12,
-            height: 12,
-            child: CircularProgressIndicator(strokeWidth: 1.8),
-          )
-        else
-          Icon(icon, size: 14, color: color),
+        SizedBox(
+          width: 14,
+          height: 14,
+          child: stage == _SaveStage.saving
+              ? const Padding(
+                  padding: EdgeInsets.all(1),
+                  child: CircularProgressIndicator(strokeWidth: 1.8),
+                )
+              : Icon(icon, size: 14, color: color),
+        ),
         const SizedBox(width: 4),
         Text(
           label,
@@ -1822,7 +1994,6 @@ class NoteEditorPage extends StatelessWidget implements ImmersivePage {
     if (store == null) {
       return PageScaffold(
         title: Text(strings.notesTitle),
-        subtitle: strings.notesLocalOnly,
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(Insets.l),
@@ -1847,7 +2018,6 @@ class NoteEditorPage extends StatelessWidget implements ImmersivePage {
     return PageScaffold(
       maxWidth: 980,
       title: Text(note == null ? strings.notesNew : strings.notesEdit),
-      subtitle: strings.notesLocalOnly,
       body: editor,
     );
   }

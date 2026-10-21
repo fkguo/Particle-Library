@@ -286,6 +286,15 @@ void main() {
       expect(m169, isNotEmpty);
       expect(m169.single.entry.dataType, 'PART');
       expect(m169.single.particleCount, 0);
+      // S067 has children, so it is still shown; the eleven PDG section rows
+      // with no children, particles, texts, measurements or decays are not.
+      expect(s067.single.hasContent, isTrue);
+      final empty = roots.where((root) => !root.hasContent).toList();
+      expect(empty.length, 11);
+      expect(
+        empty.map((root) => root.entry.pdgid),
+        containsAll(['M826', 'S841', 'S842', 'B801']),
+      );
     },
   );
 

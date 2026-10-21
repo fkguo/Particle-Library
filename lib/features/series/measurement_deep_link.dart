@@ -55,7 +55,6 @@ class _MeasurementDeepLinkPageState extends State<MeasurementDeepLinkPage> {
   @override
   Widget build(BuildContext context) {
     final strings = AppScope.of(context).strings;
-    final palette = context.palette;
     return PageScaffold(
       title: Text(
         widget.pdgid,
@@ -110,19 +109,6 @@ class _MeasurementDeepLinkPageState extends State<MeasurementDeepLinkPage> {
           return ListView(
             padding: const EdgeInsets.only(bottom: Insets.xxl),
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Insets.l,
-                  Insets.l,
-                  Insets.l,
-                  Insets.s,
-                ),
-                child: Text(
-                  strings.notesEvidenceSourceHint,
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: palette.textSecondary),
-                ),
-              ),
               MeasurementCard(bundle: bundle, seriesLabel: widget.pdgid),
             ],
           );

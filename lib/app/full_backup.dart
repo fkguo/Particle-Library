@@ -1,9 +1,10 @@
+import '../core/app_paths.dart';
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../data/review_cache.dart';
 import '../features/notes/notes_format.dart';
@@ -278,7 +279,7 @@ class FullBackup {
 
   static Future<Directory> _regionsDirectory(Directory? override) async {
     if (override != null) return override;
-    final support = await getApplicationSupportDirectory();
+    final support = await appSupportDirectory();
     return Directory('${support.path}/ParticleDesk/review_regions');
   }
 }

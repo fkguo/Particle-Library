@@ -95,6 +95,33 @@ class _HelpPageState extends State<HelpPage> {
         ],
       ),
       _HelpSectionData(
+        id: 'notes',
+        title: t('笔记与标注', 'Notes and annotations'),
+        children: [
+          _bullet(
+            context,
+            t(
+              '笔记只保存在本机数据库中，不写入 PDG 快照；换设备前请在设置里导出备份。',
+              'Notes are stored only in the local database and never written into the PDG snapshot; export a backup before switching devices.',
+            ),
+          ),
+          _bullet(
+            context,
+            t(
+              '笔记正文里的 Markdown 链接只用于跳转；Evidence 依据笔记上方的锚点，修改链接不会改变锚点。',
+              'Markdown links in a note body are navigation only. Evidence reads the anchors above the body; editing a link never changes an anchor.',
+            ),
+          ),
+          _bullet(
+            context,
+            t(
+              '证据页的数值来自只读 PDG 快照，编辑笔记不会修改 PDG 数据。',
+              'Evidence values come from the read-only PDG snapshot; editing a note never edits PDG data.',
+            ),
+          ),
+        ],
+      ),
+      _HelpSectionData(
         id: 'search',
         title: t('搜索与导航', 'Search and navigation'),
         children: [
@@ -484,6 +511,82 @@ class _HelpPageState extends State<HelpPage> {
             t(
               '当前快照是 PDG 2026；应用不自动下载新版。新快照需要通过构建流程替换并重新校验哈希。',
               'The current snapshot is PDG 2026; the app does not auto-download new editions. A new snapshot must be replaced through the build process and re-verified by hash.',
+            ),
+          ),
+          _glossary(
+            context,
+            t('多阶段衰变怎么读？', 'How do I read a multi-stage decay?'),
+            t(
+              '原文含多个阶段箭头时，各项按原文顺序展示，不把不同阶段的产物合并成一个末态。',
+              'When the source has several stage arrows, tokens are shown in source order; stages are not merged into one final state.',
+            ),
+          ),
+          _glossary(
+            context,
+            t('属性目录怎么分组？', 'How is the property directory grouped?'),
+            t(
+              '按原始章节与类型排列；未知类型也保留入口，不会被丢弃。',
+              'Grouped as published by section and type; uninterpreted types remain reachable instead of being dropped.',
+            ),
+          ),
+          _glossary(
+            context,
+            t(
+              '原始列里 NULL、空串和 0 有区别吗？',
+              'Do NULL, empty string and 0 differ in raw columns?',
+            ),
+            t(
+              '原始列按数据库原样显示：NULL、空字符串与 0 分别保留，不会被合并。',
+              'Raw columns are shown as stored: NULL, the empty string and 0 stay distinct and are never merged.',
+            ),
+          ),
+          _glossary(
+            context,
+            t('INSPIRE 检索需要联网吗？', 'Does INSPIRE search need the network?'),
+            t(
+              '需要联网。结果来自 INSPIRE，不改变本地 PDG 文献；支持 a、t、cn、doi、arxiv 等语法。',
+              'Yes. Results come from INSPIRE and do not change local PDG references; a, t, cn, doi, arxiv and other INSPIRE operators are supported.',
+            ),
+          ),
+          _glossary(
+            context,
+            t('为什么历史汇总不是每个版次都有？', 'Why is the historical summary incomplete?'),
+            t(
+              '只列出该系列实际存在的版次；同一版次的多行全部保留。',
+              'Only editions actually present are listed; every row of an edition is retained.',
+            ),
+          ),
+          _glossary(
+            context,
+            t(
+              '系列页的定义文本为什么保持原样？',
+              'Why does the definition text stay as stored?',
+            ),
+            t(
+              '文本按数据库原文显示；标题与约定段落分别保留类型，不做重排。',
+              'Text is shown as stored; headings and convention paragraphs keep their type and are not reflowed.',
+            ),
+          ),
+          _glossary(
+            context,
+            t(
+              '衰变目录的父子是物理级联吗？',
+              'Is decay-directory parentage a physical cascade?',
+            ),
+            t(
+              '不是。子项表示原文中的细化、排除条件或分组；展开只改变目录视图，不重新解释物理阶段。',
+              'No. Children represent refinements, exclusions or groupings from the source; expanding only changes the directory view, not the physics.',
+            ),
+          ),
+          _glossary(
+            context,
+            t(
+              '相关量为什么不是分支分数？',
+              'Why is a related quantity not a branching fraction?',
+            ),
+            t(
+              '相关量保留自己的类型与定义；比值或宽度不会改称本模式的分支分数。',
+              'Related quantities keep their own type and definition; a ratio or width is never relabelled as this branching fraction.',
             ),
           ),
         ],
