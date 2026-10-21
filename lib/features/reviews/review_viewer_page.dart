@@ -18,6 +18,7 @@ import '../../app/navigation.dart';
 import '../../data/review_annotation_notes.dart';
 import '../../data/review_annotations.dart';
 import '../../notes/notes_store.dart';
+import '../../user/user_store.dart';
 import '../../notes/notes_models.dart';
 import '../common/resize_handle.dart';
 import '../common/snack_bars.dart';
@@ -46,7 +47,9 @@ class ReviewViewerPage extends StatefulWidget implements ImmersivePage {
 class _ReviewViewerPageState extends State<ReviewViewerPage> {
   final PdfViewerController _controller = PdfViewerController();
   PdfTextSearcher? _searcher;
+  UserStore? _userStore;
   int? _currentPage;
+  int? _restoredPage;
   final GlobalKey _pdfOverlayKey = GlobalKey();
   NotesStore? _notes;
   List<ReviewAnnotation> _annotations = const <ReviewAnnotation>[];
@@ -59,6 +62,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   bool _zenMode = false;
   bool _pdfDarkMode = false;
   bool _regionMode = false;
+  bool _searchOpen = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
   bool _outlineLoading = false;
   int _sidebarTab = 0;
   double _sidebarWidth = 320;
@@ -85,7 +91,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
 
   @override
   void dispose() {
+    _persistReadingState();
     _searcher?.dispose();
+    _searchController.dispose();
+    _searchFocus.dispose();
     _autoHighlightTimer?.cancel();
     _pdfRetryTimer?.cancel();
     super.dispose();
@@ -96,7 +105,21 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
-    _ready = _loadAnnotations(AppScope.of(context).notes);
+    final scope = AppScope.of(context);
+    _userStore = scope.store;
+    final state = scope.store.reviewState(_fileName);
+    if (state != null) {
+      final width = state['sidebarWidth'];
+      if (width is num) _sidebarWidth = width.toDouble().clamp(220, 560);
+      final tab = state['sidebarTab'];
+      if (tab is num) _sidebarTab = tab.toInt().clamp(0, 1);
+      final page = state['page'];
+      if (page is num) _restoredPage = page.toInt();
+      _showAnnotations = state['showAnnotations'] != false;
+      _pdfDarkMode = state['dark'] == true;
+      _zenMode = state['zen'] == true;
+    }
+    _ready = _loadAnnotations(scope.notes);
     // Some Android devices paint the first PDF frame before the viewer has
     // laid out its page. Recreate once if readiness is still false shortly
     // after the first open; reopening used to be the only workaround.
@@ -1336,69 +1359,101 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     }
   }
 
-  Future<void> _openSearchDialog() async {
-    final searcher = _searcher;
-    if (searcher == null) {
+  void _toggleSearch() {
+    if (_searchOpen) {
+      _closeSearch();
+      return;
+    }
+    if (_searcher == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppScope.of(context).strings.reviewPdfLoading)),
       );
       return;
     }
+    setState(() => _searchOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocus.requestFocus();
+    });
+  }
+
+  void _closeSearch() {
+    _searcher?.resetTextSearch();
+    _searchController.clear();
+    setState(() => _searchOpen = false);
+  }
+
+  Widget _searchBar(BuildContext context) {
     final strings = AppScope.of(context).strings;
-    final query = TextEditingController();
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: TextField(
-          controller: query,
-          autofocus: true,
-          decoration: InputDecoration(hintText: strings.reviewSearchHint),
-          onChanged: (value) {
-            if (value.trim().isEmpty) {
-              searcher.resetTextSearch();
-            } else {
-              searcher.startTextSearch(value, searchImmediately: true);
-            }
-          },
+    final searcher = _searcher;
+    if (searcher == null) return const SizedBox.shrink();
+    return Material(
+      color: context.palette.surface,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 4, 6, 4),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: context.palette.divider)),
         ),
-        content: SizedBox(
-          width: 420,
-          child: AnimatedBuilder(
-            animation: searcher,
-            builder: (context, _) {
-              final matches = searcher.matches.length;
-              final total = searcher.totalPageCount;
-              final page = searcher.searchingPageNumber;
-              final progress = searcher.searchProgress;
-              final current = searcher.currentIndex;
-              return Text(
-                searcher.isSearching && total != null && page != null
-                    ? strings.reviewMatchProgress(matches, page, total)
-                    : matches == 0
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                focusNode: _searchFocus,
+                style: Theme.of(context).textTheme.bodySmall,
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: strings.reviewSearchHint,
+                  prefixIcon: const Icon(Icons.search, size: 17),
+                  border: InputBorder.none,
+                ),
+                onChanged: (value) {
+                  if (value.trim().isEmpty) {
+                    searcher.resetTextSearch();
+                  } else {
+                    searcher.startTextSearch(value, searchImmediately: true);
+                  }
+                },
+              ),
+            ),
+            AnimatedBuilder(
+              animation: searcher,
+              builder: (context, _) {
+                final count = searcher.matches.length;
+                final current = searcher.currentIndex;
+                final total = searcher.totalPageCount;
+                final page = searcher.searchingPageNumber;
+                final label =
+                    searcher.isSearching && total != null && page != null
+                    ? strings.reviewMatchProgress(count, page, total)
+                    : count == 0
                     ? strings.reviewNoMatches
-                    : '${current == null ? 0 : current + 1} / $matches'
-                          '${progress == null ? '' : ' · ${(progress * 100).round()}%'}',
-              );
-            },
-          ),
+                    : '${current == null ? 0 : current + 1}/$count';
+                return Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: context.palette.textSecondary),
+                );
+              },
+            ),
+            IconButton(
+              tooltip: strings.reviewPreviousMatch,
+              onPressed: () => unawaited(searcher.goToPrevMatch()),
+              icon: const Icon(Icons.keyboard_arrow_up, size: 18),
+            ),
+            IconButton(
+              tooltip: strings.reviewNextMatch,
+              onPressed: () => unawaited(searcher.goToNextMatch()),
+              icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+            ),
+            IconButton(
+              tooltip: strings.commonClose,
+              onPressed: _closeSearch,
+              icon: const Icon(Icons.close, size: 18),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => unawaited(searcher.goToPrevMatch()),
-            child: Text(strings.reviewPreviousMatch),
-          ),
-          TextButton(
-            onPressed: () => unawaited(searcher.goToNextMatch()),
-            child: Text(strings.reviewNextMatch),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(strings.commonClose),
-          ),
-        ],
       ),
     );
-    query.dispose();
   }
 
   Future<void> _openPageDialog() async {
@@ -1464,6 +1519,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
             height: MediaQuery.sizeOf(context).height * 0.65,
             child: _ReviewAnnotationSidebar(
               annotations: _annotations,
+              currentPage: _currentPage ?? 1,
               palette: _pdfDarkMode ? AppPalette.dark : context.palette,
               strings: AppScope.of(context).strings,
               onOpen: (annotation) {
@@ -1544,7 +1600,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                 actions: [
                   IconButton(
                     tooltip: strings.reviewSearch,
-                    onPressed: () => unawaited(_openSearchDialog()),
+                    onPressed: _toggleSearch,
                     icon: const Icon(Icons.search, size: 19),
                   ),
                   TextButton(
@@ -1764,131 +1820,162 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                     ),
                 ],
               ),
-        body: Stack(
+        body: Column(
           children: [
-            LayoutBuilder(
-              builder: (context, constraints) {
-                if (!_sidebarInitialized) {
-                  _sidebarInitialized = true;
-                  // A phone in landscape is wide but short; opening the 320 px
-                  // sidebar there leaves too little room for the page. Tablets and
-                  // desktops still get the inline sidebar.
-                  _showAnnotations =
-                      constraints.maxWidth >= 700 &&
-                      constraints.maxHeight >= 500;
-                }
-                final maxSidebar = (constraints.maxWidth - 260).clamp(
-                  220.0,
-                  560.0,
-                );
-                final sidebarWidth = _sidebarWidth.clamp(220.0, maxSidebar);
-                return SafeArea(
-                  top: false,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(child: _pdfSurfaceWithOverlay(context)),
-                      if (_showAnnotations &&
-                          !_zenMode &&
-                          constraints.maxWidth >= 700 &&
-                          constraints.maxHeight >= 500) ...[
-                        CollapsibleSidePanel(
-                          width: sidebarWidth,
-                          handleOnLeft: true,
-                          tooltip: strings.reviewAnnotationSidebar,
-                          onDrag: (delta) => setState(() {
-                            _sidebarWidth = (_sidebarWidth - delta).clamp(
-                              220.0,
-                              maxSidebar,
-                            );
-                          }),
-                          onReset: () => setState(() => _sidebarWidth = 320),
-                          child: _ReviewAnnotationSidebar(
-                            annotations: _annotations,
-                            palette: palette,
-                            strings: strings,
-                            onOpen: (annotation) {
-                              if (!_controller.isReady) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(strings.reviewPdfLoading),
+            if (_searchOpen) _searchBar(context),
+            Expanded(
+              child: Stack(
+                children: [
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (!_sidebarInitialized) {
+                        _sidebarInitialized = true;
+                        // A phone in landscape is wide but short; opening the 320 px
+                        // sidebar there leaves too little room for the page. Tablets and
+                        // desktops still get the inline sidebar.
+                        _showAnnotations =
+                            constraints.maxWidth >= 700 &&
+                            constraints.maxHeight >= 500;
+                      }
+                      final maxSidebar = (constraints.maxWidth - 260).clamp(
+                        220.0,
+                        560.0,
+                      );
+                      final sidebarWidth = _sidebarWidth.clamp(
+                        220.0,
+                        maxSidebar,
+                      );
+                      return SafeArea(
+                        top: false,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(child: _pdfSurfaceWithOverlay(context)),
+                            if (_showAnnotations &&
+                                !_zenMode &&
+                                constraints.maxWidth >= 700 &&
+                                constraints.maxHeight >= 500) ...[
+                              CollapsibleSidePanel(
+                                width: sidebarWidth,
+                                handleOnLeft: true,
+                                tooltip: strings.reviewAnnotationSidebar,
+                                onDrag: (delta) => setState(() {
+                                  _sidebarWidth = (_sidebarWidth - delta).clamp(
+                                    220.0,
+                                    maxSidebar,
+                                  );
+                                }),
+                                onReset: () =>
+                                    setState(() => _sidebarWidth = 320),
+                                child: _ReviewAnnotationSidebar(
+                                  annotations: _annotations,
+                                  currentPage: _currentPage ?? 1,
+                                  palette: palette,
+                                  strings: strings,
+                                  onOpen: (annotation) {
+                                    if (!_controller.isReady) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                strings.reviewPdfLoading,
+                                              ),
+                                            ),
+                                          );
+                                      return;
+                                    }
+                                    unawaited(
+                                      _controller.goToPage(
+                                        pageNumber: annotation.pageNumber,
+                                      ),
+                                    );
+                                  },
+                                  onOpenNote: _openAnnotationNote,
+                                  onEditNote: _editAnnotation,
+                                  onDelete: _deleteAnnotation,
+                                  selectionMode: _annotationSelectionMode,
+                                  selectedIds: _selectedAnnotationIds,
+                                  onToggleSelectionMode:
+                                      _toggleAnnotationSelectionMode,
+                                  onToggleSelection: _toggleAnnotationSelected,
+                                  onAddSelected:
+                                      _addSelectedAnnotationsToCollection,
+                                  tabIndex: _sidebarTab,
+                                  onTabChanged: (index) =>
+                                      setState(() => _sidebarTab = index),
+                                  outline: _outline,
+                                  outlineLoading: _outlineLoading,
+                                  onOpenOutline: _openOutline,
+                                  onRemoveTag: (annotation, tag) => unawaited(
+                                    _removeAnnotationTag(annotation, tag),
                                   ),
-                                );
-                                return;
-                              }
-                              unawaited(
-                                _controller.goToPage(
-                                  pageNumber: annotation.pageNumber,
                                 ),
-                              );
-                            },
-                            onOpenNote: _openAnnotationNote,
-                            onEditNote: _editAnnotation,
-                            onDelete: _deleteAnnotation,
-                            selectionMode: _annotationSelectionMode,
-                            selectedIds: _selectedAnnotationIds,
-                            onToggleSelectionMode:
-                                _toggleAnnotationSelectionMode,
-                            onToggleSelection: _toggleAnnotationSelected,
-                            onAddSelected: _addSelectedAnnotationsToCollection,
-                            tabIndex: _sidebarTab,
-                            onTabChanged: (index) =>
-                                setState(() => _sidebarTab = index),
-                            outline: _outline,
-                            outlineLoading: _outlineLoading,
-                            onOpenOutline: _openOutline,
-                            onRemoveTag: (annotation, tag) => unawaited(
-                              _removeAnnotationTag(annotation, tag),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  if (_zenMode)
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Material(
+                        color: palette.surface.withValues(alpha: 0.94),
+                        elevation: 3,
+                        borderRadius: BorderRadius.circular(22),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: strings.commonBack,
+                              onPressed: () => Navigator.of(context).maybePop(),
+                              icon: const Icon(Icons.arrow_back, size: 19),
                             ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                );
-              },
-            ),
-            if (_zenMode)
-              Positioned(
-                top: 10,
-                right: 10,
-                child: Material(
-                  color: palette.surface.withValues(alpha: 0.94),
-                  elevation: 3,
-                  borderRadius: BorderRadius.circular(22),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        tooltip: strings.commonBack,
-                        onPressed: () => Navigator.of(context).maybePop(),
-                        icon: const Icon(Icons.arrow_back, size: 19),
-                      ),
-                      IconButton(
-                        tooltip: _pdfDarkMode
-                            ? strings.reviewPdfLightMode
-                            : strings.reviewPdfDarkMode,
-                        onPressed: () =>
-                            setState(() => _pdfDarkMode = !_pdfDarkMode),
-                        icon: Icon(
-                          _pdfDarkMode
-                              ? Icons.light_mode_outlined
-                              : Icons.dark_mode_outlined,
-                          size: 19,
+                            IconButton(
+                              tooltip: _pdfDarkMode
+                                  ? strings.reviewPdfLightMode
+                                  : strings.reviewPdfDarkMode,
+                              onPressed: () =>
+                                  setState(() => _pdfDarkMode = !_pdfDarkMode),
+                              icon: Icon(
+                                _pdfDarkMode
+                                    ? Icons.light_mode_outlined
+                                    : Icons.dark_mode_outlined,
+                                size: 19,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: strings.reviewExitFullScreen,
+                              onPressed: () => setState(() => _zenMode = false),
+                              icon: const Icon(Icons.fullscreen_exit, size: 20),
+                            ),
+                          ],
                         ),
                       ),
-                      IconButton(
-                        tooltip: strings.reviewExitFullScreen,
-                        onPressed: () => setState(() => _zenMode = false),
-                        icon: const Icon(Icons.fullscreen_exit, size: 20),
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  void _persistReadingState() {
+    final store = _userStore;
+    if (store == null) return;
+    unawaited(
+      store.setReviewState(_fileName, <String, Object?>{
+        'page': _currentPage ?? _controller.pageNumber ?? 1,
+        'sidebarWidth': _sidebarWidth,
+        'sidebarTab': _sidebarTab,
+        'showAnnotations': _showAnnotations,
+        'dark': _pdfDarkMode,
+        'zen': _zenMode,
+      }),
     );
   }
 
@@ -1930,8 +2017,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           _searcher ??= PdfTextSearcher(_controller);
           _currentPage = _controller.pageNumber;
           unawaited(_loadOutline(document));
-          if (widget.initialPage > 1) {
-            unawaited(controller.goToPage(pageNumber: widget.initialPage));
+          final targetPage = _restoredPage ?? widget.initialPage;
+          if (targetPage > 1) {
+            unawaited(controller.goToPage(pageNumber: targetPage));
           }
         },
         pagePaintCallbacks: [
@@ -1995,9 +2083,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   }
 }
 
-class _ReviewAnnotationSidebar extends StatelessWidget {
+class _ReviewAnnotationSidebar extends StatefulWidget {
   const _ReviewAnnotationSidebar({
     required this.annotations,
+    required this.currentPage,
     required this.palette,
     required this.strings,
     required this.onOpen,
@@ -2018,6 +2107,7 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
   });
 
   final List<ReviewAnnotation> annotations;
+  final int currentPage;
   final AppPalette palette;
   final AppStrings strings;
   final ValueChanged<ReviewAnnotation> onOpen;
@@ -2035,6 +2125,75 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
   final bool outlineLoading;
   final ValueChanged<PdfOutlineNode> onOpenOutline;
   final void Function(ReviewAnnotation annotation, String tag) onRemoveTag;
+
+  @override
+  State<_ReviewAnnotationSidebar> createState() =>
+      _ReviewAnnotationSidebarState();
+}
+
+class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
+  final TextEditingController _filterController = TextEditingController();
+  String? _colorFilter;
+  String? _tagFilter;
+  bool _currentPageOnly = false;
+
+  List<ReviewAnnotation> get annotations => widget.annotations;
+  int get currentPage => widget.currentPage;
+  AppPalette get palette => widget.palette;
+  AppStrings get strings => widget.strings;
+  ValueChanged<ReviewAnnotation> get onOpen => widget.onOpen;
+  ValueChanged<ReviewAnnotation> get onOpenNote => widget.onOpenNote;
+  ValueChanged<ReviewAnnotation> get onEditNote => widget.onEditNote;
+  ValueChanged<ReviewAnnotation> get onDelete => widget.onDelete;
+  bool get selectionMode => widget.selectionMode;
+  Set<String> get selectedIds => widget.selectedIds;
+  VoidCallback get onToggleSelectionMode => widget.onToggleSelectionMode;
+  ValueChanged<String> get onToggleSelection => widget.onToggleSelection;
+  VoidCallback get onAddSelected => widget.onAddSelected;
+  int get tabIndex => widget.tabIndex;
+  ValueChanged<int> get onTabChanged => widget.onTabChanged;
+  List<PdfOutlineNode> get outline => widget.outline;
+  bool get outlineLoading => widget.outlineLoading;
+  ValueChanged<PdfOutlineNode> get onOpenOutline => widget.onOpenOutline;
+  void Function(ReviewAnnotation, String) get onRemoveTag => widget.onRemoveTag;
+
+  @override
+  void dispose() {
+    _filterController.dispose();
+    super.dispose();
+  }
+
+  List<ReviewAnnotation> _filteredAnnotations() {
+    final query = _filterController.text.trim().toLowerCase();
+    return annotations
+        .where((annotation) {
+          if (_currentPageOnly && annotation.pageNumber != currentPage) {
+            return false;
+          }
+          if (_colorFilter != null && annotation.color != _colorFilter) {
+            return false;
+          }
+          if (_tagFilter != null && !annotation.tags.contains(_tagFilter)) {
+            return false;
+          }
+          if (query.isNotEmpty &&
+              !annotation.text.toLowerCase().contains(query) &&
+              !annotation.note.toLowerCase().contains(query) &&
+              !annotation.tags.any(
+                (tag) => tag.toLowerCase().contains(query),
+              )) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
+  }
+
+  bool get _hasFilter =>
+      _filterController.text.trim().isNotEmpty ||
+      _colorFilter != null ||
+      _tagFilter != null ||
+      _currentPageOnly;
 
   Widget _outlineList(BuildContext context) {
     if (outlineLoading) {
@@ -2115,7 +2274,7 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ordered = [...annotations]
+    final ordered = [..._filteredAnnotations()]
       ..sort((a, b) {
         final page = a.pageNumber.compareTo(b.pageNumber);
         return page != 0 ? page : a.createdAt.compareTo(b.createdAt);
@@ -2139,7 +2298,9 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${annotations.length}',
+                  _hasFilter
+                      ? '${ordered.length}/${annotations.length}'
+                      : '${annotations.length}',
                   style: Theme.of(context).textTheme.bodySmall
                       ?.copyWith(color: palette.textSecondary),
                 ),
@@ -2193,6 +2354,70 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
                     ),
                   ),
                 ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+            child: TextField(
+              controller: _filterController,
+              style: Theme.of(context).textTheme.bodySmall,
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: strings.reviewFilterHint,
+                prefixIcon: const Icon(Icons.filter_alt_outlined, size: 16),
+                prefixIconConstraints: const BoxConstraints(
+                  minWidth: 28,
+                  minHeight: 20,
+                ),
+                suffixIcon: _hasFilter
+                    ? IconButton(
+                        tooltip: strings.reviewFilterClear,
+                        onPressed: () => setState(() {
+                          _filterController.clear();
+                          _colorFilter = null;
+                          _tagFilter = null;
+                          _currentPageOnly = false;
+                        }),
+                        icon: const Icon(Icons.close, size: 16),
+                      )
+                    : null,
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+            child: Wrap(
+              spacing: 4,
+              runSpacing: 2,
+              children: [
+                FilterChip(
+                  label: Text(strings.reviewFilterCurrentPage),
+                  selected: _currentPageOnly,
+                  visualDensity: VisualDensity.compact,
+                  onSelected: (value) =>
+                      setState(() => _currentPageOnly = value),
+                ),
+                for (final color in const ['yellow', 'green', 'pink', 'blue'])
+                  FilterChip(
+                    label: Text(strings.reviewHighlightColorName(color)),
+                    selected: _colorFilter == color,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (value) =>
+                        setState(() => _colorFilter = value ? color : null),
+                  ),
+                for (final tag in {
+                  for (final annotation in annotations) ...annotation.tags,
+                })
+                  FilterChip(
+                    label: Text(tag),
+                    selected: _tagFilter == tag,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (value) =>
+                        setState(() => _tagFilter = value ? tag : null),
+                  ),
               ],
             ),
           ),

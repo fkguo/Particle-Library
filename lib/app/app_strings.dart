@@ -1156,6 +1156,9 @@ class AppStrings {
   String get reviewTags => _t('标签', 'Tags');
   String get reviewAddTag => _t('添加标签', 'Add tag');
   String get reviewTagHint => _t('输入标签后回车', 'Type a tag and press Enter');
+  String get reviewFilterHint => _t('过滤批注…', 'Filter annotations…');
+  String get reviewFilterClear => _t('清除过滤', 'Clear filters');
+  String get reviewFilterCurrentPage => _t('当前页', 'Current page');
   String get reviewSearch => _t('搜索 PDF', 'Search PDF');
   String get reviewSearchHint => _t('输入要查找的文字', 'Search text');
   String get reviewNoMatches => _t('没有匹配项', 'No matches');

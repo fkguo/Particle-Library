@@ -262,6 +262,24 @@ class UserStore extends ChangeNotifier {
     await save();
   }
 
+  Map<String, Object?>? reviewState(String key) {
+    final raw = _data['reviewStates'];
+    if (raw is! Map) return null;
+    final value = raw[key];
+    if (value is! Map) return null;
+    return Map<String, Object?>.from(value);
+  }
+
+  Future<void> setReviewState(String key, Map<String, Object?> state) async {
+    final raw = _data['reviewStates'];
+    final states = raw is Map
+        ? Map<String, Object?>.from(raw)
+        : <String, Object?>{};
+    states[key] = state;
+    _data['reviewStates'] = states;
+    await save();
+  }
+
   List<Favorite> get favorites {
     final raw = _data['favorites'];
     if (raw is! List) return const [];
@@ -414,6 +432,20 @@ class UserStore extends ChangeNotifier {
         merged.putIfAbsent(key, () => map);
       }
       _data['recents'] = merged.values.take(20).toList(growable: false);
+    }
+    final rawStates = incoming['reviewStates'];
+    if (rawStates is Map) {
+      final merged = <String, Object?>{
+        for (final entry
+            in ((_data['reviewStates'] as Map?) ?? const {}).entries)
+          entry.key.toString(): entry.value,
+      };
+      for (final entry in rawStates.entries) {
+        final key = entry.key.toString();
+        if (key.isEmpty || entry.value is! Map) continue;
+        merged.putIfAbsent(key, () => entry.value);
+      }
+      _data['reviewStates'] = merged;
     }
     final rawTitles = incoming['referenceTitles'];
     if (rawTitles is Map) {

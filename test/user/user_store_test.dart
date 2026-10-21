@@ -17,6 +17,23 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('per-PDF reading state survives a reopen', () async {
+    final dir = await Directory.systemTemp.createTemp('pdgapp-reading-');
+    final path = '${dir.path}/user_store.json';
+    final store = await UserStore.open(overridePath: path);
+    await store.setReviewState('review.pdf', {
+      'page': 7,
+      'sidebarWidth': 380.0,
+      'dark': true,
+    });
+    final reopened = await UserStore.open(overridePath: path);
+    final state = reopened.reviewState('review.pdf');
+    expect(state?['page'], 7);
+    expect(state?['sidebarWidth'], 380.0);
+    expect(state?['dark'], isTrue);
+    await dir.delete(recursive: true);
+  });
+
   test('individual recent searches can be removed', () async {
     final dir = await Directory.systemTemp.createTemp('pdgapp-store-');
     final path = '${dir.path}/user_store.json';
