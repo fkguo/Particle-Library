@@ -12,6 +12,7 @@ import '../common/description_text.dart';
 import '../common/page.dart';
 import '../common/snack_bars.dart';
 import '../common/ui.dart';
+import 'note_tag_field.dart';
 import 'notes_format.dart';
 import 'tag_tools.dart';
 import '../reference/reference_page.dart';
@@ -1541,52 +1542,12 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                   ),
               ],
             ),
-          TextField(
+          NoteTagField(
             controller: _tagController,
-            style: Theme.of(context).textTheme.bodySmall,
-            textInputAction: TextInputAction.done,
-            decoration: InputDecoration(
-              hintText: strings.notesTagsHint,
-              prefixIcon: Icon(
-                Icons.sell_outlined,
-                size: 16,
-                color: palette.textSecondary,
-              ),
-              prefixIconConstraints: const BoxConstraints(
-                minWidth: 30,
-                minHeight: 20,
-              ),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 9,
-              ),
-            ),
+            knownTags: _knownTags,
+            strings: widget.strings,
+            onChanged: _onChanged,
           ),
-          if (_knownTags.any(
-            (tag) => !parseNoteTags(_tagController.text).contains(tag),
-          )) ...[
-            const SizedBox(height: 5),
-            Wrap(
-              spacing: 4,
-              runSpacing: 2,
-              children: [
-                for (final tag in _knownTags)
-                  if (!parseNoteTags(_tagController.text).contains(tag))
-                    ActionChip(
-                      label: Text(tag),
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      onPressed: () {
-                        final current = parseNoteTags(_tagController.text);
-                        current.add(tag);
-                        _tagController.text = current.join(', ');
-                        _onChanged();
-                      },
-                    ),
-              ],
-            ),
-          ],
         ],
       ),
     );

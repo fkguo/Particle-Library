@@ -21,6 +21,8 @@ import '../../notes/notes_models.dart';
 import '../common/resize_handle.dart';
 import '../common/snack_bars.dart';
 import '../notes/note_editor.dart';
+import '../notes/note_tag_field.dart';
+import '../notes/notes_format.dart';
 
 class ReviewViewerPage extends StatefulWidget implements ImmersivePage {
   const ReviewViewerPage({
@@ -602,9 +604,13 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       return;
     }
     final strings = AppScope.of(context).strings;
+    var knownTags = const <String>[];
+    try {
+      knownTags = (await notes.tagCounts(limit: 100)).keys.toList();
+    } catch (_) {}
+    if (!mounted) return;
     final comment = TextEditingController(text: annotation.note);
-    final tagInput = TextEditingController();
-    final tags = <String>{...annotation.tags};
+    final tags = TextEditingController(text: annotation.tags.join(', '));
     final result =
         await showModalBottomSheet<({String comment, List<String> tags})>(
           context: context,
@@ -612,157 +618,103 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           useSafeArea: true,
           builder: (sheetContext) => Theme(
             data: _pdfDarkMode ? AppTheme.dark() : Theme.of(context),
-            child: StatefulBuilder(
-              builder: (context, setSheetState) {
-                void addTag(String raw) {
-                  final tag = raw.trim();
-                  if (tag.isEmpty) return;
-                  setSheetState(() => tags.add(tag));
-                  tagInput.clear();
-                }
-
-                return Padding(
-                  padding: EdgeInsets.only(
-                    bottom: MediaQuery.viewInsetsOf(context).bottom,
-                  ),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                strings.reviewAnnotationEdit,
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: strings.commonClose,
-                              onPressed: () => Navigator.of(sheetContext).pop(),
-                              icon: const Icon(Icons.close, size: 19),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        if (annotation.imagePath != null) ...[
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: Image.file(
-                              File(annotation.imagePath!),
-                              height: 130,
-                              fit: BoxFit.contain,
-                              errorBuilder: (_, _, _) =>
-                                  const SizedBox.shrink(),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                        ] else
-                          SelectableText(
-                            annotation.text.trim().isEmpty
-                                ? strings.reviewAnnotationRegion
-                                : annotation.text,
-                            maxLines: 3,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: context.palette.textSecondary,
-                                ),
-                          ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: comment,
-                          autofocus: true,
-                          minLines: 3,
-                          maxLines: 6,
-                          decoration: InputDecoration(
-                            labelText: strings.reviewAnnotationNote,
-                            hintText: strings.reviewAnnotationNoteHint,
-                            border: const OutlineInputBorder(),
+                        Expanded(
+                          child: Text(
+                            strings.reviewAnnotationEdit,
+                            style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
-                        const SizedBox(height: 14),
-                        Text(
-                          strings.reviewTags,
-                          style: Theme.of(context).textTheme.labelMedium,
-                        ),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: [
-                            for (final tag in tags.toList()..sort())
-                              InputChip(
-                                label: Text(tag),
-                                onDeleted: () =>
-                                    setSheetState(() => tags.remove(tag)),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            if (tags.isEmpty)
-                              Text(
-                                strings.reviewTagHint,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: context.palette.textSecondary,
-                                    ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: tagInput,
-                                decoration: InputDecoration(
-                                  hintText: strings.reviewTagHint,
-                                  isDense: true,
-                                  border: const OutlineInputBorder(),
-                                ),
-                                onSubmitted: addTag,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            IconButton(
-                              tooltip: strings.reviewAddTag,
-                              onPressed: () => addTag(tagInput.text),
-                              icon: const Icon(Icons.add, size: 19),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton(
-                              onPressed: () => Navigator.of(sheetContext).pop(),
-                              child: Text(strings.commonCancel),
-                            ),
-                            const SizedBox(width: 8),
-                            FilledButton(
-                              onPressed: () {
-                                final pending = tagInput.text.trim();
-                                if (pending.isNotEmpty) tags.add(pending);
-                                Navigator.of(sheetContext).pop((
-                                  comment: comment.text.trim(),
-                                  tags: (tags.toList()..sort()),
-                                ));
-                              },
-                              child: Text(strings.commonSave),
-                            ),
-                          ],
+                        IconButton(
+                          tooltip: strings.commonClose,
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          icon: const Icon(Icons.close, size: 19),
                         ),
                       ],
                     ),
-                  ),
-                );
-              },
+                    const SizedBox(height: 6),
+                    if (annotation.imagePath != null) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.file(
+                          File(annotation.imagePath!),
+                          height: 130,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ] else
+                      SelectableText(
+                        annotation.text.trim().isEmpty
+                            ? strings.reviewAnnotationRegion
+                            : annotation.text,
+                        maxLines: 3,
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: context.palette.textSecondary),
+                      ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: comment,
+                      autofocus: true,
+                      minLines: 3,
+                      maxLines: 6,
+                      decoration: InputDecoration(
+                        labelText: strings.reviewAnnotationNote,
+                        hintText: strings.reviewAnnotationNoteHint,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      strings.reviewTags,
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    NoteTagField(
+                      controller: tags,
+                      knownTags: knownTags,
+                      strings: strings,
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          child: Text(strings.commonCancel),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop((
+                              comment: comment.text.trim(),
+                              tags: (parseNoteTags(tags.text)..sort()),
+                            ));
+                          },
+                          child: Text(strings.commonSave),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         );
     comment.dispose();
-    tagInput.dispose();
+    tags.dispose();
     if (result == null || !mounted) return;
     setState(() => _saving = true);
     try {
@@ -1773,29 +1725,29 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       ),
     );
     if (_pdfDarkMode) {
-      // Map white paper to the dark surface and black ink to the dark
-      // foreground. This is an exact palette mapping, not a generic invert.
+      // Keep the exact app dark paper colour, but use a steeper inversion so
+      // antialiased, thin PDF glyphs stay legible instead of turning into
+      // faint grey edges. Ink intentionally clips to the light end.
       final paper = AppPalette.dark.background;
-      final ink = AppPalette.dark.textPrimary;
-      double slope(double bg, double fg) => bg - fg;
-      double offset(double fg) => fg * 255;
+      const slope = 1.18;
+      double offset(double channel) => slope * 255 + channel * 255;
       viewer = ColorFiltered(
         colorFilter: ColorFilter.matrix(<double>[
-          slope(paper.r, ink.r),
+          -slope,
           0,
           0,
           0,
-          offset(ink.r),
+          offset(paper.r),
           0,
-          slope(paper.g, ink.g),
-          0,
-          0,
-          offset(ink.g),
+          -slope,
           0,
           0,
-          slope(paper.b, ink.b),
+          offset(paper.g),
           0,
-          offset(ink.b),
+          0,
+          -slope,
+          0,
+          offset(paper.b),
           0,
           0,
           0,
