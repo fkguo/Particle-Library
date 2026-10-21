@@ -1156,6 +1156,10 @@ class AppStrings {
   String get reviewTags => _t('标签', 'Tags');
   String get reviewAddTag => _t('添加标签', 'Add tag');
   String get reviewTagHint => _t('输入标签后回车', 'Type a tag and press Enter');
+  String get reviewFilterColor => _t('颜色', 'Color');
+  String get reviewFilterTag => _t('标签', 'Tag');
+  String get reviewFilterAllColors => _t('全部颜色', 'All colors');
+  String get reviewFilterAllTags => _t('全部标签', 'All tags');
   String get reviewFilterHint => _t('过滤批注…', 'Filter annotations…');
   String get reviewFilterClear => _t('清除过滤', 'Clear filters');
   String get reviewFilterCurrentPage => _t('当前页', 'Current page');

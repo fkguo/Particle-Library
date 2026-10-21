@@ -1519,7 +1519,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
             height: MediaQuery.sizeOf(context).height * 0.65,
             child: _ReviewAnnotationSidebar(
               annotations: _annotations,
-              currentPage: _currentPage ?? 1,
               palette: _pdfDarkMode ? AppPalette.dark : context.palette,
               strings: AppScope.of(context).strings,
               onOpen: (annotation) {
@@ -1869,7 +1868,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                                     setState(() => _sidebarWidth = 320),
                                 child: _ReviewAnnotationSidebar(
                                   annotations: _annotations,
-                                  currentPage: _currentPage ?? 1,
                                   palette: palette,
                                   strings: strings,
                                   onOpen: (annotation) {
@@ -2086,7 +2084,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
 class _ReviewAnnotationSidebar extends StatefulWidget {
   const _ReviewAnnotationSidebar({
     required this.annotations,
-    required this.currentPage,
     required this.palette,
     required this.strings,
     required this.onOpen,
@@ -2107,7 +2104,6 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
   });
 
   final List<ReviewAnnotation> annotations;
-  final int currentPage;
   final AppPalette palette;
   final AppStrings strings;
   final ValueChanged<ReviewAnnotation> onOpen;
@@ -2135,10 +2131,8 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
   final TextEditingController _filterController = TextEditingController();
   String? _colorFilter;
   String? _tagFilter;
-  bool _currentPageOnly = false;
 
   List<ReviewAnnotation> get annotations => widget.annotations;
-  int get currentPage => widget.currentPage;
   AppPalette get palette => widget.palette;
   AppStrings get strings => widget.strings;
   ValueChanged<ReviewAnnotation> get onOpen => widget.onOpen;
@@ -2163,13 +2157,17 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
     super.dispose();
   }
 
+  Color _annotationColorForLabel(String color) => switch (color) {
+    'green' => const Color(0xFF4CAF50),
+    'pink' => const Color(0xFFE91E63),
+    'blue' => const Color(0xFF2196F3),
+    _ => const Color(0xFFFFC107),
+  };
+
   List<ReviewAnnotation> _filteredAnnotations() {
     final query = _filterController.text.trim().toLowerCase();
     return annotations
         .where((annotation) {
-          if (_currentPageOnly && annotation.pageNumber != currentPage) {
-            return false;
-          }
           if (_colorFilter != null && annotation.color != _colorFilter) {
             return false;
           }
@@ -2192,8 +2190,7 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
   bool get _hasFilter =>
       _filterController.text.trim().isNotEmpty ||
       _colorFilter != null ||
-      _tagFilter != null ||
-      _currentPageOnly;
+      _tagFilter != null;
 
   Widget _outlineList(BuildContext context) {
     if (outlineLoading) {
@@ -2377,7 +2374,6 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
                           _filterController.clear();
                           _colorFilter = null;
                           _tagFilter = null;
-                          _currentPageOnly = false;
                         }),
                         icon: const Icon(Icons.close, size: 16),
                       )
@@ -2389,34 +2385,89 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-            child: Wrap(
-              spacing: 4,
-              runSpacing: 2,
+            child: Row(
               children: [
-                FilterChip(
-                  label: Text(strings.reviewFilterCurrentPage),
-                  selected: _currentPageOnly,
-                  visualDensity: VisualDensity.compact,
-                  onSelected: (value) =>
-                      setState(() => _currentPageOnly = value),
-                ),
-                for (final color in const ['yellow', 'green', 'pink', 'blue'])
-                  FilterChip(
-                    label: Text(strings.reviewHighlightColorName(color)),
-                    selected: _colorFilter == color,
-                    visualDensity: VisualDensity.compact,
-                    onSelected: (value) =>
-                        setState(() => _colorFilter = value ? color : null),
+                Expanded(
+                  child: PopupMenuButton<String>(
+                    tooltip: strings.reviewFilterColor,
+                    onSelected: (value) => setState(
+                      () => _colorFilter = value == 'all' ? null : value,
+                    ),
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'all',
+                        child: Text(strings.reviewFilterAllColors),
+                      ),
+                      for (final color in const [
+                        'yellow',
+                        'green',
+                        'pink',
+                        'blue',
+                      ])
+                        PopupMenuItem(
+                          value: color,
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: _annotationColorForLabel(color),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              const SizedBox(width: 7),
+                              Text(strings.reviewHighlightColorName(color)),
+                            ],
+                          ),
+                        ),
+                    ],
+                    child: _FilterMenuLabel(
+                      icon: Icons.palette_outlined,
+                      label: _colorFilter == null
+                          ? strings.reviewFilterColor
+                          : strings.reviewHighlightColorName(_colorFilter!),
+                      active: _colorFilter != null,
+                    ),
                   ),
-                for (final tag in {
-                  for (final annotation in annotations) ...annotation.tags,
-                })
-                  FilterChip(
-                    label: Text(tag),
-                    selected: _tagFilter == tag,
-                    visualDensity: VisualDensity.compact,
-                    onSelected: (value) =>
-                        setState(() => _tagFilter = value ? tag : null),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: PopupMenuButton<String>(
+                    tooltip: strings.reviewFilterTag,
+                    onSelected: (value) => setState(
+                      () => _tagFilter = value == 'all' ? null : value,
+                    ),
+                    itemBuilder: (context) {
+                      final tags = {
+                        for (final annotation in annotations)
+                          ...annotation.tags,
+                      }.toList()..sort();
+                      return [
+                        PopupMenuItem(
+                          value: 'all',
+                          child: Text(strings.reviewFilterAllTags),
+                        ),
+                        for (final tag in tags)
+                          PopupMenuItem(value: tag, child: Text(tag)),
+                      ];
+                    },
+                    child: _FilterMenuLabel(
+                      icon: Icons.sell_outlined,
+                      label: _tagFilter ?? strings.reviewFilterTag,
+                      active: _tagFilter != null,
+                    ),
+                  ),
+                ),
+                if (_hasFilter)
+                  IconButton(
+                    tooltip: strings.reviewFilterClear,
+                    onPressed: () => setState(() {
+                      _filterController.clear();
+                      _colorFilter = null;
+                      _tagFilter = null;
+                    }),
+                    icon: const Icon(Icons.close, size: 18),
                   ),
               ],
             ),
@@ -2973,4 +3024,53 @@ class _PdfAnnotationScreenPainter extends CustomPainter {
   bool shouldRepaint(covariant _PdfAnnotationScreenPainter oldDelegate) =>
       oldDelegate.annotations != annotations ||
       oldDelegate.controller != controller;
+}
+
+class _FilterMenuLabel extends StatelessWidget {
+  const _FilterMenuLabel({
+    required this.icon,
+    required this.label,
+    required this.active,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: active ? palette.primary : palette.divider),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 15,
+            color: active ? palette.primary : palette.textSecondary,
+          ),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: active ? palette.primary : palette.textSecondary,
+              ),
+            ),
+          ),
+          Icon(
+            Icons.arrow_drop_down,
+            size: 16,
+            color: active ? palette.primary : palette.textSecondary,
+          ),
+        ],
+      ),
+    );
+  }
 }
