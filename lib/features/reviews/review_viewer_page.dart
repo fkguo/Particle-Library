@@ -610,149 +610,155 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           context: context,
           isScrollControlled: true,
           useSafeArea: true,
-          builder: (sheetContext) => StatefulBuilder(
-            builder: (context, setSheetState) {
-              void addTag(String raw) {
-                final tag = raw.trim();
-                if (tag.isEmpty) return;
-                setSheetState(() => tags.add(tag));
-                tagInput.clear();
-              }
+          builder: (sheetContext) => Theme(
+            data: _pdfDarkMode ? AppTheme.dark() : Theme.of(context),
+            child: StatefulBuilder(
+              builder: (context, setSheetState) {
+                void addTag(String raw) {
+                  final tag = raw.trim();
+                  if (tag.isEmpty) return;
+                  setSheetState(() => tags.add(tag));
+                  tagInput.clear();
+                }
 
-              return Padding(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.viewInsetsOf(context).bottom,
-                ),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              strings.reviewAnnotationEdit,
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: strings.commonClose,
-                            onPressed: () => Navigator.of(sheetContext).pop(),
-                            icon: const Icon(Icons.close, size: 19),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      if (annotation.imagePath != null) ...[
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: Image.file(
-                            File(annotation.imagePath!),
-                            height: 130,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                      ] else
-                        SelectableText(
-                          annotation.text.trim().isEmpty
-                              ? strings.reviewAnnotationRegion
-                              : annotation.text,
-                          maxLines: 3,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: context.palette.textSecondary),
-                        ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: comment,
-                        autofocus: true,
-                        minLines: 3,
-                        maxLines: 6,
-                        decoration: InputDecoration(
-                          labelText: strings.reviewAnnotationNote,
-                          hintText: strings.reviewAnnotationNoteHint,
-                          border: const OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        strings.reviewTags,
-                        style: Theme.of(context).textTheme.labelMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          for (final tag in tags.toList()..sort())
-                            InputChip(
-                              label: Text(tag),
-                              onDeleted: () =>
-                                  setSheetState(() => tags.remove(tag)),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          if (tags.isEmpty)
-                            Text(
-                              strings.reviewTagHint,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: context.palette.textSecondary,
-                                  ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: tagInput,
-                              decoration: InputDecoration(
-                                hintText: strings.reviewTagHint,
-                                isDense: true,
-                                border: const OutlineInputBorder(),
-                              ),
-                              onSubmitted: addTag,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          IconButton(
-                            tooltip: strings.reviewAddTag,
-                            onPressed: () => addTag(tagInput.text),
-                            icon: const Icon(Icons.add, size: 19),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            onPressed: () => Navigator.of(sheetContext).pop(),
-                            child: Text(strings.commonCancel),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            onPressed: () {
-                              final pending = tagInput.text.trim();
-                              if (pending.isNotEmpty) tags.add(pending);
-                              Navigator.of(sheetContext).pop((
-                                comment: comment.text.trim(),
-                                tags: (tags.toList()..sort()),
-                              ));
-                            },
-                            child: Text(strings.commonSave),
-                          ),
-                        ],
-                      ),
-                    ],
+                return Padding(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.viewInsetsOf(context).bottom,
                   ),
-                ),
-              );
-            },
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                strings.reviewAnnotationEdit,
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: strings.commonClose,
+                              onPressed: () => Navigator.of(sheetContext).pop(),
+                              icon: const Icon(Icons.close, size: 19),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        if (annotation.imagePath != null) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.file(
+                              File(annotation.imagePath!),
+                              height: 130,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, _, _) =>
+                                  const SizedBox.shrink(),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                        ] else
+                          SelectableText(
+                            annotation.text.trim().isEmpty
+                                ? strings.reviewAnnotationRegion
+                                : annotation.text,
+                            maxLines: 3,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: context.palette.textSecondary,
+                                ),
+                          ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: comment,
+                          autofocus: true,
+                          minLines: 3,
+                          maxLines: 6,
+                          decoration: InputDecoration(
+                            labelText: strings.reviewAnnotationNote,
+                            hintText: strings.reviewAnnotationNoteHint,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          strings.reviewTags,
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            for (final tag in tags.toList()..sort())
+                              InputChip(
+                                label: Text(tag),
+                                onDeleted: () =>
+                                    setSheetState(() => tags.remove(tag)),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            if (tags.isEmpty)
+                              Text(
+                                strings.reviewTagHint,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: context.palette.textSecondary,
+                                    ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: tagInput,
+                                decoration: InputDecoration(
+                                  hintText: strings.reviewTagHint,
+                                  isDense: true,
+                                  border: const OutlineInputBorder(),
+                                ),
+                                onSubmitted: addTag,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            IconButton(
+                              tooltip: strings.reviewAddTag,
+                              onPressed: () => addTag(tagInput.text),
+                              icon: const Icon(Icons.add, size: 19),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: () => Navigator.of(sheetContext).pop(),
+                              child: Text(strings.commonCancel),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: () {
+                                final pending = tagInput.text.trim();
+                                if (pending.isNotEmpty) tags.add(pending);
+                                Navigator.of(sheetContext).pop((
+                                  comment: comment.text.trim(),
+                                  tags: (tags.toList()..sort()),
+                                ));
+                              },
+                              child: Text(strings.commonSave),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         );
     comment.dispose();
@@ -1212,71 +1218,74 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     await showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(
-                annotation.text.trim().isEmpty
-                    ? strings.reviewAnnotationRegion
-                    : annotation.text,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                strings.reviewAnnotationPage(annotation.pageNumber),
-              ),
-            ),
-            if (annotation.imagePath != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.file(
-                    File(annotation.imagePath!),
-                    height: 120,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                  ),
+      builder: (sheetContext) => Theme(
+        data: _pdfDarkMode ? AppTheme.dark() : Theme.of(context),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text(
+                  annotation.text.trim().isEmpty
+                      ? strings.reviewAnnotationRegion
+                      : annotation.text,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  strings.reviewAnnotationPage(annotation.pageNumber),
                 ),
               ),
-            ListTile(
-              leading: const Icon(Icons.note_alt_outlined),
-              title: Text(strings.reviewOpenNote),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                unawaited(_openAnnotationNote(annotation));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: Text(strings.reviewAnnotationEdit),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                unawaited(_editAnnotation(annotation));
-              },
-            ),
-            if (annotation.text.trim().isNotEmpty)
+              if (annotation.imagePath != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.file(
+                      File(annotation.imagePath!),
+                      height: 120,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
               ListTile(
-                leading: const Icon(Icons.open_with_outlined),
-                title: Text(strings.reviewAdjustRange),
+                leading: const Icon(Icons.note_alt_outlined),
+                title: Text(strings.reviewOpenNote),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
-                  unawaited(_beginAdjustRange(annotation));
+                  unawaited(_openAnnotationNote(annotation));
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: Text(strings.commonDelete),
-              textColor: Theme.of(context).colorScheme.error,
-              iconColor: Theme.of(context).colorScheme.error,
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                unawaited(_deleteAnnotation(annotation));
-              },
-            ),
-          ],
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: Text(strings.reviewAnnotationEdit),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(_editAnnotation(annotation));
+                },
+              ),
+              if (annotation.text.trim().isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.open_with_outlined),
+                  title: Text(strings.reviewAdjustRange),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    unawaited(_beginAdjustRange(annotation));
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: Text(strings.commonDelete),
+                textColor: Theme.of(context).colorScheme.error,
+                iconColor: Theme.of(context).colorScheme.error,
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(_deleteAnnotation(annotation));
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1323,59 +1332,62 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => SizedBox(
-          height: MediaQuery.sizeOf(context).height * 0.65,
-          child: _ReviewAnnotationSidebar(
-            annotations: _annotations,
-            palette: context.palette,
-            strings: AppScope.of(context).strings,
-            onOpen: (annotation) {
-              Navigator.of(context).pop();
-              if (_controller.isReady) {
-                unawaited(
-                  _controller.goToPage(pageNumber: annotation.pageNumber),
-                );
-              }
-            },
-            onOpenNote: (annotation) {
-              Navigator.of(sheetContext).pop();
-              unawaited(_openAnnotationNote(annotation));
-            },
-            onEditNote: (annotation) {
-              Navigator.of(sheetContext).pop();
-              unawaited(_editAnnotation(annotation));
-            },
-            onDelete: (annotation) {
-              Navigator.of(sheetContext).pop();
-              unawaited(_deleteAnnotation(annotation));
-            },
-            selectionMode: _annotationSelectionMode,
-            selectedIds: _selectedAnnotationIds,
-            onToggleSelectionMode: () {
-              _toggleAnnotationSelectionMode();
-              setSheetState(() {});
-            },
-            onToggleSelection: (id) {
-              _toggleAnnotationSelected(id);
-              setSheetState(() {});
-            },
-            onAddSelected: () async {
-              await _addSelectedAnnotationsToCollection();
-              if (context.mounted) setSheetState(() {});
-            },
-            tabIndex: _sidebarTab,
-            onTabChanged: (index) {
-              setState(() => _sidebarTab = index);
-              setSheetState(() {});
-            },
-            outline: _outline,
-            outlineLoading: _outlineLoading,
-            onOpenOutline: _openOutline,
-            onRemoveTag: (annotation, tag) {
-              Navigator.of(sheetContext).pop();
-              unawaited(_removeAnnotationTag(annotation, tag));
-            },
+      builder: (sheetContext) => Theme(
+        data: _pdfDarkMode ? AppTheme.dark() : Theme.of(context),
+        child: StatefulBuilder(
+          builder: (context, setSheetState) => SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.65,
+            child: _ReviewAnnotationSidebar(
+              annotations: _annotations,
+              palette: _pdfDarkMode ? AppPalette.dark : context.palette,
+              strings: AppScope.of(context).strings,
+              onOpen: (annotation) {
+                Navigator.of(context).pop();
+                if (_controller.isReady) {
+                  unawaited(
+                    _controller.goToPage(pageNumber: annotation.pageNumber),
+                  );
+                }
+              },
+              onOpenNote: (annotation) {
+                Navigator.of(sheetContext).pop();
+                unawaited(_openAnnotationNote(annotation));
+              },
+              onEditNote: (annotation) {
+                Navigator.of(sheetContext).pop();
+                unawaited(_editAnnotation(annotation));
+              },
+              onDelete: (annotation) {
+                Navigator.of(sheetContext).pop();
+                unawaited(_deleteAnnotation(annotation));
+              },
+              selectionMode: _annotationSelectionMode,
+              selectedIds: _selectedAnnotationIds,
+              onToggleSelectionMode: () {
+                _toggleAnnotationSelectionMode();
+                setSheetState(() {});
+              },
+              onToggleSelection: (id) {
+                _toggleAnnotationSelected(id);
+                setSheetState(() {});
+              },
+              onAddSelected: () async {
+                await _addSelectedAnnotationsToCollection();
+                if (context.mounted) setSheetState(() {});
+              },
+              tabIndex: _sidebarTab,
+              onTabChanged: (index) {
+                setState(() => _sidebarTab = index);
+                setSheetState(() {});
+              },
+              outline: _outline,
+              outlineLoading: _outlineLoading,
+              onOpenOutline: _openOutline,
+              onRemoveTag: (annotation, tag) {
+                Navigator.of(sheetContext).pop();
+                unawaited(_removeAnnotationTag(annotation, tag));
+              },
+            ),
           ),
         ),
       ),
