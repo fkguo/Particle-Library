@@ -35,6 +35,20 @@ const MethodChannel _clipboardChannel = MethodChannel('pdg.clipboard');
 /// Page spacing used by pdfrx; the fit-width math above depends on it.
 const double _pdfPageMargin = 8;
 
+/// Index of the outline row that covers [page], or null when the page is
+/// before every entry.
+///
+/// Rows are in flattened document order; the last entry that starts at or
+/// before [page] is the section being read.
+int? currentOutlineRowIndex(List<int?> rowPages, int page) {
+  int? current;
+  for (var i = 0; i < rowPages.length; i++) {
+    final start = rowPages[i];
+    if (start != null && start <= page) current = i;
+  }
+  return current;
+}
+
 class ReviewViewerPage extends StatefulWidget
     implements ImmersivePage, NoGlobalSelection {
   const ReviewViewerPage({
@@ -2587,6 +2601,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       },
       outline: _outline,
       outlineLoading: _outlineLoading,
+      currentPage:
+          _currentPage ?? (_controller.isReady ? _controller.pageNumber : null),
       onOpenOutline: _openOutline,
       onRemoveTag: (annotation, tag) {
         close();
@@ -2914,10 +2930,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         if (_controller.isReady && _controller.value.getMaxScaleOnAxis() > 0)
           'zoom': _controller.value.getMaxScaleOnAxis(),
         if (_controller.isReady)
-          'scroll': [
-            _controller.visibleRect.left,
-            _controller.visibleRect.top,
-          ],
+          'scroll': [_controller.visibleRect.left, _controller.visibleRect.top],
       }),
     );
   }
@@ -3185,6 +3198,7 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
     required this.onTabChanged,
     required this.outline,
     required this.outlineLoading,
+    this.currentPage,
     required this.onOpenOutline,
     required this.onRemoveTag,
     required this.onContextMenu,
@@ -3212,6 +3226,7 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
   final ValueChanged<int> onTabChanged;
   final List<PdfOutlineNode> outline;
   final bool outlineLoading;
+  final int? currentPage;
   final ValueChanged<PdfOutlineNode> onOpenOutline;
   final void Function(ReviewAnnotation annotation, String tag) onRemoveTag;
   final void Function(ReviewAnnotation annotation, Offset position)
@@ -3415,44 +3430,56 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
     }
 
     walk(outline, 0);
+    final currentIndex = currentOutlineRowIndex([
+      for (final row in rows) row.node.dest?.pageNumber,
+    ], widget.currentPage ?? 1);
     return ListView.builder(
       padding: const EdgeInsets.all(8),
       itemCount: rows.length,
       itemBuilder: (context, index) {
         final row = rows[index];
         final enabled = row.node.dest != null;
+        final isCurrent = index == currentIndex;
         return InkWell(
           onTap: enabled ? () => onOpenOutline(row.node) : null,
           borderRadius: BorderRadius.circular(7),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(8.0 + row.depth * 14, 8, 8, 8),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.chevron_right,
-                  size: 15,
-                  color: enabled ? palette.textSecondary : palette.divider,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    row.node.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: enabled
-                          ? palette.textPrimary
-                          : palette.textSecondary,
+          child: Container(
+            decoration: isCurrent
+                ? BoxDecoration(
+                    color: palette.accent.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(7),
+                  )
+                : null,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(8.0 + row.depth * 14, 8, 8, 8),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.chevron_right,
+                    size: 15,
+                    color: enabled ? palette.textSecondary : palette.divider,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      row.node.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: enabled
+                            ? palette.textPrimary
+                            : palette.textSecondary,
+                      ),
                     ),
                   ),
-                ),
-                if (row.node.dest != null)
-                  Text(
-                    '${row.node.dest!.pageNumber}',
-                    style: Theme.of(context).textTheme.labelSmall
-                        ?.copyWith(color: palette.textSecondary),
-                  ),
-              ],
+                  if (row.node.dest != null)
+                    Text(
+                      '${row.node.dest!.pageNumber}',
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: palette.textSecondary),
+                    ),
+                ],
+              ),
             ),
           ),
         );
