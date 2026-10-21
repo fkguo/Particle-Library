@@ -551,39 +551,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     if (mounted) await _loadAnnotations(notes);
   }
 
-  Future<void> _editNote(ReviewAnnotation annotation) async {
+  Future<void> _editAnnotation(ReviewAnnotation annotation) async {
     await _ready;
     if (!mounted) return;
-    final controller = TextEditingController(text: annotation.note);
-    final note = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(AppScope.of(context).strings.reviewAnnotationNote),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 5,
-          decoration: InputDecoration(
-            hintText: AppScope.of(context).strings.reviewAnnotationNoteHint,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(AppScope.of(context).strings.commonCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: Text(AppScope.of(context).strings.commonSave),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (note == null || !mounted) return;
-    final index = _annotations.indexWhere((item) => item.id == annotation.id);
-    if (index < 0) return;
-    final previous = _annotations[index];
     final notes = _notes;
     if (notes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -591,32 +561,175 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       );
       return;
     }
+    final strings = AppScope.of(context).strings;
+    final comment = TextEditingController(text: annotation.note);
+    final tagInput = TextEditingController();
+    final tags = <String>{...annotation.tags};
+    final result =
+        await showModalBottomSheet<({String comment, List<String> tags})>(
+          context: context,
+          isScrollControlled: true,
+          useSafeArea: true,
+          builder: (sheetContext) => StatefulBuilder(
+            builder: (context, setSheetState) {
+              void addTag(String raw) {
+                final tag = raw.trim();
+                if (tag.isEmpty) return;
+                setSheetState(() => tags.add(tag));
+                tagInput.clear();
+              }
+
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              strings.reviewAnnotationEdit,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: strings.commonClose,
+                            onPressed: () => Navigator.of(sheetContext).pop(),
+                            icon: const Icon(Icons.close, size: 19),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      if (annotation.imagePath != null) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Image.file(
+                            File(annotation.imagePath!),
+                            height: 130,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ] else
+                        SelectableText(
+                          annotation.text.trim().isEmpty
+                              ? strings.reviewAnnotationRegion
+                              : annotation.text,
+                          maxLines: 3,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: context.palette.textSecondary),
+                        ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: comment,
+                        autofocus: true,
+                        minLines: 3,
+                        maxLines: 6,
+                        decoration: InputDecoration(
+                          labelText: strings.reviewAnnotationNote,
+                          hintText: strings.reviewAnnotationNoteHint,
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        strings.reviewTags,
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          for (final tag in tags.toList()..sort())
+                            InputChip(
+                              label: Text(tag),
+                              onDeleted: () =>
+                                  setSheetState(() => tags.remove(tag)),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          if (tags.isEmpty)
+                            Text(
+                              strings.reviewTagHint,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: context.palette.textSecondary,
+                                  ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: tagInput,
+                              decoration: InputDecoration(
+                                hintText: strings.reviewTagHint,
+                                isDense: true,
+                                border: const OutlineInputBorder(),
+                              ),
+                              onSubmitted: addTag,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          IconButton(
+                            tooltip: strings.reviewAddTag,
+                            onPressed: () => addTag(tagInput.text),
+                            icon: const Icon(Icons.add, size: 19),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(sheetContext).pop(),
+                            child: Text(strings.commonCancel),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton(
+                            onPressed: () => Navigator.of(sheetContext).pop((
+                              comment: comment.text.trim(),
+                              tags: (tags.toList()..sort()),
+                            )),
+                            child: Text(strings.commonSave),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+    comment.dispose();
+    tagInput.dispose();
+    if (result == null || !mounted) return;
     setState(() => _saving = true);
     try {
-      await ReviewAnnotationNotes.updateComment(notes, previous, note);
+      await ReviewAnnotationNotes.updateComment(
+        notes,
+        annotation,
+        result.comment,
+        tags: result.tags,
+      );
       if (!mounted) return;
-      setState(() {
-        _annotations = [..._annotations];
-        _annotations[index] = ReviewAnnotation(
-          id: previous.id,
-          fileName: previous.fileName,
-          pageNumber: previous.pageNumber,
-          rects: previous.rects,
-          text: previous.text,
-          note: note,
-          color: previous.color,
-          createdAt: previous.createdAt,
-          noteId: previous.noteId,
-          imagePath: previous.imagePath,
-        );
-      });
-      _notifyNotesChanged();
+      await _loadAnnotations(notes);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${AppScope.of(context).strings.notesSaveFailed}: ${errorText(error, AppScope.of(context).strings)}',
+              '${strings.notesSaveFailed}: ${errorText(error, strings)}',
             ),
           ),
         );
@@ -986,6 +1099,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       createdAt: annotation.createdAt,
       noteId: annotation.noteId,
       imagePath: annotation.imagePath,
+      tags: annotation.tags,
     );
   }
 
@@ -1078,7 +1192,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
               title: Text(strings.reviewAnnotationEdit),
               onTap: () {
                 Navigator.of(sheetContext).pop();
-                unawaited(_editNote(annotation));
+                unawaited(_editAnnotation(annotation));
               },
             ),
             if (annotation.text.trim().isNotEmpty)
@@ -1158,7 +1272,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
               }
             },
             onOpenNote: _openAnnotationNote,
-            onEditNote: _editNote,
+            onEditNote: _editAnnotation,
             onDelete: _deleteAnnotation,
             selectionMode: _annotationSelectionMode,
             selectedIds: _selectedAnnotationIds,
@@ -1457,7 +1571,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                             );
                           },
                           onOpenNote: _openAnnotationNote,
-                          onEditNote: _editNote,
+                          onEditNote: _editAnnotation,
                           onDelete: _deleteAnnotation,
                           selectionMode: _annotationSelectionMode,
                           selectedIds: _selectedAnnotationIds,
@@ -1837,7 +1951,7 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
                         hoverColor: palette.accent.withValues(alpha: 0.08),
                         onTap: selectionMode
                             ? () => onToggleSelection(annotation.id)
-                            : () => onOpen(annotation),
+                            : () => onEditNote(annotation),
                         child: Container(
                           padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
                           decoration: BoxDecoration(
@@ -1874,18 +1988,41 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(width: 6),
-                                  Text(
-                                    strings.reviewAnnotationPage(
-                                      annotation.pageNumber,
-                                    ),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(
-                                          color: palette.textSecondary,
+                                  Tooltip(
+                                    message: strings.reviewGoToPage,
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(4),
+                                      onTap: () => onOpen(annotation),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 3,
+                                          vertical: 2,
                                         ),
+                                        child: Text(
+                                          strings.reviewAnnotationPage(
+                                            annotation.pageNumber,
+                                          ),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(
+                                                color: palette.textSecondary,
+                                              ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                   const Spacer(),
+                                  if (!selectionMode)
+                                    IconButton(
+                                      tooltip: strings.reviewAnnotationEdit,
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () => onEditNote(annotation),
+                                      icon: const Icon(
+                                        Icons.edit_outlined,
+                                        size: 16,
+                                      ),
+                                    ),
                                   if (!selectionMode)
                                     PopupMenuButton<String>(
                                       tooltip: strings.moreActions,
@@ -1950,17 +2087,50 @@ class _ReviewAnnotationSidebar extends StatelessWidget {
                                   ),
                                 ),
                               ],
-                              if (annotation.note.trim().isNotEmpty) ...[
-                                const SizedBox(height: 3),
-                                Text(
-                                  annotation.note,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        color: palette.textSecondary,
-                                        fontStyle: FontStyle.italic,
+                              const SizedBox(height: 3),
+                              Text(
+                                annotation.note.trim().isEmpty
+                                    ? strings.reviewNoComment
+                                    : annotation.note,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: palette.textSecondary,
+                                      fontStyle: annotation.note.trim().isEmpty
+                                          ? FontStyle.normal
+                                          : FontStyle.italic,
+                                    ),
+                              ),
+                              if (annotation.tags.isNotEmpty) ...[
+                                const SizedBox(height: 5),
+                                Wrap(
+                                  spacing: 4,
+                                  runSpacing: 2,
+                                  children: [
+                                    for (final tag in annotation.tags)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: palette.surfaceAlt,
+                                          borderRadius: BorderRadius.circular(
+                                            9,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          tag,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(
+                                                color: palette.textSecondary,
+                                              ),
+                                        ),
                                       ),
+                                  ],
                                 ),
                               ],
                             ],

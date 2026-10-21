@@ -21,6 +21,7 @@ class ReviewAnnotation {
     required this.createdAt,
     this.noteId,
     this.imagePath,
+    this.tags = const <String>[],
   });
 
   final String id;
@@ -38,6 +39,9 @@ class ReviewAnnotation {
   /// Rendered PNG for a region annotation, when available.
   final String? imagePath;
 
+  /// Tags mirrored from the owning note.
+  final List<String> tags;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'fileName': fileName,
@@ -50,6 +54,7 @@ class ReviewAnnotation {
     'color': color,
     'createdAt': createdAt.toUtc().toIso8601String(),
     if (imagePath != null) 'imagePath': imagePath,
+    'tags': tags,
   };
 
   static ReviewAnnotation? fromJson(Object? raw) {
@@ -95,6 +100,10 @@ class ReviewAnnotation {
       createdAt: createdAt.toLocal(),
       noteId: data['noteId']?.toString(),
       imagePath: data['imagePath']?.toString(),
+      tags: [
+        for (final tag in (data['tags'] as List? ?? const <Object?>[]))
+          if (tag?.toString().trim().isNotEmpty ?? false) tag.toString().trim(),
+      ],
     );
   }
 }

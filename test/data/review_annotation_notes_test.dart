@@ -57,6 +57,33 @@ void main() {
     expect(hits.map((hit) => hit.id), contains(note.id));
   });
 
+  test('annotation comments and tags are editable together', () async {
+    final annotation = await ReviewAnnotationNotes.create(
+      notes,
+      fileName: 'rpp2026-rev-qcd.pdf',
+      pageNumber: 4,
+      rects: const [Rect.fromLTRB(0.1, 0.2, 0.4, 0.3)],
+      text: 'a selected formula',
+      color: 'blue',
+      reviewTitle: 'Quantum chromodynamics',
+      tags: const ['important'],
+    );
+    expect(annotation.tags, ['important']);
+    await ReviewAnnotationNotes.updateComment(
+      notes,
+      annotation,
+      'check this again',
+      tags: const ['important', 'qcd'],
+    );
+    final loaded = await ReviewAnnotationNotes.load(
+      notes,
+      'rpp2026-rev-qcd.pdf',
+      reviewTitle: 'Quantum chromodynamics',
+    );
+    expect(loaded.single.note, 'check this again');
+    expect(loaded.single.tags, ['important', 'qcd']);
+  });
+
   test('comment edits update the note body and survive reload', () async {
     final annotation = await ReviewAnnotationNotes.create(
       notes,

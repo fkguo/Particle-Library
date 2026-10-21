@@ -1142,12 +1142,19 @@ class AppStrings {
     '正文中的链接只用于跳转；Evidence 读取上方 anchors，不会因 Markdown 链接改变而自动更新。',
     'Links in the body are navigation only. Evidence reads the anchors above; editing a Markdown link does not update them.',
   );
+  String get reviewAddComment => _t('添加评论', 'Add comment');
+  String get reviewNoComment => _t('暂无评论', 'No comment');
+  String get reviewTags => _t('标签', 'Tags');
+  String get reviewAddTag => _t('添加标签', 'Add tag');
+  String get reviewTagHint => _t('输入标签后回车', 'Type a tag and press Enter');
+  String get reviewGoToPage => _t('跳转到页面', 'Go to page');
+  String get reviewCancelEdit => _t('取消', 'Cancel');
   String get reviewAnnotationSidebar => _t('批注侧栏', 'Annotation sidebar');
-  String get reviewAnnotationNote => _t('批注备注', 'Annotation note');
-  String get reviewAnnotationNoteHint => _t('可选，写一句提醒…', 'Optional note…');
+  String get reviewAnnotationNote => _t('评论', 'Comment');
+  String get reviewAnnotationNoteHint => _t('添加一句评论…', 'Add a comment…');
   String reviewAnnotationPage(int page) => _t('第 $page 页', 'Page $page');
-  String get reviewAnnotationEdit => _t('编辑备注', 'Edit note');
-  String get reviewOpenNote => _t('打开笔记', 'Open note');
+  String get reviewAnnotationEdit => _t('编辑评论与标签', 'Edit comment and tags');
+  String get reviewOpenNote => _t('打开完整笔记', 'Open full note');
   String get reviewNotCached => _t(
     '该综述尚未缓存，请先在「PDG 综述」中下载。',
     'This review is not cached; download it in PDG reviews.',

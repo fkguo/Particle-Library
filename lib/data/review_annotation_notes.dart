@@ -66,6 +66,7 @@ class ReviewAnnotationNotes {
         uuid: uuid,
         createdAt: record.createdAt,
         imagePath: record.imagePath,
+        tags: record.tags,
       );
     }
     // Keep the sidecar for a retry if malformed/duplicate records were
@@ -113,6 +114,7 @@ class ReviewAnnotationNotes {
     required String reviewTitle,
     String comment = '',
     String? imagePath,
+    Iterable<String> tags = const <String>[],
   }) => _createNote(
     notes,
     fileName: fileName,
@@ -123,13 +125,15 @@ class ReviewAnnotationNotes {
     color: color,
     reviewTitle: reviewTitle,
     imagePath: imagePath,
+    tags: tags,
   );
 
   static Future<void> updateComment(
     NotesStore notes,
     ReviewAnnotation annotation,
-    String comment,
-  ) async {
+    String comment, {
+    Iterable<String>? tags,
+  }) async {
     final noteId = annotation.noteId;
     if (noteId == null) return;
     final note = await notes.noteById(noteId);
@@ -181,6 +185,7 @@ class ReviewAnnotationNotes {
       note.id,
       bodyMarkdown: generatedBodyUntouched ? body : null,
       anchors: anchors,
+      tags: tags,
       expectedRevision: note.revision,
     );
   }
@@ -290,6 +295,7 @@ class ReviewAnnotationNotes {
     String? uuid,
     DateTime? createdAt,
     String? imagePath,
+    Iterable<String> tags = const <String>[],
   }) async {
     final id = _newAnnotationId(pageNumber);
     final reviewKey = _reviewKey(fileName);
@@ -322,6 +328,7 @@ class ReviewAnnotationNotes {
       bodyMarkdown: body,
       uuid: uuid,
       createdAt: createdAt,
+      tags: tags,
       anchors: [
         NoteAnchorInput.review(
           reviewKey,
@@ -341,6 +348,7 @@ class ReviewAnnotationNotes {
       createdAt: note.createdAt,
       noteId: note.id,
       imagePath: imagePath,
+      tags: note.tagNames,
     );
   }
 
@@ -383,6 +391,7 @@ class ReviewAnnotationNotes {
       createdAt: note.createdAt,
       noteId: note.id,
       imagePath: context['imagePath']?.toString(),
+      tags: note.tagNames,
     );
   }
 
