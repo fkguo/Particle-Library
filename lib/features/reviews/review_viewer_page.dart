@@ -29,7 +29,8 @@ import '../notes/notes_format.dart';
 
 const MethodChannel _clipboardChannel = MethodChannel('pdg.clipboard');
 
-class ReviewViewerPage extends StatefulWidget implements ImmersivePage {
+class ReviewViewerPage extends StatefulWidget
+    implements ImmersivePage, NoGlobalSelection {
   const ReviewViewerPage({
     super.key,
     required this.title,
@@ -2775,6 +2776,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
             if (_editingRange != null) unawaited(_saveAdjustedRange());
           },
         ),
+        buildContextMenu: (context, params) => null,
         customizeContextMenuItems: _customizePdfContextMenu,
         onGeneralTap: _onPdfGeneralTap,
         onPageChanged: (page) {
