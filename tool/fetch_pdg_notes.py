@@ -145,6 +145,23 @@ def inspire_reference(recid: int, timeout: int = 30, retries: int = 3) -> dict:
     raise RuntimeError(f"INSPIRE {recid}: {last}")
 
 
+def inspire_cite_key(recid: int, timeout: int = 30, retries: int = 3) -> str:
+    """Fetch the INSPIRE BibTeX entry and return its cite key."""
+    url = f"{INSPIRE_API}{recid}?format=bibtex"
+    last: Exception | None = None
+    for attempt in range(retries):
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": UA})
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                bibtex = response.read().decode("utf-8", "replace")
+            match = re.match(r"^\s*@[A-Za-z]+\s*\{\s*([^,\s]+)\s*,", bibtex)
+            return match.group(1) if match else ""
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            last = error
+            time.sleep(2 * (attempt + 1))
+    raise RuntimeError(f"INSPIRE bibtex {recid}: {last}")
+
+
 def local_reference_ids(snapshot: str) -> set[str]:
     with sqlite3.connect(snapshot) as connection:
         return {
@@ -218,16 +235,18 @@ def main() -> int:
 
     # Citation labels that are not in the official reference table need their
     # bibliographic data in the patch so the app can show an in-app page.
-    local = local_reference_ids(args.snapshot)
     wanted: dict[str, int] = {}
     for note in notes.values():
         for label, recid in note.get("citations", {}).items():
-            if label not in local:
-                wanted[label] = recid
+            wanted[label] = recid
     references: dict[str, dict] = {}
     for index, (label, recid) in enumerate(sorted(wanted.items()), 1):
         try:
-            references[label] = {"inspire_recid": recid, **inspire_reference(recid)}
+            references[label] = {
+                    "inspire_recid": recid,
+                    "cite_key": inspire_cite_key(recid),
+                    **inspire_reference(recid),
+                }
         except Exception as error:  # noqa: BLE001
             print(f"[ref {index}/{len(wanted)}] {label}: FAILED {error}", file=sys.stderr)
             continue
@@ -257,7 +276,8 @@ def main() -> int:
               year INTEGER,
               publication TEXT,
               doi TEXT,
-              arxiv_id TEXT
+              arxiv_id TEXT,
+              cite_key TEXT
             );
             CREATE TABLE pdg_note_citations (
               pdgid TEXT NOT NULL,
@@ -285,7 +305,8 @@ def main() -> int:
         )
         store.executemany(
             "INSERT INTO pdg_note_references(document_id, inspire_recid, title, "
-            "authors, year, publication, doi, arxiv_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "authors, year, publication, doi, arxiv_id, cite_key) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     label,
@@ -296,6 +317,7 @@ def main() -> int:
                     reference.get("publication"),
                     reference.get("doi"),
                     reference.get("arxiv_id"),
+                    reference.get("cite_key"),
                 )
                 for label, reference in sorted(references.items())
             ],

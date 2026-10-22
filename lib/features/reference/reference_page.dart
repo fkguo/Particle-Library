@@ -357,7 +357,10 @@ class _ReferencePageState extends State<ReferencePage> {
         'inspire_id': patch.inspireRecid?.toString() ?? '',
         'title': patch.title ?? '',
       });
-      if (InspireBibtexService.canFetch(
+      final patchKey = patch.citeKey ?? '';
+      if (patchKey.isNotEmpty) {
+        _citeKey = patchKey;
+      } else if (InspireBibtexService.canFetch(
         inspireId: reference.inspireId,
         doi: reference.doi,
       )) {
@@ -384,7 +387,12 @@ class _ReferencePageState extends State<ReferencePage> {
     final sameDoi = reference.doi.isEmpty
         ? <Reference>[]
         : await database.referencesByDoi(reference.doi);
-    if (InspireBibtexService.canFetch(
+    // Prefer the cite key captured in the pdgLive-notes patch (offline), and
+    // only ask INSPIRE for references the patch does not cover.
+    final patchCiteKey = await PdgNotes.citeKeyFor(reference.documentId);
+    if (patchCiteKey != null) {
+      _citeKey = patchCiteKey;
+    } else if (InspireBibtexService.canFetch(
       inspireId: reference.inspireId,
       doi: reference.doi,
     )) {
