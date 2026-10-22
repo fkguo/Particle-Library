@@ -4,6 +4,8 @@ import 'package:pdgapp/data/inspire_literature_search.dart';
 Map<String, Object?> _hit({
   List<Map<String, Object?>> authors = const [],
   List<Map<String, Object?>> collaborations = const [],
+  Map<String, Object?>? firstAuthor,
+  int authorCount = 0,
 }) => {
   'metadata': {
     'control_number': 3161743,
@@ -11,6 +13,8 @@ Map<String, Object?> _hit({
       {'title': 'Elliptic Flow of Multi-strange Hadrons', 'source': 'arXiv'},
     ],
     'authors': authors,
+    if (firstAuthor != null) 'first_author': firstAuthor,
+    'author_count': authorCount,
     'collaborations': collaborations,
   },
 };
@@ -18,9 +22,11 @@ Map<String, Object?> _hit({
 void main() {
   test('collaboration-only records use the collaboration as the byline', () {
     final hit = parseInspireLiteratureHit(
-      _hit(collaborations: [
-        {'value': 'STAR'},
-      ]),
+      _hit(
+        collaborations: [
+          {'value': 'STAR'},
+        ],
+      ),
     );
     expect(hit, isNotNull);
     expect(hit!.authors, isEmpty);
@@ -28,14 +34,19 @@ void main() {
     expect(hit.bylineShort, 'STAR Collaboration');
   });
 
-  test('a collaboration value that already ends with Collaboration is kept', () {
-    final hit = parseInspireLiteratureHit(
-      _hit(collaborations: [
-        {'value': 'STAR Collaboration'},
-      ]),
-    );
-    expect(hit!.byline, 'STAR Collaboration');
-  });
+  test(
+    'a collaboration value that already ends with Collaboration is kept',
+    () {
+      final hit = parseInspireLiteratureHit(
+        _hit(
+          collaborations: [
+            {'value': 'STAR Collaboration'},
+          ],
+        ),
+      );
+      expect(hit!.byline, 'STAR Collaboration');
+    },
+  );
 
   test('individual authors win and long lists are shortened', () {
     final hit = parseInspireLiteratureHit(
@@ -52,6 +63,15 @@ void main() {
     expect(hit.bylineShort, endsWith('et al.'));
     expect(hit.bylineShort, contains('Author 4'));
     expect(hit.bylineShort, isNot(contains('Author 5')));
+  });
+
+  test('a record without the author array falls back to first_author', () {
+    final hit = parseInspireLiteratureHit(
+      _hit(firstAuthor: {'full_name': 'Jia, Jiangyong'}, authorCount: 1664),
+    );
+    expect(hit!.authors, isEmpty);
+    expect(hit.byline, 'Jia, Jiangyong et al.');
+    expect(hit.bylineShort, 'Jia, Jiangyong et al.');
   });
 
   test('records without authors or collaborations have an empty byline', () {

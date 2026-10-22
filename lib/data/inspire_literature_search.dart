@@ -10,6 +10,8 @@ class InspireLiteratureHit {
     required this.recid,
     required this.title,
     required this.authors,
+    required this.firstAuthor,
+    required this.authorCount,
     required this.collaborations,
     required this.doi,
     required this.arxivId,
@@ -23,6 +25,8 @@ class InspireLiteratureHit {
   final int recid;
   final String title;
   final List<String> authors;
+  final String firstAuthor;
+  final int authorCount;
   final List<String> collaborations;
   final String doi;
   final String arxivId;
@@ -39,6 +43,10 @@ class InspireLiteratureHit {
   /// papers have an empty author list but a collaboration entry).
   String get byline {
     if (authors.isNotEmpty) return authors.join(', ');
+    final first = firstAuthor.trim();
+    if (first.isNotEmpty) {
+      return authorCount > 1 ? '$first et al.' : first;
+    }
     return collaborations.map(_collaborationLabel).join(', ');
   }
 
@@ -157,9 +165,12 @@ class InspireLiteratureSearchService {
       'size': '$limit',
       'page': '$page',
       'sort': sort,
+      // Do not ask for the full author array: a single 2900-author
+      // collaboration paper makes a 20-record page ~2 MB instead of ~34 KB.
+      // `first_author` + `author_count` is enough for the result list.
       'fields':
-          'titles,authors.full_name,collaborations,dois,publication_info,'
-          'arxiv_eprints,citation_count,control_number',
+          'titles,first_author,author_count,collaborations,dois,'
+          'publication_info,arxiv_eprints,citation_count,control_number',
     });
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 8)
@@ -280,6 +291,13 @@ class InspireLiteratureSearchService {
         if (trimmed.isNotEmpty) collaborations.add(trimmed);
       }
     }
+    final firstAuthor = metadata['first_author'] is Map
+        ? ((metadata['first_author'] as Map)['full_name']?.toString() ?? '')
+        : '';
+    final rawCount = metadata['author_count'];
+    final authorCount = rawCount is num
+        ? rawCount.toInt()
+        : int.tryParse(rawCount?.toString() ?? '') ?? 0;
     final dois = metadata['dois'];
     final doi = dois is List && dois.isNotEmpty && dois.first is Map
         ? (dois.first as Map)['value']?.toString() ?? ''
@@ -324,6 +342,8 @@ class InspireLiteratureSearchService {
       recid: recid,
       title: title.isEmpty ? '(untitled INSPIRE record)' : title,
       authors: authors,
+      firstAuthor: firstAuthor,
+      authorCount: authorCount,
       collaborations: collaborations,
       doi: doi,
       arxivId: arxivId,

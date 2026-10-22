@@ -1000,15 +1000,20 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
               hit.title,
               selectable: true,
               maxLines: 3,
-              style: Theme.of(context).textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                // Tighten the default 1.5 line box: the card title sits right
+                // above the byline and the theme's regular leading left a
+                // visible gap.
+                height: 1.25,
+              ),
             ),
             if (hit.bylineShort.isNotEmpty) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               SelectableText(
                 hit.bylineShort,
                 style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: palette.textSecondary),
+                    ?.copyWith(color: palette.textSecondary, height: 1.3),
               ),
             ],
             const SizedBox(height: 4),
