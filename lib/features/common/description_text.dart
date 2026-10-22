@@ -52,18 +52,20 @@ class DescriptionText extends StatelessWidget {
         spans.addAll(_citationSpans(context, segment.text ?? '', base));
       }
     }
-    final rich = selectable
-        ? SelectableText.rich(
-            TextSpan(children: spans),
-            style: base,
-            maxLines: maxLines,
-          )
-        : Text.rich(
-            TextSpan(children: spans),
-            style: base,
-            maxLines: maxLines,
-            overflow: maxLines == null ? TextOverflow.clip : overflow,
-          );
+    // SelectableText reserves `maxLines` line boxes even for short text (it
+    // reuses EditableText's fixed height), which left large empty gaps under
+    // card titles. SelectionArea keeps selection without that reservation.
+    final body = Text.rich(
+      TextSpan(children: spans),
+      style: base,
+      maxLines: maxLines,
+      overflow: maxLines == null ? TextOverflow.clip : overflow,
+    );
+    final rich = !selectable
+        ? body
+        : maxLines == null
+        ? SelectableText.rich(TextSpan(children: spans), style: base)
+        : SelectionArea(child: body);
     return Semantics(
       label: text,
       child: ExcludeSemantics(child: rich),
