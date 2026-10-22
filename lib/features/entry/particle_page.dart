@@ -18,6 +18,7 @@ import '../common/async_view.dart';
 import '../common/context_sidebar.dart';
 import '../common/citation_text.dart';
 import '../common/description_text.dart';
+import '../common/pdg_live_text.dart';
 import '../common/display_value.dart';
 import '../common/favorite_button.dart';
 import '../common/math_text.dart';
@@ -112,6 +113,7 @@ class _ParticleBody extends StatefulWidget {
 class _ParticleBodyState extends State<_ParticleBody> {
   int _tab = 0;
   PdgNote? _pdgNote;
+  Map<String, PdgCitation> _citations = const <String, PdgCitation>{};
   final GlobalKey _overviewKey = GlobalKey();
   final GlobalKey _tabsKey = GlobalKey();
   final GlobalKey _identityKey = GlobalKey();
@@ -122,13 +124,34 @@ class _ParticleBodyState extends State<_ParticleBody> {
   @override
   void initState() {
     super.initState();
-    unawaited(_loadPdgNote());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_loadPdgNote());
+    });
   }
 
   Future<void> _loadPdgNote() async {
     final note = await PdgNotes.forPdgid(widget.view.entry.pdgid);
     if (!mounted || note == null || note.isEmpty) return;
-    setState(() => _pdgNote = note);
+    var localIds = const <String, int>{};
+    if (note.citations.isNotEmpty) {
+      try {
+        localIds = await AppScope.of(context).database
+            .referenceIdsForCitationKeys(note.citations.keys.toSet());
+      } catch (_) {
+        // Links fall back to INSPIRE.
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _pdgNote = note;
+      _citations = {
+        for (final entry in note.citations.entries)
+          entry.key: PdgCitation(
+            localId: localIds[entry.key],
+            inspireRecid: entry.value,
+          ),
+      };
+    });
   }
 
   void _selectTab(int tab) {
@@ -300,9 +323,8 @@ class _ParticleBodyState extends State<_ParticleBody> {
                   Insets.l,
                   0,
                 ),
-                child: CitationText(
+                child: PdgLiveText(
                   'was $was',
-                  selectable: true,
                   style: Theme.of(context).textTheme.bodyMedium
                       ?.copyWith(color: palette.textSecondary),
                 ),
@@ -311,17 +333,14 @@ class _ParticleBodyState extends State<_ParticleBody> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   Insets.l,
-                  Insets.m,
+                  Insets.s,
                   Insets.l,
                   0,
                 ),
-                child: SectionCard(
-                  title: strings.particleSummarySection,
-                  child: CitationText(
-                    summary,
-                    selectable: true,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
+                child: PdgLiveText(
+                  summary,
+                  citations: _citations,
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
             if (!view.hasIdentity)

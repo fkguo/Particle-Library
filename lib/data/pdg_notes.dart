@@ -10,10 +10,13 @@ import '../core/app_paths.dart';
 /// the `was ...` rename line and the short summary paragraph.
 @immutable
 class PdgNote {
-  const PdgNote({this.was, this.summary});
+  const PdgNote({this.was, this.summary, this.citations = const {}});
 
   final String? was;
   final String? summary;
+
+  /// Citation label -> INSPIRE recid, as linked on the pdgLive page.
+  final Map<String, int> citations;
 
   bool get isEmpty => (was ?? '').isEmpty && (summary ?? '').isEmpty;
 }
@@ -48,13 +51,30 @@ class PdgNotes {
       final file = await _materialize(bytes);
       final database = sqlite3.open(file.path, mode: OpenMode.readOnly);
       try {
+        final citations = <String, Map<String, int>>{};
+        try {
+          for (final row in database.select(
+            'SELECT pdgid, label, inspire_recid FROM pdg_note_citations',
+          )) {
+            final recid = row['inspire_recid'];
+            if (recid is int) {
+              (citations[row['pdgid'] as String] ??= {})[row['label']
+                      as String] =
+                  recid;
+            }
+          }
+        } on SqliteException {
+          // Older assets have no citation table.
+        }
         final notes = <String, PdgNote>{};
         for (final row in database.select(
           'SELECT pdgid, was, summary FROM pdg_notes',
         )) {
-          notes[row['pdgid'] as String] = PdgNote(
+          final pdgid = row['pdgid'] as String;
+          notes[pdgid] = PdgNote(
             was: row['was'] as String?,
             summary: row['summary'] as String?,
+            citations: citations[pdgid] ?? const {},
           );
         }
         return notes;

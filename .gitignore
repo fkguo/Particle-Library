@@ -28,6 +28,8 @@ android/local.properties
 
 # Raw PDG snapshots must never be committed (~2 GB; supply via PDGAPP_SOURCE_DB)
 *.sqlite
+# The small pdgLive-notes sidecar is shipped in git; the official snapshot is not.
+!assets/pdg_notes_*.sqlite
 
 # SQLite runtime journals and Python caches
 *.sqlite-wal

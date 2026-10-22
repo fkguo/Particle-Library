@@ -66,8 +66,8 @@ def clean(fragment: str) -> str:
     return " ".join(soup.get_text(" ", strip=True).split())
 
 
-def parse(html: str) -> dict[str, str]:
-    note: dict[str, str] = {}
+def parse(html: str) -> dict[str, object]:
+    note: dict[str, object] = {}
     was = re.search(r"<br>\s*was\s*(.*?)\s*<div class=\"minor_headerX\"", html, re.S)
     if was:
         value = clean(was.group(1))
@@ -75,11 +75,19 @@ def parse(html: str) -> dict[str, str]:
             note["was"] = value
     summary_div = BeautifulSoup(html, "lxml").find("div", id="minor_headerX")
     if summary_div is not None:
+        citations: dict[str, int] = {}
+        for anchor in summary_div.find_all("a", href=True):
+            match = re.search(r"inspirehep\.net/literature/(\d+)", anchor["href"])
+            label = " ".join(anchor.get_text(" ", strip=True).split())
+            if label and match:
+                citations[label] = int(match.group(1))
         for br in summary_div.find_all("br"):
             br.replace_with("\n")
         summary = " ".join(summary_div.get_text(" ", strip=True).split())
         if summary:
             note["summary"] = summary
+        if citations:
+            note["citations"] = citations
     return note
 
 
@@ -118,6 +126,15 @@ def main() -> int:
                     for key, value in (("was", was), ("summary", summary))
                     if value
                 }
+            try:
+                for pdgid, label, recid in store.execute(
+                    "SELECT pdgid, label, inspire_recid FROM pdg_note_citations"
+                ):
+                    existing.setdefault(pdgid, {}).setdefault(
+                        "citations", {}
+                    )[label] = recid
+            except sqlite3.Error:
+                pass
 
     notes = dict(existing)
     fetched = failed = 0
@@ -151,6 +168,12 @@ def main() -> int:
               key TEXT NOT NULL PRIMARY KEY,
               value TEXT NOT NULL
             );
+            CREATE TABLE pdg_note_citations (
+              pdgid TEXT NOT NULL,
+              label TEXT NOT NULL,
+              inspire_recid INTEGER,
+              PRIMARY KEY (pdgid, label)
+            );
             """
         )
         store.executemany(
@@ -158,6 +181,15 @@ def main() -> int:
             [
                 (pdgid, note.get("was"), note.get("summary"))
                 for pdgid, note in sorted(notes.items())
+            ],
+        )
+        store.executemany(
+            "INSERT INTO pdg_note_citations(pdgid, label, inspire_recid) "
+            "VALUES (?, ?, ?)",
+            [
+                (pdgid, label, recid)
+                for pdgid, note in sorted(notes.items())
+                for label, recid in sorted(note.get("citations", {}).items())
             ],
         )
         store.executemany(

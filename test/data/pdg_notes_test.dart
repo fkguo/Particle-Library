@@ -13,6 +13,12 @@ void main() {
       expect(note, isNotNull);
       expect(note!.was, contains('2400'));
       expect(note.summary, contains('two poles'));
+      // Every citation link from the pdgLive page is preserved with its recid.
+      expect(
+        note.citations.keys,
+        containsAll(['AAIJ 2015Y', 'DU 2018A', 'DU 2021']),
+      );
+      expect(note.citations['DU 2018A'], isNotNull);
     },
   );
 
