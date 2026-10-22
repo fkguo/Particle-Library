@@ -20,6 +20,7 @@ import '../common/snack_bars.dart';
 import '../common/ui.dart';
 import '../../app/navigation.dart';
 import '../../data/inspire_bibtex.dart';
+import 'csv_cell.dart';
 import 'evidence_view.dart';
 import 'note_editor.dart';
 import 'notes_entity.dart';
@@ -2543,13 +2544,13 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
     for (final row in _evidenceRows) {
       buffer.writeln(
         [
-          _csv(row.type.name),
-          _csv(row.title),
-          _csv(row.capturedValue == '—' ? '' : row.capturedValue),
-          _csv(row.captured?.edition ?? ''),
-          _csv(row.currentValue == '—' ? '' : row.currentValue),
-          _csv(row.current?.edition ?? ''),
-          _csv(row.displayStatus.name),
+          csvCell(row.type.name),
+          csvCell(row.title),
+          csvCell(row.capturedValue == '—' ? '' : row.capturedValue),
+          csvCell(row.captured?.edition ?? ''),
+          csvCell(row.currentValue == '—' ? '' : row.currentValue),
+          csvCell(row.current?.edition ?? ''),
+          csvCell(row.displayStatus.name),
           '${row.noteCount}',
         ].join(','),
       );
@@ -2576,8 +2577,6 @@ class _NotesWorkspaceState extends State<NotesWorkspace> {
       );
     }
   }
-
-  String _csv(String value) => '"${value.replaceAll('"', '""')}"';
 
   Future<void> _manageCollections() async {
     final store = widget.store;
