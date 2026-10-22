@@ -34,6 +34,12 @@ void main() {
     await executor.dispose();
   });
 
+  test('negative Monte Carlo ids resolve the antiparticle', () async {
+    final particles = await db.particlesByMcid(-211);
+    expect(particles, isNotEmpty);
+    expect(particles.first.name, contains('pi'));
+  });
+
   test('snapshot metadata and schema are the verified baseline', () async {
     expect(db.info.edition, '2026');
     expect(db.info.schemaVersion, '0.3');

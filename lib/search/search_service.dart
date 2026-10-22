@@ -508,7 +508,8 @@ class SearchService {
   }
 
   Future<SearchGroup?> _mcidHits(String query, int limit) async {
-    if (!RegExp(r'^\d+$').hasMatch(query)) return null;
+    // PDG Monte Carlo ids include negative values (antiparticles).
+    if (!RegExp(r'^-?\d+$').hasMatch(query)) return null;
     final mcid = int.tryParse(query);
     if (mcid == null) return null;
     final particles = await db.particlesByMcid(mcid);
