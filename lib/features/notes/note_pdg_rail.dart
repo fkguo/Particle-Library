@@ -17,12 +17,14 @@ class NotePdgRail extends StatefulWidget {
     required this.strings,
     required this.onOpen,
     this.compact = false,
+    this.autofocus = false,
   });
 
   final SearchService search;
   final AppStrings strings;
   final ValueChanged<SearchHit> onOpen;
   final bool compact;
+  final bool autofocus;
 
   @override
   State<NotePdgRail> createState() => _NotePdgRailState();
@@ -132,6 +134,7 @@ class _NotePdgRailState extends State<NotePdgRail> {
             child: TextField(
               controller: _controller,
               focusNode: _focus,
+              autofocus: widget.autofocus,
               onChanged: _onChanged,
               onSubmitted: (_) => _run(),
               decoration: InputDecoration(

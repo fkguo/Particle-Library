@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -11,6 +12,7 @@ import '../../notes/notes.dart';
 import '../common/description_text.dart';
 import '../common/page.dart';
 import '../common/snack_bars.dart';
+import '../common/floating_panel.dart';
 import '../common/ui.dart';
 import 'note_tag_field.dart';
 import 'notes_format.dart';
@@ -100,6 +102,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   Timer? _linkHoverTimer;
   Timer? _linkHoverHideTimer;
   OverlayEntry? _linkHoverOverlay;
+  OverlayEntry? _lookupOverlay;
   int _linkHoverGeneration = 0;
   bool _saving = false;
   bool _disposed = false;
@@ -162,6 +165,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     _linkHoverHideTimer?.cancel();
     _linkHoverOverlay?.remove();
     _linkHoverOverlay = null;
+    _closeFloatingLookup();
     if (!_discarded && (_saving || _hasChanges)) {
       _flushOnDispose();
     }
@@ -1087,6 +1091,11 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   Future<void> _openPdgLookup() async {
     final scope = AppScope.maybeOf(context);
     if (scope == null) return;
+    final size = MediaQuery.sizeOf(context);
+    if (size.width >= 900) {
+      _toggleFloatingLookup(scope.services, size);
+      return;
+    }
     await showDialog<void>(
       context: context,
       builder: (context) => Dialog(
@@ -1104,6 +1113,42 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  void _toggleFloatingLookup(AppServices scope, Size size) {
+    if (_lookupOverlay != null) {
+      _closeFloatingLookup();
+      return;
+    }
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final width = math.min(520.0, size.width - 48);
+    final height = math.min(620.0, size.height - 120);
+    final rect = Rect.fromLTWH((size.width - width) / 2, 80, width, height);
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (context) => FloatingPanel(
+        title: widget.strings.notesPdgLookup,
+        initialRect: rect,
+        maxSize: Size(size.width - 24, size.height - 60),
+        onClose: _closeFloatingLookup,
+        child: NotePdgRail(
+          search: scope.search,
+          strings: widget.strings,
+          autofocus: true,
+          onOpen: (hit) {
+            _closeFloatingLookup();
+            _openPdgHit(hit);
+          },
+        ),
+      ),
+    );
+    _lookupOverlay = entry;
+    overlay.insert(entry);
+  }
+
+  void _closeFloatingLookup() {
+    _lookupOverlay?.remove();
+    _lookupOverlay = null;
   }
 
   Future<void> _copyMarkdown() async {
