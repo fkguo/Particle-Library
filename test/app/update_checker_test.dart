@@ -24,8 +24,8 @@ void main() {
       request.response.headers.contentType = ContentType.json;
       request.response.write(
         jsonEncode({
-          'version': '0.2.0',
-          'url': 'https://example.com/releases/0.2.0',
+          'version': '9.9.9',
+          'url': 'https://example.com/releases/9.9.9',
           'notes': 'New PDF tools',
         }),
       );
@@ -35,7 +35,7 @@ void main() {
       endpoint: Uri.parse('http://127.0.0.1:${server.port}/latest'),
     );
     expect(info, isNotNull);
-    expect(info!.version, '0.2.0');
+    expect(info!.version, '9.9.9');
     expect(info.notes, 'New PDF tools');
   });
 
