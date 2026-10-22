@@ -357,6 +357,13 @@ class _ReferencePageState extends State<ReferencePage> {
         'inspire_id': patch.inspireRecid?.toString() ?? '',
         'title': patch.title ?? '',
       });
+      if (InspireBibtexService.canFetch(
+        inspireId: reference.inspireId,
+        doi: reference.doi,
+      )) {
+        _citeKeyLoading = true;
+        unawaited(_loadCiteKey(reference));
+      }
       final citing = <Entry>[];
       for (final id in await PdgNotes.entriesForCitation(patch.documentId)) {
         final entry = await database.entryByPdgid(id);
