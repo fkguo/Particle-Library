@@ -2470,7 +2470,16 @@ CREATE INDEX idx_note_collections_collection
   static String _nowIso() => _formatTimestamp(DateTime.now());
 
   static String _formatTimestamp(DateTime value) {
-    final utc = value.toUtc();
+    // Stored stamps are fixed-width text that sorts as a string and must read
+    // back through DateTime.tryParse. A negative year would be written as
+    // "00-5-..." and a five-digit year sorts wrongly, so a stamp from an
+    // imported file outside 0000-9999 is clamped to the nearest end.
+    var utc = value.toUtc();
+    if (utc.year < 0) {
+      utc = DateTime.utc(0);
+    } else if (utc.year > 9999) {
+      utc = DateTime.utc(9999, 12, 31, 23, 59, 59, 999, 999);
+    }
     String pad(int number, int width) => number.toString().padLeft(width, '0');
     final fraction = pad(utc.millisecond * 1000 + utc.microsecond, 6);
     return '${pad(utc.year, 4)}-${pad(utc.month, 2)}-${pad(utc.day, 2)}'
