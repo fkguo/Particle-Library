@@ -33,6 +33,7 @@ android/local.properties
 
 # SQLite runtime journals and Python caches
 *.sqlite-wal
+*.sqlite-journal
 *.sqlite-shm
 __pycache__/
 *.py[cod]
