@@ -1342,6 +1342,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
       if (_notesSplit) {
         _splitNote = null;
         _splitSession++;
+        // The docked inspector and the notes pane would otherwise both take
+        // the right side on expanded windows.
+        _showAnnotations = false;
       }
     });
   }
@@ -1356,7 +1359,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
         context: <String, Object?>{
           'schema': 1,
           'kind': 'pdf_reading',
-          if (page != null) 'pageNumber': page,
+          'pageNumber': ?page,
         },
       ),
     ];
