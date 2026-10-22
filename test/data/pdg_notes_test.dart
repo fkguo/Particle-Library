@@ -22,12 +22,20 @@ void main() {
     },
   );
 
-  test('citations missing from the official table have a patch reference', () async {
-    final reference = await PdgNotes.referenceFor('DU 2018A');
-    expect(reference, isNotNull);
-    expect(reference!.title, isNotNull);
-    expect(reference.title, isNotEmpty);
-    expect(reference.year, isNotNull);
+  test(
+    'citations missing from the official table have a patch reference',
+    () async {
+      final reference = await PdgNotes.referenceFor('DU 2018A');
+      expect(reference, isNotNull);
+      expect(reference!.title, isNotNull);
+      expect(reference.title, isNotEmpty);
+      expect(reference.year, isNotNull);
+    },
+  );
+
+  test('a patch citation knows which entries cite it', () async {
+    final entries = await PdgNotes.entriesForCitation('DU 2018A');
+    expect(entries, contains('M252'));
   });
 
   test('identifiers without notes return null', () async {

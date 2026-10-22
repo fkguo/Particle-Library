@@ -1,22 +1,56 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_scope.dart';
 import '../../app/app_theme.dart';
+import '../../app/navigation.dart';
 import '../../data/pdg_notes.dart';
+import '../../domain/models.dart';
 import '../common/description_text.dart';
+import '../common/math_text.dart';
 import '../common/page.dart';
 
 /// A citation that appears only in a pdgLive summary. The local PDG listings
 /// have no measurements for it, so this page shows the bibliographic record
 /// completed from INSPIRE plus a link to the INSPIRE entry.
-class PdgNoteReferencePage extends StatelessWidget {
+class PdgNoteReferencePage extends StatefulWidget {
   const PdgNoteReferencePage({super.key, required this.reference});
 
   final PdgNoteReference reference;
 
   @override
+  State<PdgNoteReferencePage> createState() => _PdgNoteReferencePageState();
+}
+
+class _PdgNoteReferencePageState extends State<PdgNoteReferencePage> {
+  List<Entry> _entries = const <Entry>[];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_loadEntries());
+    });
+  }
+
+  Future<void> _loadEntries() async {
+    final ids = await PdgNotes.entriesForCitation(widget.reference.documentId);
+    if (!mounted || ids.isEmpty) return;
+    final database = AppScope.of(context).database;
+    final entries = <Entry>[];
+    for (final id in ids) {
+      final entry = await database.entryByPdgid(id);
+      if (entry != null) entries.add(entry);
+    }
+    if (!mounted) return;
+    setState(() => _entries = entries);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final reference = widget.reference;
     final strings = AppScope.of(context).strings;
     final palette = context.palette;
     final theme = Theme.of(context);
@@ -84,6 +118,27 @@ class PdgNoteReferencePage extends StatelessWidget {
           ],
           const SizedBox(height: Insets.l),
           Text(strings.referencePdgLiveExplanation, style: secondary),
+          if (_entries.isNotEmpty) ...[
+            const SizedBox(height: Insets.l),
+            Text(
+              strings.referenceCitedByEntries,
+              style: theme.textTheme.titleSmall,
+            ),
+            const SizedBox(height: Insets.xs),
+            for (final entry in _entries)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.science_outlined,
+                  size: 20,
+                  color: palette.textSecondary,
+                ),
+                title: ParticleSymbol(entry.description, fontSize: 16),
+                subtitle: Text('PDG ${entry.pdgid}', style: secondary),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                onTap: () => AppNav.openPdgid(context, entry.pdgid),
+              ),
+          ],
         ],
       ),
     );

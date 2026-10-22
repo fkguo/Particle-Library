@@ -89,12 +89,15 @@ class InspireLiteratureSearchService {
     final query = raw.trim();
     if (query.isEmpty) return false;
     if (RegExp(
-      r'(^|\s)(a|author|t|title|doi|arxiv|recid|cn|collaboration|reportnumber|fulltext|refersto|citedby)\s*:',
+      r'(^|\s)(a|author|ea|eauthor|t|title|doi|arxiv|recid|cn|collaboration|reportnumber|fulltext|refersto|citedby)\s*:',
       caseSensitive: false,
     ).hasMatch(query)) {
       return true;
     }
-    if (RegExp(r'^(a|t|cn)\s+\S', caseSensitive: false).hasMatch(query)) {
+    if (RegExp(
+      r'^(a|author|ea|eauthor|t|title|cn)\s+\S',
+      caseSensitive: false,
+    ).hasMatch(query)) {
       return true;
     }
     if (RegExp(r'\b(and|or|not)\b', caseSensitive: false).hasMatch(query) &&

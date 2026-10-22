@@ -562,6 +562,8 @@ class AppStrings {
       _t('通用名称，展开为 $count 个粒子', 'Generic name; expands to $count particles');
 
   String get referenceTitle => _t('文献', 'Publication');
+  String get referenceCitedByEntries =>
+      _t('在 PDG 中引用它的条目', 'PDG entries that cite it');
   String get referencePdgLiveNote =>
       _t('PDG Live 摘要中的引用', 'Cited in a PDG Live summary');
   String get referencePdgLiveExplanation => _t(
@@ -589,8 +591,8 @@ class AppStrings {
   String get inspireSearchEmpty =>
       _t('INSPIRE 没有找到匹配文献。', 'No matching INSPIRE records.');
   String get inspireSearchAuthorHint => _t(
-    '按作者检索请加 a：例如 a "jiangyong"、a "Jia, Jiangyong"',
-    'Prefix author searches with a: e.g. a "jiangyong", a "Jia, Jiangyong"',
+    '按作者检索请加 a 或 ea（精确作者）：例如 a "Jia, Jiangyong"、ea "Jia, Jiangyong"',
+    'Prefix author searches with a or ea (exact author): e.g. a "Jia, Jiangyong", ea "Jia, Jiangyong"',
   );
   String inspireSearchResults(int count) =>
       _t('找到 $count 条 INSPIRE 记录', '$count INSPIRE records');
@@ -631,8 +633,8 @@ class AppStrings {
   String get inspireSearchOpenLocal =>
       _t('打开本地 PDG 文献记录', 'Open local PDG reference');
   String get inspireSearchSyntaxExamples => _t(
-    '支持 INSPIRE 语法：cn BESIII · t "muon" · arxiv:0902.4759 · doi:10.1103/PhysRevLett.6.381',
-    'INSPIRE syntax is supported: cn BESIII · t "muon" · arxiv:0902.4759 · doi:10.1103/PhysRevLett.6.381',
+    '支持 INSPIRE 语法：cn BESIII · a "Jia, Jiangyong" · ea "Jia, Jiangyong" · arxiv:0902.4759',
+    'INSPIRE syntax is supported: cn BESIII · a "Jia, Jiangyong" · ea "Jia, Jiangyong" · arxiv:0902.4759',
   );
   String get inspireSearchOpenLocalHint => _t(
     '“打开本地 PDG 文献记录”表示按 DOI 查找 PDG 快照中的文献条目，不是打开 PDG 网站。',

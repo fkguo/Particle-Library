@@ -58,6 +58,7 @@ class PdgNotes {
 
   static Map<String, PdgNote>? _cache;
   static Map<String, PdgNoteReference>? _references;
+  static Map<String, List<String>>? _citedByEntries;
 
   static Future<PdgNote?> forPdgid(String pdgid) async {
     await _ensureLoaded();
@@ -67,6 +68,12 @@ class PdgNotes {
   static Future<PdgNoteReference?> referenceFor(String documentId) async {
     await _ensureLoaded();
     return _references![documentId];
+  }
+
+  /// Particle identifiers whose pdgLive summary cites [documentId].
+  static Future<List<String>> entriesForCitation(String documentId) async {
+    await _ensureLoaded();
+    return _citedByEntries![documentId] ?? const <String>[];
   }
 
   static Future<PdgNoteReference?> referenceForDoi(String doi) async {
@@ -84,16 +91,22 @@ class PdgNotes {
     final loaded = await _load();
     _cache = loaded.notes;
     _references = loaded.references;
+    _citedByEntries = loaded.citedByEntries;
   }
 
   @visibleForTesting
   static void resetCache() {
     _cache = null;
     _references = null;
+    _citedByEntries = null;
   }
 
   static Future<
-    ({Map<String, PdgNote> notes, Map<String, PdgNoteReference> references})
+    ({
+      Map<String, PdgNote> notes,
+      Map<String, PdgNoteReference> references,
+      Map<String, List<String>> citedByEntries,
+    })
   >
   _load() async {
     try {
@@ -131,6 +144,13 @@ class PdgNotes {
             citations: citations[pdgid] ?? const {},
           );
         }
+        final citedByEntries = <String, List<String>>{};
+        for (final row in database.select(
+          'SELECT label, pdgid FROM pdg_note_citations',
+        )) {
+          final label = row['label'] as String;
+          (citedByEntries[label] ??= <String>[]).add(row['pdgid'] as String);
+        }
         final references = <String, PdgNoteReference>{};
         try {
           for (final row in database.select(
@@ -151,7 +171,11 @@ class PdgNotes {
         } on SqliteException {
           // Older assets have no reference table.
         }
-        return (notes: notes, references: references);
+        return (
+          notes: notes,
+          references: references,
+          citedByEntries: citedByEntries,
+        );
       } finally {
         database.dispose();
       }
@@ -161,6 +185,7 @@ class PdgNotes {
       return (
         notes: const <String, PdgNote>{},
         references: const <String, PdgNoteReference>{},
+        citedByEntries: const <String, List<String>>{},
       );
     }
   }
