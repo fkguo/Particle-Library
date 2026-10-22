@@ -279,19 +279,26 @@ void main() {
     expect(find.byType(TextField), findsWidgets);
     expect(tester.takeException(), isNull);
 
-    // Close the annotation editor, scroll the page and reopen: the reading
-    // position is restored together with the fit and zoom.
+    // Close the annotation editor, go to page 2, scroll and reopen: page,
+    // zoom and reading position are restored, and stay restored.
     await tester.tapAt(const Offset(8, 8));
     await tester.pump(const Duration(milliseconds: 500));
+    // Zero duration: the test advances frames only while pumping, so an
+    // animated goToPage would never complete.
+    await controller.goToPage(pageNumber: 2, duration: Duration.zero);
+    await tester.pump(const Duration(milliseconds: 400));
     final viewerRect = tester.getRect(find.byType(PdfViewer));
     await tester.dragFrom(
       viewerRect.bottomCenter - const Offset(0, 40),
-      const Offset(0, -220),
+      const Offset(0, -180),
       kind: PointerDeviceKind.touch,
     );
     await tester.pump(const Duration(milliseconds: 400));
+    final savedPage = controller.pageNumber;
+    expect(savedPage, 2);
     final savedScrollTop = controller.visibleRect.top;
     expect(savedScrollTop, greaterThan(0));
+    final savedScale = controller.value.getMaxScaleOnAxis();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -334,25 +341,44 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(
       reopened.value.getMaxScaleOnAxis(),
-      closeTo(chosenScale, chosenScale * 0.03),
+      closeTo(savedScale, savedScale * 0.03),
     );
+    expect(reopened.pageNumber, savedPage);
+    expect(reopened.visibleRect.top, closeTo(savedScrollTop, 60));
+    // The position must survive the late layout pass as well; this is where
+    // the reader used to jump back to the top of the page.
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(reopened.pageNumber, savedPage);
     expect(reopened.visibleRect.top, closeTo(savedScrollTop, 60));
   });
 }
 
 Uint8List _pdf() {
-  final stream = StringBuffer('BT /F1 14 Tf 30 TL 60 540 Td ');
-  for (var line = 0; line < 15; line++) {
-    stream.write('(Hybrid page line ${line + 1}) Tj T* ');
+  String pageStream(String label) {
+    final stream = StringBuffer('BT /F1 14 Tf 30 TL 60 540 Td ');
+    for (var line = 0; line < 15; line++) {
+      stream.write('($label line ${line + 1}) Tj T* ');
+    }
+    stream.write('ET');
+    return stream.toString();
   }
-  stream.write('ET');
+
+  final streams = [
+    pageStream('Hybrid page'),
+    pageStream('Page two'),
+    pageStream('Page three'),
+  ];
+  // Object numbering (1-based): 1 catalog, 2 pages, 3 font, then page/stream
+  // pairs for pages 1..3.
   final objects = <String>[
     '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [4 0 R] /Count 1 >>',
+    '<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R] /Count 3 >>',
     '<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 600] '
-        '/Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>',
-    '<< /Length ${stream.length} >>\nstream\n$stream\nendstream',
+    for (var i = 0; i < 3; i++) ...[
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 600] '
+          '/Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>',
+      '<< /Length ${streams[i].length} >>\nstream\n${streams[i]}\nendstream',
+    ],
   ];
   final out = StringBuffer('%PDF-1.4\n');
   final offsets = <int>[0];
