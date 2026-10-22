@@ -103,9 +103,7 @@ class _InspireSearchFieldState extends State<InspireSearchField> {
     final palette = context.palette;
     final theme = Theme.of(context);
     final hint = _hint;
-    final suffix = hint == null
-        ? null
-        : hint.substring(widget.controller.text.length);
+    final suffix = hint?.substring(widget.controller.text.length);
     final textStyle =
         theme.textTheme.bodyLarge ?? const TextStyle(fontSize: 16);
     // The field is borderless with a fixed horizontal padding, so the inline
@@ -125,7 +123,8 @@ class _InspireSearchFieldState extends State<InspireSearchField> {
                 const SingleActivator(LogicalKeyboardKey.arrowRight):
                     _acceptHint,
               },
-              const SingleActivator(LogicalKeyboardKey.arrowDown): _toggleMenu,
+              // The history list only opens from its button (or ArrowDown is
+              // deliberately not bound): typing shows the inline hint only.
               if (_menu.isOpen)
                 const SingleActivator(LogicalKeyboardKey.escape): () =>
                     _menu.close(),

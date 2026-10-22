@@ -166,7 +166,7 @@ class _ParticleBodyState extends State<_ParticleBody> {
     CategoryInfo? category,
   ) async {
     final related = await PdgNotes.reviewFilesFor(widget.view.entry.pdgid);
-    if (!mounted) return;
+    if (!context.mounted) return;
     final files = related.isNotEmpty
         ? related.toSet()
         : (category == null
