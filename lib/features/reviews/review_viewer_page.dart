@@ -24,12 +24,14 @@ import '../../data/review_annotations.dart';
 import '../../notes/notes_store.dart';
 import '../../user/user_store.dart';
 import '../../notes/notes_models.dart';
+import '../common/export_file.dart';
 import '../common/resize_handle.dart';
 import '../common/snack_bars.dart';
 import '../notes/note_editor.dart';
 import '../notes/note_tag_field.dart';
 import '../notes/notes_format.dart';
 import 'reading_history.dart';
+import 'region_export.dart';
 import 'review_index.dart';
 
 const MethodChannel _clipboardChannel = MethodChannel('pdg.clipboard');
@@ -1045,15 +1047,15 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
     if (path == null) return;
     final strings = AppScope.of(context).strings;
     try {
-      final location = await getSaveLocation(
+      // saveOrShareBytes opens the share sheet on iOS/Android, where the
+      // file_selector save dialog does not exist.
+      final saved = await saveOrShareBytes(
         suggestedName: path.split(RegExp(r'[\\/]')).last,
-        acceptedTypeGroups: const [
-          XTypeGroup(label: 'PNG', extensions: ['png']),
-        ],
+        bytes: await File(path).readAsBytes(),
+        type: const XTypeGroup(label: 'PNG', extensions: ['png']),
+        mimeType: 'image/png',
       );
-      if (location == null) return;
-      await File(path).copy(location.path);
-      if (!mounted) return;
+      if (!saved || !mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(strings.reviewImageSaved)));
     } catch (error) {
@@ -1073,28 +1075,44 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
     if (source == null || annotation.imageStale) return;
     final strings = AppScope.of(context).strings;
     try {
-      final location = await getSaveLocation(
-        suggestedName: 'annotation-${annotation.id}.md',
-        acceptedTypeGroups: const [
-          XTypeGroup(label: 'Markdown', extensions: ['md']),
-        ],
-      );
-      if (location == null) return;
-      final mdPath = location.path.toLowerCase().endsWith('.md')
-          ? location.path
-          : '${location.path}.md';
-      final imagePath = mdPath.replaceFirst(RegExp(r'\.md$'), '.png');
-      await File(source).copy(imagePath);
-      final comment = annotation.note.trim();
-      final body = StringBuffer(
-        '![Region](${imagePath.split(RegExp(r'[\\/]')).last})\n',
-      );
-      if (comment.isNotEmpty) {
-        body
-          ..writeln()
-          ..writeln(comment);
+      final suggestedName = 'annotation-${annotation.id}.md';
+      if (Platform.isAndroid || Platform.isIOS) {
+        // No save dialog on mobile: hand the Markdown and the image it links
+        // to to the share sheet together.
+        final directory = await temporaryExportPath(suggestedName);
+        final paths = regionExportPaths(directory, exists: (_) => false);
+        final image = await File(source).copy(paths.image);
+        final markdown = File(paths.markdown);
+        await markdown.writeAsString(
+          regionMarkdown(
+            imageName: image.uri.pathSegments.last,
+            comment: annotation.note,
+          ),
+          flush: true,
+        );
+        await shareFiles(
+          [markdown, image],
+          mimeTypes: const ['text/markdown', 'image/png'],
+          subject: suggestedName,
+        );
+      } else {
+        final location = await getSaveLocation(
+          suggestedName: suggestedName,
+          acceptedTypeGroups: const [
+            XTypeGroup(label: 'Markdown', extensions: ['md']),
+          ],
+        );
+        if (location == null) return;
+        final paths = regionExportPaths(location.path);
+        await File(source).copy(paths.image);
+        await File(paths.markdown).writeAsString(
+          regionMarkdown(
+            imageName: paths.image.split(RegExp(r'[\\/]')).last,
+            comment: annotation.note,
+          ),
+          flush: true,
+        );
       }
-      await File(mdPath).writeAsString(body.toString(), flush: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(strings.reviewImageSaved)));

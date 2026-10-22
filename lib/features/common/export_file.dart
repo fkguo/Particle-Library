@@ -37,6 +37,24 @@ Future<void> shareFile(File file, {String mimeType = 'application/zip'}) async {
   );
 }
 
+/// Opens the share sheet with several files at once (mobile export of a
+/// Markdown file together with the image it links to).
+Future<void> shareFiles(
+  List<File> files, {
+  required List<String> mimeTypes,
+  String? subject,
+}) async {
+  await SharePlus.instance.share(
+    ShareParams(
+      files: [
+        for (var i = 0; i < files.length; i++)
+          XFile(files[i].path, mimeType: mimeTypes[i]),
+      ],
+      subject: subject,
+    ),
+  );
+}
+
 /// Returns a writable temporary path for a file that will be shared.
 Future<String> temporaryExportPath(String fileName) async {
   final directory = await getTemporaryDirectory();
