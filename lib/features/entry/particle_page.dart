@@ -141,6 +141,12 @@ class _ParticleBodyState extends State<_ParticleBody> {
         // Links fall back to INSPIRE.
       }
     }
+    final patchReferences = <String, PdgNoteReference>{};
+    for (final label in note.citations.keys) {
+      if (localIds[label] != null) continue;
+      final reference = await PdgNotes.referenceFor(label);
+      if (reference != null) patchReferences[label] = reference;
+    }
     if (!mounted) return;
     setState(() {
       _pdgNote = note;
@@ -149,6 +155,7 @@ class _ParticleBodyState extends State<_ParticleBody> {
           entry.key: PdgCitation(
             localId: localIds[entry.key],
             inspireRecid: entry.value,
+            reference: patchReferences[entry.key],
           ),
       };
     });

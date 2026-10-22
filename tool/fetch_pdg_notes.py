@@ -31,6 +31,7 @@ shared service.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sqlite3
@@ -89,6 +90,67 @@ def parse(html: str) -> dict[str, object]:
         if citations:
             note["citations"] = citations
     return note
+
+
+INSPIRE_API = "https://inspirehep.net/api/literature/"
+
+
+def inspire_reference(recid: int, timeout: int = 30, retries: int = 3) -> dict:
+    """Fetch the bibliographic record for a summary citation from INSPIRE."""
+    url = (
+        f"{INSPIRE_API}{recid}?fields=titles,authors.full_name,"
+        "publication_info,dois,arxiv_eprints"
+    )
+    last: Exception | None = None
+    for attempt in range(retries):
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": UA})
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                payload = json.loads(response.read().decode("utf-8", "replace"))
+            metadata = payload.get("metadata", {})
+            titles = metadata.get("titles") or []
+            title = titles[0].get("title", "") if titles else ""
+            authors = [
+                author.get("full_name", "")
+                for author in (metadata.get("authors") or [])
+                if author.get("full_name")
+            ]
+            publication = ""
+            year = None
+            pub_info = metadata.get("publication_info") or []
+            if pub_info:
+                first = pub_info[0]
+                year = first.get("year")
+                journal = first.get("journal_title", "")
+                volume = first.get("journal_volume", "")
+                page = first.get("page_start", "") or first.get("artid", "")
+                publication = " ".join(
+                    part for part in (journal, volume, page) if part
+                )
+            dois = metadata.get("dois") or []
+            doi = dois[0].get("value", "") if dois else ""
+            eprints = metadata.get("arxiv_eprints") or []
+            arxiv_id = eprints[0].get("value", "") if eprints else ""
+            return {
+                "title": title,
+                "authors": ", ".join(authors[:20]),
+                "year": year,
+                "publication": publication,
+                "doi": doi,
+                "arxiv_id": arxiv_id,
+            }
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as error:
+            last = error
+            time.sleep(2 * (attempt + 1))
+    raise RuntimeError(f"INSPIRE {recid}: {last}")
+
+
+def local_reference_ids(snapshot: str) -> set[str]:
+    with sqlite3.connect(snapshot) as connection:
+        return {
+            row[0]
+            for row in connection.execute("SELECT document_id FROM pdgreference")
+        }
 
 
 def roots(snapshot: str) -> list[str]:
@@ -154,9 +216,28 @@ def main() -> int:
         if index < len(nodes):
             time.sleep(args.delay)
 
-    if os.path.exists(args.out):
-        os.remove(args.out)
-    with sqlite3.connect(args.out) as store:
+    # Citation labels that are not in the official reference table need their
+    # bibliographic data in the patch so the app can show an in-app page.
+    local = local_reference_ids(args.snapshot)
+    wanted: dict[str, int] = {}
+    for note in notes.values():
+        for label, recid in note.get("citations", {}).items():
+            if label not in local:
+                wanted[label] = recid
+    references: dict[str, dict] = {}
+    for index, (label, recid) in enumerate(sorted(wanted.items()), 1):
+        try:
+            references[label] = {"inspire_recid": recid, **inspire_reference(recid)}
+        except Exception as error:  # noqa: BLE001
+            print(f"[ref {index}/{len(wanted)}] {label}: FAILED {error}", file=sys.stderr)
+            continue
+        print(f"[ref {index}/{len(wanted)}] {label}: {references[label]['title'][:60]}")
+        time.sleep(args.delay)
+
+    tmp = args.out + ".tmp"
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    with sqlite3.connect(tmp) as store:
         store.executescript(
             """
             CREATE TABLE pdg_notes (
@@ -167,6 +248,16 @@ def main() -> int:
             CREATE TABLE pdg_notes_info (
               key TEXT NOT NULL PRIMARY KEY,
               value TEXT NOT NULL
+            );
+            CREATE TABLE pdg_note_references (
+              document_id TEXT NOT NULL PRIMARY KEY,
+              inspire_recid INTEGER,
+              title TEXT,
+              authors TEXT,
+              year INTEGER,
+              publication TEXT,
+              doi TEXT,
+              arxiv_id TEXT
             );
             CREATE TABLE pdg_note_citations (
               pdgid TEXT NOT NULL,
@@ -193,6 +284,23 @@ def main() -> int:
             ],
         )
         store.executemany(
+            "INSERT INTO pdg_note_references(document_id, inspire_recid, title, "
+            "authors, year, publication, doi, arxiv_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    label,
+                    reference.get("inspire_recid"),
+                    reference.get("title"),
+                    reference.get("authors"),
+                    reference.get("year"),
+                    reference.get("publication"),
+                    reference.get("doi"),
+                    reference.get("arxiv_id"),
+                )
+                for label, reference in sorted(references.items())
+            ],
+        )
+        store.executemany(
             "INSERT INTO pdg_notes_info(key, value) VALUES (?, ?)",
             [
                 ("edition", args.edition),
@@ -201,6 +309,7 @@ def main() -> int:
                 ("count", str(len(notes))),
             ],
         )
+    os.replace(tmp, args.out)
     with_was = sum(1 for note in notes.values() if "was" in note)
     with_summary = sum(1 for note in notes.values() if "summary" in note)
     print(

@@ -562,6 +562,12 @@ class AppStrings {
       _t('通用名称，展开为 $count 个粒子', 'Generic name; expands to $count particles');
 
   String get referenceTitle => _t('文献', 'Publication');
+  String get referencePdgLiveNote =>
+      _t('PDG Live 摘要中的引用', 'Cited in a PDG Live summary');
+  String get referencePdgLiveExplanation => _t(
+    '这条文献只在 PDG Live 的摘要说明中被引用，本地 PDG 数据表没有它的测量记录；题录信息由 INSPIRE 补全。',
+    'This work is cited only in a PDG Live summary; the local PDG listings have no measurements for it. The bibliographic record is completed from INSPIRE.',
+  );
   String get inspireSearchTitle => _t('INSPIRE 文献搜索', 'Search INSPIRE');
   String get inspireSearchSubtitle => _t(
     '使用 INSPIRE 语法在线检索文献',

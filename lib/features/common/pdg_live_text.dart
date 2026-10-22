@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_theme.dart';
 import '../../app/navigation.dart';
+import '../../data/pdg_notes.dart';
+import '../reference/pdg_note_reference_page.dart';
 
 /// pdgLive uses the plain-TeX font switch `{\mit i}` for the imaginary unit.
 /// flutter_math has no `\mit`, and math letters are italic already, so the
@@ -26,13 +28,16 @@ String normalizePdgLiveMath(String body) {
 /// A citation found in a pdgLive note.
 @immutable
 class PdgCitation {
-  const PdgCitation({this.localId, this.inspireRecid});
+  const PdgCitation({this.localId, this.inspireRecid, this.reference});
 
   /// Local PDG reference id when the key exists in the snapshot.
   final int? localId;
 
   /// INSPIRE record linked from the pdgLive page.
   final int? inspireRecid;
+
+  /// Bibliographic record from the patch when the key is not in the snapshot.
+  final PdgNoteReference? reference;
 }
 
 /// Renders a pdgLive note: `$...$` LaTeX becomes typeset math, and citation
@@ -152,6 +157,11 @@ class PdgLiveText extends StatelessWidget {
     final local = citation.localId;
     if (local != null) {
       AppNav.openReference(context, local);
+      return;
+    }
+    final reference = citation.reference;
+    if (reference != null) {
+      AppNav.push<void>(context, PdgNoteReferencePage(reference: reference));
       return;
     }
     final recid = citation.inspireRecid;

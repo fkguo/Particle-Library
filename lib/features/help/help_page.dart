@@ -467,6 +467,13 @@ class _HelpPageState extends State<HelpPage> {
               'Crossref title enrichment and INSPIRE BibTeX/cite-key use the network only on explicit actions or when needed; core lookups do not depend on the network.',
             ),
           ),
+          _bullet(
+            context,
+            t(
+              '官方数据库没有 pdgLive 粒子页上的“was …”旧名和摘要说明，也没有摘要里引用的部分文献。应用为此附带了一个补丁库：粒子页会显示旧名、摘要和可点击的引用；这些引用若不在官方文献表中，点开的是应用内的题录页（数据由 INSPIRE 补全），不会跳出到网页。补丁每年随 PDG 版次重新生成。',
+              'The official database has neither the “was …” rename and summary prose shown on pdgLive particle pages, nor some works cited in those summaries. The app ships a patch database: particle pages show the rename, the summary and tappable citations; a citation missing from the official reference table opens an in-app record completed from INSPIRE instead of a web page. The patch is regenerated with each PDG edition.',
+            ),
+          ),
         ],
       ),
       _HelpSectionData(
