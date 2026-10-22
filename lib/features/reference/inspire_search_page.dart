@@ -1238,16 +1238,16 @@ class _InspireSearchHelpPanel extends StatelessWidget {
       color: palette.textSecondary,
     );
     final rows = <(String, String)>[
-      ('a "Weinberg, Steven"', pick(lang, '作者', 'Author')),
-      ('ea "Weinberg, Steven"', pick(lang, '精确作者', 'Exact author')),
-      ('t "muon"', pick(lang, '题名', 'Title')),
+      ('a Weinberg, Steven', pick(lang, '作者', 'Author')),
+      ('ea Weinberg, Steven', pick(lang, '精确作者', 'Exact author')),
+      ('t muon', pick(lang, '题名', 'Title')),
       ('cn BESIII', pick(lang, '合作组', 'Collaboration')),
       ('doi 10.1103/...', 'DOI'),
       ('arXiv:1705.00141', 'arXiv'),
       ('recid 1597424', pick(lang, '记录号', 'Record id')),
       ('de 2020->2024', pick(lang, '日期', 'Date')),
       ('topcite 100+', pick(lang, '引用数', 'Citations')),
-      ('ft "..."', pick(lang, '全文（= fulltext）', 'Full text (= fulltext)')),
+      ('ft <term>', pick(lang, '全文（= fulltext）', 'Full text (= fulltext)')),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

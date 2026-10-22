@@ -578,8 +578,8 @@ class AppStrings {
     'Search INSPIRE online with INSPIRE query syntax',
   );
   String get inspireSearchHint => _t(
-    '输入 INSPIRE 语法或关键词，例如 cn BESIII、t "muon"',
-    'Enter INSPIRE syntax or keywords, e.g. cn BESIII, t "muon"',
+    '输入 INSPIRE 语法或关键词，例如 cn BESIII、t muon',
+    'Enter INSPIRE syntax or keywords, e.g. cn BESIII, t muon',
   );
   String get inspireSearchAction => _t('搜索 INSPIRE', 'Search INSPIRE');
   String get inspireHelpTitle => _t('INSPIRE 搜索语法', 'INSPIRE search syntax');
@@ -587,8 +587,7 @@ class AppStrings {
     '搜索框把内容原样发给 INSPIRE；下面是最常用的写法。',
     'The box sends your text to INSPIRE unchanged; these are the most common forms.',
   );
-  String get inspireHelpOpenDocs =>
-      _t('INSPIRE 搜索帮助', 'INSPIRE search help');
+  String get inspireHelpOpenDocs => _t('INSPIRE 搜索帮助', 'INSPIRE search help');
   String get inspireHelpOpenAllTerms =>
       _t('完整搜索项列表', 'Full list of search terms');
   String get inspireClearHistory =>
@@ -642,8 +641,8 @@ class AppStrings {
   String get inspireSearchOpenLocal =>
       _t('打开本地 PDG 文献记录', 'Open local PDG reference');
   String get inspireSearchSyntaxExamples => _t(
-    '支持 INSPIRE 语法：cn BESIII · t "muon" · arxiv:0902.4759 · doi:10.1103/PhysRevLett.6.381',
-    'INSPIRE syntax is supported: cn BESIII · t "muon" · arxiv:0902.4759 · doi:10.1103/PhysRevLett.6.381',
+    '支持 INSPIRE 语法：cn BESIII · t muon · arXiv:1705.00141 · doi:10.1103/PhysRevLett.6.381',
+    'INSPIRE syntax is supported: cn BESIII · t muon · arXiv:1705.00141 · doi:10.1103/PhysRevLett.6.381',
   );
   String get inspireSearchOpenLocalHint => _t(
     '“打开本地 PDG 文献记录”表示按 DOI 查找 PDG 快照中的文献条目，不是打开 PDG 网站。',
