@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/app_scope.dart';
 import '../../app/error_text.dart';
 import '../../app/app_strings.dart';
+import '../../app/build_info.dart';
 import '../../app/full_backup.dart';
 import '../../app/settings_controller.dart';
 import '../../app/update_checker.dart';
@@ -905,6 +906,14 @@ class _SettingsPageState extends State<SettingsPage> {
                       style: Theme.of(context).textTheme.bodySmall
                           ?.copyWith(color: palette.textSecondary),
                     ),
+                    if (buildLabel.isNotEmpty) ...[
+                      const SizedBox(height: Insets.xs),
+                      Text(
+                        strings.settingsBuildValue(buildLabel),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: palette.textSecondary),
+                      ),
+                    ],
                     const SizedBox(height: Insets.xs),
                     OutlinedButton.icon(
                       onPressed: _checkingUpdate ? null : _checkUpdates,

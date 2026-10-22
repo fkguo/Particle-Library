@@ -1462,6 +1462,7 @@ class AppStrings {
   String get settingsAppVersion => _t('应用版本', 'App version');
   String settingsVersionValue(String version) =>
       _t('版本 $version', 'Version $version');
+  String settingsBuildValue(String build) => _t('构建 $build', 'Build $build');
   String get settingsSnapshotVersion => _t('快照版本', 'Snapshot version');
   String get settingsSnapshotFile => _t('快照文件', 'Snapshot file');
   String get settingsSchema => _t('schema', 'schema');

@@ -2277,26 +2277,27 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   }
 
   Future<void> _fitInitialPage(int pageNumber) async {
+    // Restoring must not animate: pdfrx keeps writing the matrix while a page
+    // animation runs, so applying the saved scroll next to an animated
+    // goToPage used to land on the top of the page once the animation ended.
     if (pageNumber > 1) {
-      await _controller.goToPage(pageNumber: pageNumber);
+      await _controller.goToPage(
+        pageNumber: pageNumber,
+        duration: Duration.zero,
+      );
     }
     if (!mounted) return;
     final page = _controller.pageNumber ?? pageNumber;
     _applyFit(page);
-    final zoom = _restoredZoom;
-    if (zoom != null) _applyZoom(zoom);
     final scroll = _restoredScroll;
-    if (scroll != null) _restoreScroll(scroll);
-  }
-
-  /// Puts a saved document point back at the viewport origin, which restores
-  /// the reading position without depending on pdfrx internals.
-  void _restoreScroll(Offset documentPoint) {
-    if (!_controller.isReady) return;
-    final global = _controller.documentToGlobal(documentPoint);
-    if (global == null) return;
-    _controller.value = Matrix4.translationValues(-global.dx, -global.dy, 0)
-      ..multiply(_controller.value);
+    final zoom = _restoredZoom;
+    if (scroll != null) {
+      // A single pdfrx transaction places the saved document point at the
+      // viewport origin and restores the zoom with it.
+      await _controller.goToPosition(documentOffset: scroll, zoom: zoom);
+    } else if (zoom != null) {
+      _applyZoom(zoom);
+    }
   }
 
   /// Applies [mode] and remembers it for this document.
