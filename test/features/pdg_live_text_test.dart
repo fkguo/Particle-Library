@@ -35,6 +35,11 @@ void main() {
     expect(links, contains('DU 2018A'));
   });
 
+  test('the mit font switch becomes the plain letter', () {
+    expect(normalizePdgLiveMath(r'-{\mit i}(102)'), '-i(102)');
+    expect(normalizePdgLiveMath(r'\mit i'), 'i');
+  });
+
   testWidgets('the M252 rename body is typeset, not left as source', (
     tester,
   ) async {

@@ -8,6 +8,21 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/app_theme.dart';
 import '../../app/navigation.dart';
 
+/// pdgLive uses the plain-TeX font switch `{\mit i}` for the imaginary unit.
+/// flutter_math has no `\mit`, and math letters are italic already, so the
+/// switch is reduced to the letter itself.
+String normalizePdgLiveMath(String body) {
+  var out = body.replaceAllMapped(
+    RegExp(r'\{\s*\\mit\s+([A-Za-z])\s*\}'),
+    (match) => match.group(1)!,
+  );
+  out = out.replaceAllMapped(
+    RegExp(r'\\mit\s+([A-Za-z])'),
+    (match) => match.group(1)!,
+  );
+  return out;
+}
+
 /// A citation found in a pdgLive note.
 @immutable
 class PdgCitation {
@@ -64,7 +79,7 @@ class PdgLiveText extends StatelessWidget {
           alignment: PlaceholderAlignment.baseline,
           baseline: TextBaseline.alphabetic,
           child: Math.tex(
-            body,
+            normalizePdgLiveMath(body),
             mathStyle: MathStyle.text,
             textStyle: base,
             onErrorFallback: (_) => Text(
