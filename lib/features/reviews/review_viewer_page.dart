@@ -29,6 +29,8 @@ import '../common/snack_bars.dart';
 import '../notes/note_editor.dart';
 import '../notes/note_tag_field.dart';
 import '../notes/notes_format.dart';
+import 'reading_history.dart';
+import 'review_index.dart';
 
 const MethodChannel _clipboardChannel = MethodChannel('pdg.clipboard');
 
@@ -83,6 +85,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
 
   final PdfViewerController _controller = PdfViewerController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final ReadingHistory _readingHistory = ReadingHistory();
+  bool _notesSplit = false;
+  NoteRecord? _splitNote;
+  int _splitSession = 0;
   PdfTextSearcher? _searcher;
   UserStore? _userStore;
   int? _currentPage;
@@ -870,11 +876,19 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
     setState(() => _selectedAnnotationId = annotation.id);
     if (_controller.isReady &&
         (_currentPage ?? _controller.pageNumber) != annotation.pageNumber) {
+      _rememberForBack();
       unawaited(_controller.goToPage(pageNumber: annotation.pageNumber));
     }
   }
 
   Future<void> _openNoteRecord(NoteRecord note) async {
+    if (_notesSplit && context.layoutClass != LayoutClass.compact) {
+      setState(() {
+        _splitNote = note;
+        _splitSession++;
+      });
+      return;
+    }
     await AppNav.push<void>(context, NoteEditorPage(note: note));
     if (!mounted) return;
     final notes = _notes;
@@ -1283,7 +1297,153 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
 
   void _openOutline(PdfOutlineNode node) {
     if (!_controller.isReady || node.dest == null) return;
+    _rememberForBack();
     unawaited(_controller.goToDest(node.dest));
+  }
+
+  void _rememberForBack() {
+    if (!_controller.isReady) return;
+    final zoom = _controller.value.getMaxScaleOnAxis();
+    if (zoom <= 0) return;
+    _readingHistory.push(
+      ReadingPosition(
+        page: _currentPage ?? _controller.pageNumber ?? 1,
+        offset: _controller.visibleRect.topLeft,
+        zoom: zoom,
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _goBackInReading() async {
+    final target = _readingHistory.pop();
+    if (mounted) setState(() {});
+    if (target == null || !_controller.isReady) return;
+    if (_controller.pageNumber != target.page) {
+      await _controller.goToPage(
+        pageNumber: target.page,
+        duration: Duration.zero,
+      );
+    }
+    if (!mounted || !_controller.isReady) return;
+    await _controller.goToPosition(
+      documentOffset: target.offset,
+      zoom: target.zoom,
+    );
+  }
+
+  void _toggleNotesSplit() {
+    if (context.layoutClass == LayoutClass.compact) {
+      unawaited(AppNav.push<void>(context, NoteEditorPage(note: _splitNote)));
+      return;
+    }
+    setState(() {
+      _notesSplit = !_notesSplit;
+      if (_notesSplit) {
+        _splitNote = null;
+        _splitSession++;
+      }
+    });
+  }
+
+  List<NoteAnchorInput> _splitAnchors() {
+    final page =
+        _currentPage ?? (_controller.isReady ? _controller.pageNumber : null);
+    return [
+      NoteAnchorInput.review(
+        '$reviewEdition/$_fileName',
+        targetLabel: '${widget.title}${page == null ? '' : ' · p.$page'}',
+        context: <String, Object?>{
+          'schema': 1,
+          'kind': 'pdf_reading',
+          if (page != null) 'pageNumber': page,
+        },
+      ),
+    ];
+  }
+
+  Widget _notesSplitPane(
+    BuildContext context,
+    AppStrings strings,
+    AppPalette palette,
+  ) {
+    final store = _notes;
+    final width = (MediaQuery.sizeOf(context).width * 0.36).clamp(320.0, 440.0);
+    return Container(
+      width: width,
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border(left: BorderSide(color: palette.divider)),
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            height: 44,
+            child: Row(
+              children: [
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    strings.notesTitle,
+                    style: Theme.of(context).textTheme.titleSmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  tooltip: strings.notesNew,
+                  onPressed: () => setState(() {
+                    _splitNote = null;
+                    _splitSession++;
+                  }),
+                  icon: const Icon(Icons.add, size: 18),
+                ),
+                IconButton(
+                  tooltip: strings.commonClose,
+                  onPressed: () => setState(() => _notesSplit = false),
+                  icon: const Icon(Icons.close, size: 18),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: store == null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(strings.notesUnavailable),
+                    ),
+                  )
+                : NoteEditor(
+                    key: ValueKey<String>(
+                      'split-note-${_splitNote?.id ?? 'draft'}-$_splitSession',
+                    ),
+                    store: store,
+                    strings: strings,
+                    note: _splitNote,
+                    draft: _splitNote == null,
+                    autofocusTitle: _splitNote == null,
+                    initialAnchors: _splitNote == null
+                        ? _splitAnchors()
+                        : const <NoteAnchorInput>[],
+                    onSaved: (note) {
+                      setState(() => _splitNote = note);
+                      unawaited(_loadAnnotations(store));
+                    },
+                    onDeleted: () {
+                      setState(() {
+                        _splitNote = null;
+                        _splitSession++;
+                      });
+                      unawaited(_loadAnnotations(store));
+                    },
+                    onCancel: () => setState(() => _notesSplit = false),
+                  ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<String?> _renderRegionImage(int pageNumber, Rect rect) async {
@@ -2031,6 +2191,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
         await _openAnnotationNote(annotation);
       case 'page':
         if (_controller.isReady) {
+          _rememberForBack();
           await _controller.goToPage(pageNumber: annotation.pageNumber);
         }
       case 'save':
@@ -2321,6 +2482,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
     controller.dispose();
     if (page == null || !mounted) return;
     if (page < 1 || page > _controller.pageCount) return;
+    _rememberForBack();
     await _controller.goToPage(pageNumber: page);
   }
 
@@ -2791,12 +2953,27 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
                 // One row: page, search, annotate mode, everything else in
                 // the overflow. Annotation tools live in the annotate strip.
                 actions: [
+                  if (_readingHistory.canGoBack)
+                    IconButton(
+                      tooltip: strings.reviewBackToPosition,
+                      onPressed: () => unawaited(_goBackInReading()),
+                      icon: const Icon(Icons.history, size: 20),
+                    ),
                   TextButton(
                     onPressed: () => unawaited(_openPageDialog()),
                     child: Text(
                       '${_currentPage ?? 1}/${_controller.isReady ? _controller.pageCount : '—'}',
                       style: Theme.of(context).textTheme.labelMedium,
                     ),
+                  ),
+                  IconButton(
+                    tooltip: _notesSplit
+                        ? strings.commonClose
+                        : strings.notesTitle,
+                    isSelected: _notesSplit,
+                    onPressed: _toggleNotesSplit,
+                    icon: const Icon(Icons.vertical_split_outlined, size: 20),
+                    selectedIcon: const Icon(Icons.vertical_split, size: 20),
                   ),
                   IconButton(
                     tooltip: strings.reviewSearch,
@@ -2870,160 +3047,174 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
                 ],
               ),
 
-        body: Column(
+        body: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_searchOpen) _searchBar(context),
             Expanded(
-              child: Stack(
+              child: Column(
                 children: [
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      if (!_sidebarInitialized) {
-                        _sidebarInitialized = true;
-                        if (!_hadReadingState) {
-                          // Only expanded windows dock the inspector; medium
-                          // opens it as an end drawer and compact as a sheet.
-                          _showAnnotations = expandedLayout;
-                        }
-                      }
-                      final maxSidebar = (constraints.maxWidth - 260).clamp(
-                        220.0,
-                        560.0,
-                      );
-                      final sidebarWidth = _sidebarWidth.clamp(
-                        220.0,
-                        maxSidebar,
-                      );
-                      return SafeArea(
-                        top: false,
-                        left: false,
-                        right: false,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(
-                              child: Stack(
+                  if (_searchOpen) _searchBar(context),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            if (!_sidebarInitialized) {
+                              _sidebarInitialized = true;
+                              if (!_hadReadingState) {
+                                // Only expanded windows dock the inspector; medium
+                                // opens it as an end drawer and compact as a sheet.
+                                _showAnnotations = expandedLayout;
+                              }
+                            }
+                            final maxSidebar = (constraints.maxWidth - 260)
+                                .clamp(220.0, 560.0);
+                            final sidebarWidth = _sidebarWidth.clamp(
+                              220.0,
+                              maxSidebar,
+                            );
+                            return SafeArea(
+                              top: false,
+                              left: false,
+                              right: false,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Positioned.fill(
-                                    child: RepaintBoundary(
-                                      child: _pdfSurfaceWithOverlay(context),
+                                  Expanded(
+                                    child: Stack(
+                                      children: [
+                                        Positioned.fill(
+                                          child: RepaintBoundary(
+                                            child: _pdfSurfaceWithOverlay(
+                                              context,
+                                            ),
+                                          ),
+                                        ),
+                                        if ((defaultTargetPlatform ==
+                                                    TargetPlatform.iOS ||
+                                                defaultTargetPlatform ==
+                                                    TargetPlatform.android) &&
+                                            _mobileTextSelection &&
+                                            _editingRange == null)
+                                          Positioned(
+                                            left: 12,
+                                            right: 12,
+                                            bottom: 12,
+                                            child: _mobileSelectionBar(context),
+                                          ),
+                                      ],
                                     ),
                                   ),
-                                  if ((defaultTargetPlatform ==
-                                              TargetPlatform.iOS ||
-                                          defaultTargetPlatform ==
-                                              TargetPlatform.android) &&
-                                      _mobileTextSelection &&
-                                      _editingRange == null)
-                                    Positioned(
-                                      left: 12,
-                                      right: 12,
-                                      bottom: 12,
-                                      child: _mobileSelectionBar(context),
+                                  if (!_zenMode && expandedLayout) ...[
+                                    CollapsibleSidebar(
+                                      expanded: _showAnnotations,
+                                      width: sidebarWidth,
+                                      handleOnLeft: true,
+                                      expandIcon:
+                                          Icons.keyboard_double_arrow_left,
+                                      railIcon: Icons.list_alt,
+                                      railTooltip: strings.sidebarShow,
+                                      tooltip: strings.reviewAnnotationSidebar,
+                                      onExpand: () => setState(
+                                        () => _showAnnotations = true,
+                                      ),
+                                      onDrag: (delta) => setState(() {
+                                        final next = (_sidebarWidth - delta)
+                                            .clamp(220.0, maxSidebar);
+                                        // Dragging past the minimum collapses to the
+                                        // rail, like the Notes/Search sidebars.
+                                        if (delta > 0 && next <= 222) {
+                                          _showAnnotations = false;
+                                          return;
+                                        }
+                                        _sidebarWidth = next;
+                                      }),
+                                      onReset: () =>
+                                          setState(() => _sidebarWidth = 320),
+                                      child: RepaintBoundary(
+                                        child: _inspectorSidebar(
+                                          context,
+                                          palette: palette,
+                                          strings: strings,
+                                          close: () {},
+                                          onCollapse: () => setState(
+                                            () => _showAnnotations = false,
+                                          ),
+                                        ),
+                                      ),
                                     ),
+                                  ],
                                 ],
                               ),
-                            ),
-                            if (!_zenMode && expandedLayout) ...[
-                              CollapsibleSidebar(
-                                expanded: _showAnnotations,
-                                width: sidebarWidth,
-                                handleOnLeft: true,
-                                expandIcon: Icons.keyboard_double_arrow_left,
-                                railIcon: Icons.list_alt,
-                                railTooltip: strings.sidebarShow,
-                                tooltip: strings.reviewAnnotationSidebar,
-                                onExpand: () =>
-                                    setState(() => _showAnnotations = true),
-                                onDrag: (delta) => setState(() {
-                                  final next = (_sidebarWidth - delta).clamp(
-                                    220.0,
-                                    maxSidebar,
-                                  );
-                                  // Dragging past the minimum collapses to the
-                                  // rail, like the Notes/Search sidebars.
-                                  if (delta > 0 && next <= 222) {
-                                    _showAnnotations = false;
-                                    return;
-                                  }
-                                  _sidebarWidth = next;
-                                }),
-                                onReset: () =>
-                                    setState(() => _sidebarWidth = 320),
-                                child: RepaintBoundary(
-                                  child: _inspectorSidebar(
-                                    context,
-                                    palette: palette,
-                                    strings: strings,
-                                    close: () {},
-                                    onCollapse: () => setState(
-                                      () => _showAnnotations = false,
-                                    ),
+                            );
+                          },
+                        ),
+                        if (_zenMode)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: SafeArea(
+                              left: false,
+                              right: false,
+                              minimum: const EdgeInsets.only(bottom: 12),
+                              child: Center(
+                                child: Material(
+                                  color: palette.surface.withValues(
+                                    alpha: 0.94,
+                                  ),
+                                  elevation: 3,
+                                  borderRadius: BorderRadius.circular(22),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        tooltip: strings.commonBack,
+                                        onPressed: () =>
+                                            Navigator.of(context).maybePop(),
+                                        icon: const Icon(
+                                          Icons.arrow_back,
+                                          size: 19,
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: _pdfDarkMode
+                                            ? strings.reviewPdfLightMode
+                                            : strings.reviewPdfDarkMode,
+                                        onPressed: () => setState(
+                                          () => _pdfDarkMode = !_pdfDarkMode,
+                                        ),
+                                        icon: Icon(
+                                          _pdfDarkMode
+                                              ? Icons.light_mode_outlined
+                                              : Icons.dark_mode_outlined,
+                                          size: 19,
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: strings.reviewExitFullScreen,
+                                        onPressed: () =>
+                                            setState(() => _zenMode = false),
+                                        icon: const Icon(
+                                          Icons.close_fullscreen,
+                                          size: 20,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
-                            ],
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                  if (_zenMode)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: SafeArea(
-                        left: false,
-                        right: false,
-                        minimum: const EdgeInsets.only(bottom: 12),
-                        child: Center(
-                          child: Material(
-                            color: palette.surface.withValues(alpha: 0.94),
-                            elevation: 3,
-                            borderRadius: BorderRadius.circular(22),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  tooltip: strings.commonBack,
-                                  onPressed: () =>
-                                      Navigator.of(context).maybePop(),
-                                  icon: const Icon(Icons.arrow_back, size: 19),
-                                ),
-                                IconButton(
-                                  tooltip: _pdfDarkMode
-                                      ? strings.reviewPdfLightMode
-                                      : strings.reviewPdfDarkMode,
-                                  onPressed: () => setState(
-                                    () => _pdfDarkMode = !_pdfDarkMode,
-                                  ),
-                                  icon: Icon(
-                                    _pdfDarkMode
-                                        ? Icons.light_mode_outlined
-                                        : Icons.dark_mode_outlined,
-                                    size: 19,
-                                  ),
-                                ),
-                                IconButton(
-                                  tooltip: strings.reviewExitFullScreen,
-                                  onPressed: () =>
-                                      setState(() => _zenMode = false),
-                                  icon: const Icon(
-                                    Icons.close_fullscreen,
-                                    size: 20,
-                                  ),
-                                ),
-                              ],
                             ),
                           ),
-                        ),
-                      ),
+                      ],
                     ),
+                  ),
+                  if (_annotateMode && !_zenMode) _annotateStrip(context),
                 ],
               ),
             ),
-            if (_annotateMode && !_zenMode) _annotateStrip(context),
+            if (_notesSplit && layout != LayoutClass.compact)
+              _notesSplitPane(context, strings, palette),
           ],
         ),
       ),
