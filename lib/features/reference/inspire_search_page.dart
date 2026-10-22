@@ -222,11 +222,14 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
   }
 
   void _toggleFilter(String value) {
-    setState(
-      () => _activeFilters
+    // Compute before mutating: in a cascade the argument of addAll is
+    // evaluated after clear(), so toggling used to re-add the filter.
+    final next = toggleInspireFilter(_activeFilters, value);
+    setState(() {
+      _activeFilters
         ..clear()
-        ..addAll(toggleInspireFilter(_activeFilters, value)),
-    );
+        ..addAll(next);
+    });
   }
 
   List<InspireLiteratureHit> get _filteredHits {

@@ -13,7 +13,7 @@ Map<String, Object?> _hit({
       {'title': 'Elliptic Flow of Multi-strange Hadrons', 'source': 'arXiv'},
     ],
     'authors': authors,
-    if (firstAuthor != null) 'first_author': firstAuthor,
+    'first_author': ?firstAuthor,
     'author_count': authorCount,
     'collaborations': collaborations,
   },
