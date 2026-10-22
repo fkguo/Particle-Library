@@ -95,6 +95,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   bool _pdfDarkMode = false;
 
   /// 'auto' | 'width' | 'page'; remembered per document.
+  ///
+  /// Auto matters on the same device: resizing a macOS window or putting an
+  /// iPad app in Split View changes the width class, and Auto follows it.
   String _fitMode = 'auto';
   double? _restoredZoom;
   Offset? _restoredScroll;
@@ -2298,8 +2301,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
 
   /// Applies [mode] and remembers it for this document.
   ///
-  /// `auto` is the viewport decision from the research: fit width on a phone,
-  /// fit the whole page when there is room for it.
+  /// `auto` follows the width class, which changes when the same device gets a
+  /// different window (macOS resize, iPad Split View).
   void _fitPage(String mode) {
     if (!_controller.isReady) return;
     setState(() => _fitMode = mode);
@@ -2315,11 +2318,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       case 'page':
         _fitPageMatrix(pageNumber);
       default:
-        if (context.isCompactLayout) {
-          _fitWidthInSafeArea(pageNumber);
-        } else {
-          _fitPageMatrix(pageNumber);
-        }
+        context.isCompactLayout
+            ? _fitWidthInSafeArea(pageNumber)
+            : _fitPageMatrix(pageNumber);
     }
   }
 
