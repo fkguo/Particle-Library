@@ -391,6 +391,37 @@ void main() {
     expect(tester.element(find.byType(TextField).at(1)), same(bodyElement));
   });
 
+  testWidgets('a save after an unseen external append merges it', (
+    tester,
+  ) async {
+    final note = await store.create(
+      title: 'Target',
+      bodyMarkdown: 'first paragraph',
+    );
+    await pumpEditor(tester, note: note);
+    await tester.pump();
+
+    // Append externally without notifying the editor (worst case).
+    await store.update(
+      note.id,
+      bodyMarkdown: 'first paragraph\n\n[Source](review:2026/x.pdf)',
+    );
+
+    await tester.enterText(
+      find.byType(TextField).at(1),
+      'first paragraph local edit',
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 150)),
+    );
+    await tester.pump();
+
+    final saved = await store.noteById(note.id);
+    expect(saved!.bodyMarkdown, contains('local edit'));
+    expect(saved.bodyMarkdown, contains('[Source]'));
+  });
+
   testWidgets('an external append is merged into the open note', (
     tester,
   ) async {

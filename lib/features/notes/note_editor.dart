@@ -514,13 +514,54 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         );
       } else {
         final anchorsChanged = _anchorSignature() != _savedAnchorSignature;
+        // Another surface may have appended a quote/source line (PDG lookup)
+        // while this editor was open and its change signal was not processed
+        // yet. Merge that suffix instead of overwriting it on save.
+        var bodyToSave = body;
+        var anchorsToSave = anchorsChanged ? _allAnchors() : null;
+        var expectedRevision = force ? null : _record?.revision;
+        final latest = await widget.store.noteById(existing.id);
+        final base = _record?.bodyMarkdown ?? '';
+        if (latest != null &&
+            _record != null &&
+            latest.revision != _record!.revision &&
+            // Only an append (the capture flow) is merged silently; a real
+            // external edit keeps the conflict path below.
+            latest.title == _record!.title &&
+            latest.bodyMarkdown.startsWith(base)) {
+          final latestBody = latest.bodyMarkdown;
+          final suffix = latestBody.substring(base.length);
+          if (suffix.isNotEmpty) {
+            bodyToSave = '${bodyToSave.trimRight()}$suffix';
+          }
+          final merged = <String, NoteAnchorInput>{};
+          for (final anchor in latest.anchors) {
+            merged['${anchor.targetId}\u0000${anchor.snapshotHash}'] =
+                NoteAnchorInput(
+                  targetKind: anchor.targetKind,
+                  targetKey: anchor.targetKey,
+                  snapshotHash: anchor.snapshotHash.isEmpty
+                      ? null
+                      : anchor.snapshotHash,
+                  targetLabel: anchor.targetLabel,
+                  status: anchor.status,
+                  context: anchor.context,
+                );
+          }
+          for (final anchor in _allAnchors()) {
+            merged['${anchor.targetId}\u0000${anchor.snapshotHash ?? ''}'] =
+                anchor;
+          }
+          anchorsToSave = merged.values.toList(growable: false);
+          expectedRevision = latest.revision;
+        }
         await widget.store.update(
           existing.id,
           title: title,
-          bodyMarkdown: body,
-          anchors: anchorsChanged ? _allAnchors() : null,
+          bodyMarkdown: bodyToSave,
+          anchors: anchorsToSave,
           tags: tags,
-          expectedRevision: force ? null : _record?.revision,
+          expectedRevision: expectedRevision,
         );
         if (_collectionsDirty) {
           final before = {
