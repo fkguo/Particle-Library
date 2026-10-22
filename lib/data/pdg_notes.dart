@@ -69,6 +69,16 @@ class PdgNotes {
     return _references![documentId];
   }
 
+  static Future<PdgNoteReference?> referenceForDoi(String doi) async {
+    await _ensureLoaded();
+    final key = doi.trim().toLowerCase();
+    if (key.isEmpty) return null;
+    for (final reference in _references!.values) {
+      if ((reference.doi ?? '').trim().toLowerCase() == key) return reference;
+    }
+    return null;
+  }
+
   static Future<void> _ensureLoaded() async {
     if (_cache != null) return;
     final loaded = await _load();

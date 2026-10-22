@@ -11,6 +11,7 @@ import '../../app/app_theme.dart';
 import '../../app/navigation.dart';
 import '../../data/inspire_bibtex.dart';
 import '../../data/inspire_literature_search.dart';
+import '../../data/pdg_notes.dart';
 import '../../data/zotero_bridge.dart';
 import '../../data/zotero_cache.dart';
 import '../../data/zotero_inspire_api.dart';
@@ -22,6 +23,7 @@ import '../common/snack_bars.dart';
 import '../common/ui.dart';
 import '../common/zotero_icon.dart';
 import 'zotero_setup_dialog.dart';
+import 'pdg_note_reference_page.dart';
 import 'reference_page.dart';
 
 /// Filters that describe opposite states of the same property; enabling one
@@ -77,8 +79,9 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
   bool _loading = false;
   Object? _error;
   int _generation = 0;
-  final Map<String, int?> _localIds = <String, int?>{};
-  final Map<String, Future<int?>> _localFutures = <String, Future<int?>>{};
+  final Map<String, ({int? id, PdgNoteReference? patch})> _localTargets = {};
+  final Map<String, Future<({int? id, PdgNoteReference? patch})>>
+  _localFutures = {};
   int _page = 1;
   int _total = 0;
   int _pageSize = 20;
@@ -176,7 +179,7 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
 
   Future<void> _prefetchPresence(List<InspireLiteratureHit> hits) async {
     if (hits.isEmpty) return;
-    final localResults = <String, int?>{};
+    final localResults = <String, ({int? id, PdgNoteReference? patch})>{};
     for (var start = 0; start < hits.length; start += 8) {
       final chunk = hits.sublist(
         start,
@@ -185,8 +188,9 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
       final entries = await Future.wait([
         for (final hit in chunk)
           if (hit.doi.trim().isNotEmpty)
-            _localFuture(hit.doi)
-                .then((id) => MapEntry(hit.doi.trim().toLowerCase(), id)),
+            _localTarget(
+              hit.doi,
+            ).then((target) => MapEntry(hit.doi.trim().toLowerCase(), target)),
       ]);
       for (final entry in entries) {
         localResults[entry.key] = entry.value;
@@ -212,7 +216,7 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
     }
     if (!mounted) return;
     setState(() {
-      _localIds.addAll(localResults);
+      _localTargets.addAll(localResults);
       _zoteroPresence.addAll(zoteroResults);
     });
   }
@@ -241,8 +245,10 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
             if (!haystack.contains(text)) return false;
           }
           final doi = hit.doi.trim().toLowerCase();
-          final localKnown = doi.isNotEmpty && _localIds.containsKey(doi);
-          final local = localKnown && _localIds[doi] != null;
+          final target = doi.isEmpty ? null : _localTargets[doi];
+          final localKnown = target != null;
+          final local =
+              target != null && (target.id != null || target.patch != null);
           if (_activeFilters.contains('local') && !local) return false;
           if (_activeFilters.contains('notLocal') && !(localKnown && !local)) {
             return false;
@@ -614,24 +620,24 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
     mode: LaunchMode.externalApplication,
   );
 
-  Future<int?> _localFuture(String doi) {
+  Future<({int? id, PdgNoteReference? patch})> _localTarget(String doi) {
     final key = doi.trim().toLowerCase();
-    if (key.isEmpty) return Future<int?>.value(null);
-    if (_localIds.containsKey(key)) {
-      return Future<int?>.value(_localIds[key]);
-    }
+    if (key.isEmpty) return Future.value((id: null, patch: null));
+    final cached = _localTargets[key];
+    if (cached != null) return Future.value(cached);
     return _localFutures.putIfAbsent(key, () async {
       try {
         final references = await AppScope.of(context).database
             .referencesByDoi(key);
         final id = references.isEmpty ? null : references.first.id;
-        if (mounted) {
-          setState(() => _localIds[key] = id);
-        }
-        return id;
+        final patch = id == null ? await PdgNotes.referenceForDoi(key) : null;
+        final target = (id: id, patch: patch);
+        if (mounted) setState(() => _localTargets[key] = target);
+        return target;
       } catch (_) {
-        if (mounted) setState(() => _localIds[key] = null);
-        return null;
+        const target = (id: null, patch: null);
+        if (mounted) setState(() => _localTargets[key] = target);
+        return target;
       }
     });
   }
@@ -1016,11 +1022,13 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
               spacing: 8,
               runSpacing: 4,
               children: [
-                FutureBuilder<int?>(
-                  future: _localFuture(hit.doi),
+                FutureBuilder<({int? id, PdgNoteReference? patch})>(
+                  future: _localTarget(hit.doi),
                   builder: (context, snapshot) {
-                    final id = snapshot.data;
-                    final enabled = id != null;
+                    final target = snapshot.data;
+                    final id = target?.id;
+                    final patch = target?.patch;
+                    final enabled = id != null || patch != null;
                     return Tooltip(
                       message: enabled
                           ? strings.inspireSearchOpenLocal
@@ -1030,7 +1038,9 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
                             ? null
                             : () => AppNav.push<void>(
                                 context,
-                                ReferencePage(referenceId: id),
+                                id != null
+                                    ? ReferencePage(referenceId: id)
+                                    : PdgNoteReferencePage(reference: patch!),
                               ),
                         icon: Icon(
                           enabled ? Icons.menu_book_outlined : Icons.menu_book,
