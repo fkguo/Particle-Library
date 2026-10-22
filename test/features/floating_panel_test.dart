@@ -41,4 +41,77 @@ void main() {
     await tester.tap(find.byIcon(Icons.close));
     expect(closed, isTrue);
   });
+  group('FloatingPanelHost.dismiss', () {
+    Future<OverlayState> pumpOverlay(WidgetTester tester) async {
+      final key = GlobalKey<OverlayState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Overlay(
+            key: key,
+            initialEntries: [OverlayEntry(builder: (_) => const SizedBox())],
+          ),
+        ),
+      );
+      return key.currentState!;
+    }
+
+    OverlayEntry panelEntry() => OverlayEntry(
+      builder: (_) => const Positioned(left: 0, top: 0, child: Text('panel')),
+    );
+
+    testWidgets('removes a live entry and forgets it', (tester) async {
+      final overlay = await pumpOverlay(tester);
+      final entry = panelEntry();
+      FloatingPanelHost.register(entry, overlay);
+      overlay.insert(entry);
+      await tester.pump();
+      expect(find.text('panel'), findsOneWidget);
+
+      FloatingPanelHost.dismiss(entry);
+      await tester.pump();
+      expect(find.text('panel'), findsNothing);
+
+      // A forgotten entry must not come back when dialogs hand control back.
+      FloatingPanelHost.resumeAll();
+      await tester.pump();
+      expect(find.text('panel'), findsNothing);
+    });
+
+    testWidgets('an owner can dismiss an entry closeAll already removed', (
+      tester,
+    ) async {
+      final overlay = await pumpOverlay(tester);
+      final entry = panelEntry();
+      FloatingPanelHost.register(entry, overlay);
+      overlay.insert(entry);
+      await tester.pump();
+
+      // "Save and open" from a capture dialog closes every panel behind the
+      // owning editor's back; the editor later disposes and dismisses its
+      // stale handle.
+      FloatingPanelHost.closeAll();
+      await tester.pump();
+      expect(find.text('panel'), findsNothing);
+
+      expect(() => FloatingPanelHost.dismiss(entry), returnsNormally);
+    });
+
+    testWidgets('an owner can dismiss an entry that is suspended', (
+      tester,
+    ) async {
+      final overlay = await pumpOverlay(tester);
+      final entry = panelEntry();
+      FloatingPanelHost.register(entry, overlay);
+      overlay.insert(entry);
+      await tester.pump();
+
+      FloatingPanelHost.suspendAll();
+      await tester.pump();
+      expect(() => FloatingPanelHost.dismiss(entry), returnsNormally);
+
+      FloatingPanelHost.resumeAll();
+      await tester.pump();
+      expect(find.text('panel'), findsNothing);
+    });
+  });
 }

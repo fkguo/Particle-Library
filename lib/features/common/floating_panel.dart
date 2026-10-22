@@ -38,6 +38,17 @@ class FloatingPanelHost {
     }
     _active.clear();
   }
+
+  /// Forgets [entry] and takes it out of its overlay if it is still there.
+  ///
+  /// [closeAll] and [suspendAll] remove entries without telling the widget that
+  /// opened them, so an owner can be left holding an entry that is already out
+  /// of the overlay. Removing such an entry again throws, which in a `dispose`
+  /// would skip everything after it.
+  static void dismiss(OverlayEntry entry) {
+    unregister(entry);
+    if (entry.mounted) entry.remove();
+  }
 }
 
 class FloatingPanel extends StatefulWidget {

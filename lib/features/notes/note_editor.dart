@@ -1239,6 +1239,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         _closeFloatingLookup();
         return;
       }
+      FloatingPanelHost.unregister(_lookupOverlay!);
       _lookupOverlay = null;
     }
     final overlay = Overlay.of(context, rootOverlay: true);
@@ -1262,10 +1263,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
 
   void _closeFloatingLookup() {
     final entry = _lookupOverlay;
-    if (entry != null) {
-      FloatingPanelHost.unregister(entry);
-      entry.remove();
-    }
+    if (entry != null) FloatingPanelHost.dismiss(entry);
     _lookupOverlay = null;
   }
 
