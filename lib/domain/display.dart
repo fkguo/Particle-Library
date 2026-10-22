@@ -77,8 +77,17 @@ class DisplayQuantity {
   }) {
     final hasRaw = rawValueText != null && rawValueText.trim().isNotEmpty;
     var number = displayText.trim();
+    final rawText = (rawValueText ?? '').trim();
+    // PDG sometimes stores a complex pole in `value_text` but truncates
+    // `display_value_text` to the real part (e.g. T_cc(3875)+ pole); keep the
+    // full pole instead of silently dropping the width.
+    final polePattern = RegExp(r'\bi\s*\(');
+    if ((number.isEmpty || !polePattern.hasMatch(number)) &&
+        polePattern.hasMatch(rawText)) {
+      number = rawText;
+    }
     if (number.isEmpty) {
-      number = (rawValueText ?? '').trim();
+      number = rawText;
     }
     if (number.isEmpty && value != null) {
       number = _compactNumber(value);
@@ -90,15 +99,15 @@ class DisplayQuantity {
     // are relative, so the visible exponent is their sum.
     int? embeddedPower;
     if (number.isNotEmpty) {
-      final exponent = RegExp(r'\s*[Ee]([+-]?[0-9]+)\s*$')
-          .firstMatch(number);
+      final exponent = RegExp(r'\s*[Ee]([+-]?[0-9]+)\s*$').firstMatch(number);
       if (exponent != null) {
         embeddedPower = int.tryParse(exponent.group(1)!);
         number = number.substring(0, exponent.start).trimRight();
       }
     }
-    final effectivePower =
-        inPercent ? (embeddedPower ?? 0) : powerOfTen + (embeddedPower ?? 0);
+    final effectivePower = inPercent
+        ? (embeddedPower ?? 0)
+        : powerOfTen + (embeddedPower ?? 0);
 
     if (number.isNotEmpty) {
       number = number.replaceAll('+-', ' ± ');
@@ -167,8 +176,18 @@ String _timesTen(int power) {
 
 String _superscriptInt(int value) {
   const digits = {
-    '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
-    '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '-': '⁻', '+': '⁺',
+    '0': '⁰',
+    '1': '¹',
+    '2': '²',
+    '3': '³',
+    '4': '⁴',
+    '5': '⁵',
+    '6': '⁶',
+    '7': '⁷',
+    '8': '⁸',
+    '9': '⁹',
+    '-': '⁻',
+    '+': '⁺',
   };
   return value.toString().split('').map((c) => digits[c] ?? c).join();
 }
@@ -208,10 +227,7 @@ String rawNumber(double? value) {
 /// - otherwise there is no unique preferred row and every candidate stays
 ///   visible. A single row carrying a limit is still that one row.
 class SummarySelection {
-  const SummarySelection({
-    required this.candidates,
-    required this.preferred,
-  });
+  const SummarySelection({required this.candidates, required this.preferred});
 
   final List<Summary> candidates;
   final Summary? preferred;
@@ -221,8 +237,9 @@ class SummarySelection {
   bool get isUnique => preferred != null;
   int get count => candidates.length;
 
-  List<Summary> get otherCandidates =>
-      candidates.where((row) => row.id != preferred?.id).toList(growable: false);
+  List<Summary> get otherCandidates => candidates
+      .where((row) => row.id != preferred?.id)
+      .toList(growable: false);
 
   List<Summary> get summaryTableRows =>
       candidates.where((row) => row.inSummaryTable).toList(growable: false);
@@ -233,11 +250,19 @@ SummarySelection selectBestSummary(List<Summary> rows) {
     return const SummarySelection(candidates: [], preferred: null);
   }
   if (rows.length == 1) {
-    return SummarySelection(candidates: List.unmodifiable(rows), preferred: rows.first);
+    return SummarySelection(
+      candidates: List.unmodifiable(rows),
+      preferred: rows.first,
+    );
   }
-  final tableRows = rows.where((row) => row.inSummaryTable).toList(growable: false);
+  final tableRows = rows
+      .where((row) => row.inSummaryTable)
+      .toList(growable: false);
   if (tableRows.length == 1) {
-    return SummarySelection(candidates: List.unmodifiable(rows), preferred: tableRows.first);
+    return SummarySelection(
+      candidates: List.unmodifiable(rows),
+      preferred: tableRows.first,
+    );
   }
   return SummarySelection(candidates: List.unmodifiable(rows), preferred: null);
 }
@@ -247,15 +272,18 @@ String inclusionLabel(bool? value, String kind, TextLang lang) {
   final status = value == null
       ? pick(lang, '未注明', 'not stated')
       : value
-          ? pick(lang, '是', 'yes')
-          : pick(lang, '否', 'no');
+      ? pick(lang, '是', 'yes')
+      : pick(lang, '否', 'no');
   return pick(lang, '$name 标志：$status', '$name flag: $status');
 }
 
 String scaleFactorNote(double? factor, TextLang lang) {
   if (factor == null || (factor - 1.0).abs() < 1e-12) return '';
-  return pick(lang, '误差调整因子（原样记录，不再乘入误差）：${_compactNumber(factor)}',
-      'Error scale factor (recorded, not re-applied): ${_compactNumber(factor)}');
+  return pick(
+    lang,
+    '误差调整因子（原样记录，不再乘入误差）：${_compactNumber(factor)}',
+    'Error scale factor (recorded, not re-applied): ${_compactNumber(factor)}',
+  );
 }
 
 /// Units are stored exactly as published. The display helper only turns the
@@ -276,7 +304,9 @@ String prettyUnit(String unit) {
 /// Values whose source text uses asymmetric errors, ranges or a complex
 /// notation need a math line; simple values keep the tabular selectable text.
 bool displayNumberNeedsMath(String number) {
-  if (number.contains('--') || number.contains('i(')) return true;
+  if (number.contains('--') || RegExp(r'\bi\s*\(').hasMatch(number)) {
+    return true;
+  }
   if (RegExp(r'[Ee][+-]?[0-9]+').hasMatch(number)) return true;
   return RegExp(r'\+\s*[0-9]+(?:\.[0-9]+)?\s*-\s*[0-9]+(?:\.[0-9]+)?')
       .hasMatch(number);
@@ -302,13 +332,23 @@ String displayNumberLatex(String number) {
       .replaceAll('×10', r'\times 10')
       .replaceAll('%', r'\%');
   const superscript = {
-    '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
-    '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
-    '⁻': '-', '⁺': '+',
+    '⁰': '0',
+    '¹': '1',
+    '²': '2',
+    '³': '3',
+    '⁴': '4',
+    '⁵': '5',
+    '⁶': '6',
+    '⁷': '7',
+    '⁸': '8',
+    '⁹': '9',
+    '⁻': '-',
+    '⁺': '+',
   };
   text = text.replaceAllMapped(
     RegExp(r'[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+'),
-    (match) => '^{${match.group(0)!.split('').map((c) => superscript[c] ?? c).join()}}',
+    (match) =>
+        '^{${match.group(0)!.split('').map((c) => superscript[c] ?? c).join()}}',
   );
   text = text.replaceAll(RegExp(r' +'), ' ');
   text = text.replaceAll(RegExp(r'\s+\\;'), r'\;');
