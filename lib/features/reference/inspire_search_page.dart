@@ -1238,7 +1238,7 @@ class _InspireSearchHelpPanel extends StatelessWidget {
       color: palette.textSecondary,
     );
     final rows = <(String, String)>[
-      ('a Weinberg, Steven', pick(lang, '作者', 'Author')),
+      ('a s weinberg', pick(lang, '作者', 'Author')),
       ('ea Weinberg, Steven', pick(lang, '精确作者', 'Exact author')),
       ('t muon', pick(lang, '题名', 'Title')),
       ('cn BESIII', pick(lang, '合作组', 'Collaboration')),
