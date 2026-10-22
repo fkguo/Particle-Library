@@ -8,7 +8,6 @@ import '../../app/app_scope.dart';
 import '../../app/error_text.dart';
 import '../../app/app_strings.dart';
 import '../../app/app_theme.dart';
-import '../../app/layout.dart';
 import '../../app/navigation.dart';
 import '../../data/inspire_bibtex.dart';
 import '../../data/inspire_literature_search.dart';
@@ -16,13 +15,15 @@ import '../../data/pdg_notes.dart';
 import '../../data/zotero_bridge.dart';
 import '../../data/zotero_cache.dart';
 import '../../data/zotero_inspire_api.dart';
-import '../../domain/labels.dart';
+import 'inspire_search_help.dart';
 import '../common/async_view.dart';
 
+import '../common/context_sidebar.dart';
 import '../common/description_text.dart';
 import '../common/page.dart';
 import '../common/snack_bars.dart';
 import '../common/ui.dart';
+import '../help/help_page.dart';
 import '../common/zotero_icon.dart';
 import 'zotero_setup_dialog.dart';
 import 'reference_page.dart';
@@ -242,48 +243,18 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
     _searchFocus.requestFocus();
   }
 
-  Future<void> _openInspireHelp(BuildContext context) async {
-    final panel = const _InspireSearchHelpPanel();
-    if (context.isCompactLayout) {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        builder: (sheetContext) => SizedBox(
-          height: MediaQuery.sizeOf(sheetContext).height * 0.85,
-          child: panel,
-        ),
-      );
+  void _openInspireHelp(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    if (width >= 620) {
+      // Wide enough for the shared context sidebar, where the cheat sheet
+      // lives; make sure that sidebar is not switched off.
+      final settings = AppScope.of(context).settings;
+      if (settings.sidebarMode == 'off') {
+        unawaited(settings.setSidebarMode('auto'));
+      }
       return;
     }
-    await showGeneralDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: AppScope.of(context).strings.commonClose,
-      barrierColor: Colors.black26,
-      transitionDuration: const Duration(milliseconds: 180),
-      pageBuilder: (context, animation, secondaryAnimation) => Align(
-        alignment: Alignment.centerRight,
-        child: Material(
-          color: context.palette.surface,
-          child: SafeArea(
-            left: false,
-            child: SizedBox(width: 400, child: panel),
-          ),
-        ),
-      ),
-      transitionBuilder: (context, animation, secondaryAnimation, child) =>
-          SlideTransition(
-            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
-                .animate(
-                  CurvedAnimation(
-                    parent: animation,
-                    curve: Curves.easeOutCubic,
-                  ),
-                ),
-            child: child,
-          ),
-    );
+    AppNav.push<void>(context, const HelpPage(initialSection: 'inspire'));
   }
 
   void _toggleFilter(String value) {
@@ -719,35 +690,42 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
       title: Text(strings.inspireSearchTitle),
       subtitle: strings.inspireSearchSubtitle,
       maxWidth: 960,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          Insets.l,
-          Insets.m,
-          Insets.l,
-          Insets.xxl,
-        ),
-        children: [
-          Row(
+      showSidebarToggle: true,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final content = ListView(
+            padding: const EdgeInsets.fromLTRB(
+              Insets.l,
+              Insets.m,
+              Insets.l,
+              Insets.xxl,
+            ),
             children: [
-              Expanded(
-                child: RawAutocomplete<String>(
-                  textEditingController: _controller,
-                  focusNode: _searchFocus,
-                  optionsBuilder: (value) {
-                    final history = _inspireHistory();
-                    final text = value.text.trim().toLowerCase();
-                    if (text.isEmpty) return history;
-                    return history.where(
-                      (query) => query.toLowerCase().contains(text),
-                    );
-                  },
-                  onSelected: (value) {
-                    _controller.text = value;
-                    _search(page: 1);
-                  },
-                  fieldViewBuilder:
-                      (context, controller, focusNode, onSubmitted) =>
-                          TextField(
+              Row(
+                children: [
+                  Expanded(
+                    child: RawAutocomplete<String>(
+                      textEditingController: _controller,
+                      focusNode: _searchFocus,
+                      optionsBuilder: (value) {
+                        final history = _inspireHistory();
+                        final text = value.text.trim().toLowerCase();
+                        if (text.isEmpty) return history;
+                        return history.where(
+                          (query) => query.toLowerCase().contains(text),
+                        );
+                      },
+                      onSelected: (value) {
+                        _controller.text = value;
+                        _search(page: 1);
+                      },
+                      fieldViewBuilder:
+                          (
+                            context,
+                            controller,
+                            focusNode,
+                            onSubmitted,
+                          ) => TextField(
                             controller: controller,
                             focusNode: focusNode,
                             autofocus: true,
@@ -765,220 +743,245 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
                               ),
                             ),
                           ),
-                  optionsViewBuilder: (context, onSelected, options) {
-                    final entries = options.toList();
-                    return Align(
-                      alignment: Alignment.topLeft,
-                      child: Material(
-                        elevation: 6,
-                        borderRadius: BorderRadius.circular(10),
-                        clipBehavior: Clip.antiAlias,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 260),
-                          child: ListView(
-                            padding: EdgeInsets.zero,
-                            shrinkWrap: true,
-                            children: [
-                              for (final query in entries)
-                                ListTile(
-                                  dense: true,
-                                  leading: const Icon(Icons.history, size: 18),
-                                  title: Text(
-                                    query,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                      optionsViewBuilder: (context, onSelected, options) {
+                        final entries = options.toList();
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 6,
+                            borderRadius: BorderRadius.circular(10),
+                            clipBehavior: Clip.antiAlias,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 260),
+                              child: ListView(
+                                padding: EdgeInsets.zero,
+                                shrinkWrap: true,
+                                children: [
+                                  for (final query in entries)
+                                    ListTile(
+                                      dense: true,
+                                      leading: const Icon(
+                                        Icons.history,
+                                        size: 18,
+                                      ),
+                                      title: Text(
+                                        query,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      onTap: () => onSelected(query),
+                                    ),
+                                  if (entries.isNotEmpty)
+                                    const Divider(height: 1),
+                                  ListTile(
+                                    dense: true,
+                                    leading: const Icon(
+                                      Icons.delete_sweep_outlined,
+                                      size: 18,
+                                    ),
+                                    title: Text(strings.inspireClearHistory),
+                                    onTap: () {
+                                      unawaited(_clearInspireHistory());
+                                    },
                                   ),
-                                  onTap: () => onSelected(query),
-                                ),
-                              if (entries.isNotEmpty) const Divider(height: 1),
-                              ListTile(
-                                dense: true,
-                                leading: const Icon(
-                                  Icons.delete_sweep_outlined,
-                                  size: 18,
-                                ),
-                                title: Text(strings.inspireClearHistory),
-                                onTap: () {
-                                  unawaited(_clearInspireHistory());
-                                },
+                                ],
                               ),
-                            ],
+                            ),
                           ),
+                        );
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: strings.inspireHelpTitle,
+                    onPressed: () => _openInspireHelp(context),
+                    icon: const Icon(Icons.help_outline, size: 20),
+                  ),
+                ],
+              ),
+              const SizedBox(height: Insets.s),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _filterController,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: strings.inspireFilterHint,
+                        prefixIcon: const Icon(
+                          Icons.filter_alt_outlined,
+                          size: 18,
+                        ),
+                        suffixIcon: _filterController.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: strings.commonClear,
+                                onPressed: () {
+                                  _filterController.clear();
+                                  setState(() {});
+                                },
+                                icon: const Icon(Icons.close, size: 16),
+                              ),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _filterMenu(context, strings),
+                ],
+              ),
+              if (_activeFilters.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Wrap(
+                    spacing: 5,
+                    runSpacing: 3,
+                    children: [
+                      for (final entry in <(String, String)>[
+                        ('local', strings.inspireFilterLocal),
+                        ('notLocal', strings.inspireFilterNotLocal),
+                        if (_zoteroCache != null) ...[
+                          ('zotero', strings.inspireFilterZotero),
+                          ('notZotero', strings.inspireFilterNotZotero),
+                        ],
+                        ('published', strings.inspireFilterPublished),
+                        ('preprint', strings.inspireFilterPreprint),
+                        ('highCited', strings.inspireFilterHighCited),
+                        ('recent5', strings.inspireFilterRecent5),
+                      ])
+                        if (_activeFilters.contains(entry.$1))
+                          InputChip(
+                            label: Text(entry.$2),
+                            visualDensity: VisualDensity.compact,
+                            onDeleted: () => _toggleFilter(entry.$1),
+                          ),
+                    ],
+                  ),
+                ),
+              if (_zoteroSupported &&
+                  _zoteroAvailable == true &&
+                  _zoteroCache == null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    strings.inspireZoteroCacheHint,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: palette.textSecondary),
+                  ),
+                ),
+              if (_loading)
+                Padding(
+                  padding: const EdgeInsets.only(top: Insets.m),
+                  child: Row(
+                    children: [
+                      const BrandMark(size: 28, animate: true),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              strings.commonLoading,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            const SizedBox(height: 3),
+                            const LinearProgressIndicator(minHeight: 2),
+                          ],
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: Insets.m),
+                  child: ErrorPanel(
+                    error: _error!,
+                    onRetry: () => _search(page: _page),
+                  ),
+                ),
+              if (!_loading && _error == null && _hits.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: Insets.l),
+                  child: EmptyPanel(
+                    message: strings.inspireSearchEmpty,
+                    icon: Icons.search_off,
+                  ),
+                ),
+              if (!_loading &&
+                  _error == null &&
+                  _hits.isNotEmpty &&
+                  filtered.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: Insets.l),
+                  child: EmptyPanel(
+                    message: strings.inspireFilterNoResults,
+                    icon: Icons.filter_alt_off_outlined,
+                  ),
+                ),
+              if (_hits.isNotEmpty) ...[
+                const SizedBox(height: Insets.m),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final count = Text(
+                      _activeFilters.isNotEmpty ||
+                              _filterController.text.trim().isNotEmpty
+                          ? strings.inspireFilteredShowing(
+                              filtered.length,
+                              _hits.length,
+                            )
+                          : _total > _hits.length
+                          ? strings.inspireShowing(_hits.length, _total)
+                          : strings.inspireSearchResults(_total),
+                      style: Theme.of(context).textTheme.labelMedium
+                          ?.copyWith(color: palette.textSecondary),
+                    );
+                    final controls = Wrap(
+                      spacing: 12,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _pageSizeControl(context, strings),
+                        _sortControl(context, strings),
+                      ],
+                    );
+                    if (constraints.maxWidth < 620) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [count, const SizedBox(height: 4), controls],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: count),
+                        const SizedBox(width: 12),
+                        controls,
+                      ],
                     );
                   },
                 ),
-              ),
-              IconButton(
-                tooltip: strings.inspireHelpTitle,
-                onPressed: () => _openInspireHelp(context),
-                icon: const Icon(Icons.help_outline, size: 20),
-              ),
+                for (final hit in filtered) _hitTile(context, hit, strings),
+                _pagination(context, strings),
+              ],
             ],
-          ),
-          const SizedBox(height: Insets.s),
-          Row(
+          );
+          if (!showContextSidebar(context, constraints.maxWidth)) {
+            return content;
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _filterController,
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                    hintText: strings.inspireFilterHint,
-                    prefixIcon: const Icon(Icons.filter_alt_outlined, size: 18),
-                    suffixIcon: _filterController.text.isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: strings.commonClear,
-                            onPressed: () {
-                              _filterController.clear();
-                              setState(() {});
-                            },
-                            icon: const Icon(Icons.close, size: 16),
-                          ),
-                    isDense: true,
-                  ),
+              Expanded(child: content),
+              ResizableContextSidebar(
+                viewportWidth: constraints.maxWidth,
+                child: ContextSidebar(
+                  facts: const <SidebarFact>[],
+                  sections: const <Widget>[InspireSearchHelp()],
                 ),
               ),
-              const SizedBox(width: 8),
-              _filterMenu(context, strings),
             ],
-          ),
-          if (_activeFilters.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Wrap(
-                spacing: 5,
-                runSpacing: 3,
-                children: [
-                  for (final entry in <(String, String)>[
-                    ('local', strings.inspireFilterLocal),
-                    ('notLocal', strings.inspireFilterNotLocal),
-                    if (_zoteroCache != null) ...[
-                      ('zotero', strings.inspireFilterZotero),
-                      ('notZotero', strings.inspireFilterNotZotero),
-                    ],
-                    ('published', strings.inspireFilterPublished),
-                    ('preprint', strings.inspireFilterPreprint),
-                    ('highCited', strings.inspireFilterHighCited),
-                    ('recent5', strings.inspireFilterRecent5),
-                  ])
-                    if (_activeFilters.contains(entry.$1))
-                      InputChip(
-                        label: Text(entry.$2),
-                        visualDensity: VisualDensity.compact,
-                        onDeleted: () => _toggleFilter(entry.$1),
-                      ),
-                ],
-              ),
-            ),
-          if (_zoteroSupported &&
-              _zoteroAvailable == true &&
-              _zoteroCache == null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                strings.inspireZoteroCacheHint,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: palette.textSecondary),
-              ),
-            ),
-          if (_loading)
-            Padding(
-              padding: const EdgeInsets.only(top: Insets.m),
-              child: Row(
-                children: [
-                  const BrandMark(size: 28, animate: true),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          strings.commonLoading,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 3),
-                        const LinearProgressIndicator(minHeight: 2),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: Insets.m),
-              child: ErrorPanel(
-                error: _error!,
-                onRetry: () => _search(page: _page),
-              ),
-            ),
-          if (!_loading && _error == null && _hits.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: Insets.l),
-              child: EmptyPanel(
-                message: strings.inspireSearchEmpty,
-                icon: Icons.search_off,
-              ),
-            ),
-          if (!_loading &&
-              _error == null &&
-              _hits.isNotEmpty &&
-              filtered.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: Insets.l),
-              child: EmptyPanel(
-                message: strings.inspireFilterNoResults,
-                icon: Icons.filter_alt_off_outlined,
-              ),
-            ),
-          if (_hits.isNotEmpty) ...[
-            const SizedBox(height: Insets.m),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final count = Text(
-                  _activeFilters.isNotEmpty ||
-                          _filterController.text.trim().isNotEmpty
-                      ? strings.inspireFilteredShowing(
-                          filtered.length,
-                          _hits.length,
-                        )
-                      : _total > _hits.length
-                      ? strings.inspireShowing(_hits.length, _total)
-                      : strings.inspireSearchResults(_total),
-                  style: Theme.of(context).textTheme.labelMedium
-                      ?.copyWith(color: palette.textSecondary),
-                );
-                final controls = Wrap(
-                  spacing: 12,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _pageSizeControl(context, strings),
-                    _sortControl(context, strings),
-                  ],
-                );
-                if (constraints.maxWidth < 620) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [count, const SizedBox(height: 4), controls],
-                  );
-                }
-                return Row(
-                  children: [
-                    Expanded(child: count),
-                    const SizedBox(width: 12),
-                    controls,
-                  ],
-                );
-              },
-            ),
-            for (final hit in filtered) _hitTile(context, hit, strings),
-            _pagination(context, strings),
-          ],
-        ],
+          );
+        },
       ),
     );
   }
@@ -1219,119 +1222,6 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Operator cheat sheet shown from the search box's help button. Opens as a
-/// right-hand sheet on wide windows and as a bottom sheet on phones.
-class _InspireSearchHelpPanel extends StatelessWidget {
-  const _InspireSearchHelpPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = AppScope.of(context).strings;
-    final palette = context.palette;
-    final lang = strings.lang;
-    final theme = Theme.of(context);
-    final secondary = theme.textTheme.bodySmall?.copyWith(
-      color: palette.textSecondary,
-    );
-    final rows = <(String, String)>[
-      ('a s weinberg', pick(lang, '作者', 'Author')),
-      ('ea Weinberg, Steven', pick(lang, '精确作者', 'Exact author')),
-      ('t muon', pick(lang, '题名', 'Title')),
-      ('cn BESIII', pick(lang, '合作组', 'Collaboration')),
-      ('doi 10.1103/...', 'DOI'),
-      ('arXiv:1705.00141', 'arXiv'),
-      ('recid 1597424', pick(lang, '记录号', 'Record id')),
-      ('de 2020->2024', pick(lang, '日期', 'Date')),
-      ('topcite 100+', pick(lang, '引用数', 'Citations')),
-      ('ft <term>', pick(lang, '全文（= fulltext）', 'Full text (= fulltext)')),
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Insets.l, Insets.m, Insets.s, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  strings.inspireHelpTitle,
-                  style: theme.textTheme.titleMedium,
-                ),
-              ),
-              IconButton(
-                tooltip: strings.commonClose,
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close, size: 18),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Insets.l, 0, Insets.l, Insets.s),
-          child: Text(strings.inspireHelpIntro, style: secondary),
-        ),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: Insets.l),
-            children: [
-              for (final row in rows)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: Insets.s),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 180,
-                        child: SelectableText(
-                          row.$1,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: palette.textPrimary,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: Insets.s),
-                      Expanded(child: Text(row.$2, style: secondary)),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(Insets.l),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => launchUrl(
-                  Uri.parse(
-                    'https://help.inspirehep.net/knowledge-base/inspire-paper-search/',
-                  ),
-                  mode: LaunchMode.externalApplication,
-                ),
-                icon: const Icon(Icons.open_in_new, size: 16),
-                label: Text(strings.inspireHelpOpenDocs),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => launchUrl(
-                  Uri.parse(
-                    'https://help.inspirehep.net/knowledge-base/full-listing-of-search-terms/',
-                  ),
-                  mode: LaunchMode.externalApplication,
-                ),
-                icon: const Icon(Icons.open_in_new, size: 16),
-                label: Text(strings.inspireHelpOpenAllTerms),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

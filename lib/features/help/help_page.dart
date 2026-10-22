@@ -6,10 +6,14 @@ import '../../app/navigation.dart';
 import '../common/page.dart';
 import '../common/page_outline.dart';
 import '../common/ui.dart';
+import '../reference/inspire_search_help.dart';
 import '../reviews/reviews_page.dart';
 
 class HelpPage extends StatefulWidget {
-  const HelpPage({super.key});
+  const HelpPage({super.key, this.initialSection});
+
+  /// Optional section id to scroll to on open (e.g. `inspire`).
+  final String? initialSection;
 
   @override
   State<HelpPage> createState() => _HelpPageState();
@@ -19,6 +23,7 @@ class _HelpPageState extends State<HelpPage> {
   static const _ids = <String>[
     'start',
     'search',
+    'inspire',
     'pages',
     'values',
     'place',
@@ -32,6 +37,17 @@ class _HelpPageState extends State<HelpPage> {
   final ScrollController _controller = ScrollController();
   String? _activeId;
   final Map<String, GlobalKey> _keys = {for (final id in _ids) id: GlobalKey()};
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialSection;
+    if (initial != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _jump(initial);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -150,6 +166,11 @@ class _HelpPageState extends State<HelpPage> {
             ),
           ),
         ],
+      ),
+      _HelpSectionData(
+        id: 'inspire',
+        title: t('INSPIRE 搜索语法', 'INSPIRE search syntax'),
+        children: [const InspireSearchHelp(showTitle: false)],
       ),
       _HelpSectionData(
         id: 'pages',
