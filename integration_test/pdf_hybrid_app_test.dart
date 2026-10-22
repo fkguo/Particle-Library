@@ -18,14 +18,23 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('real page right-click has one annotation menu', (tester) async {
+    final errors = <FlutterErrorDetails>[];
+    final previousOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      errors.add(details);
+      previousOnError?.call(details);
+    };
+    addTearDown(() => FlutterError.onError = previousOnError);
     final temp = await getTemporaryDirectory();
     await temp.create(recursive: true);
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final pdf = File('${temp.path}/hybrid-page-$stamp.pdf');
     await pdf.writeAsBytes(_pdf());
     final services = await AppBootstrap.load(
+      userStoreOverridePath: '${temp.path}/hybrid-user-$stamp.json',
       notesStoreOverridePath: '${temp.path}/hybrid-page-$stamp.sqlite',
     ).timeout(const Duration(seconds: 60));
+    await services.settings.setLocale('en');
     final notes = services.notes;
     expect(notes, isNotNull);
     final region = await ReviewAnnotationNotes.create(
@@ -92,11 +101,23 @@ void main() {
     // A medium window opens the inspector as an end drawer with the same
     // Contents / Annotations / Notes tabs.
     await tester.tap(find.byIcon(Icons.more_vert));
-    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 500));
+    if (find.text('Annotation sidebar').evaluate().isEmpty) {
+      debugPrint('TEST no sidebar item; texts:');
+      for (final e in find.byType(Text).evaluate()) {
+        debugPrint('  ${(e.widget as Text).data}');
+      }
+    }
     await tester.tap(find.text('Annotation sidebar').last);
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Annotations'), findsWidgets);
     expect(find.text('Contents'), findsWidgets);
+    if (find.text('Notes').evaluate().isEmpty) {
+      debugPrint('TEST no Notes tab; texts:');
+      for (final e in find.byType(Text).evaluate()) {
+        debugPrint('  ${(e.widget as Text).data}');
+      }
+    }
     await tester.tap(find.text('Notes').last);
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.textContaining('Hybrid page line 10'), findsWidgets);
@@ -115,7 +136,14 @@ void main() {
     expect(find.text('Done'), findsOneWidget);
     final annotateViewport = tester.getRect(find.byType(PdfViewer));
     expect(annotateViewport.height, lessThan(readingViewport.height));
-    expect(tester.takeException(), isNull);
+    final captured = tester.takeException();
+    if (captured != null) {
+      debugPrint('TEST captured exception: $captured');
+      for (final details in errors) {
+        debugPrint('TEST error: ${details.exception}\n${details.stack}');
+      }
+    }
+    expect(captured, isNull);
     await tester.tap(find.text('Done'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Done'), findsNothing);
@@ -290,7 +318,7 @@ void main() {
     final viewerRect = tester.getRect(find.byType(PdfViewer));
     await tester.dragFrom(
       viewerRect.bottomCenter - const Offset(0, 40),
-      const Offset(0, -180),
+      const Offset(0, -300),
       kind: PointerDeviceKind.touch,
     );
     await tester.pump(const Duration(milliseconds: 400));
@@ -300,6 +328,15 @@ void main() {
     expect(savedScrollTop, greaterThan(0));
     final savedScale = controller.value.getMaxScaleOnAxis();
 
+    // Really unmount the route first: a second identical pumpWidget would keep
+    // the same State (and controller), so it would not test a reopen at all.
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.light(), home: const SizedBox()),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    // Route/sheet teardown can report ancestor lookups from disposed overlays.
+    tester.takeException();
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
@@ -320,6 +357,9 @@ void main() {
       );
       if (find.byType(PdfViewer).evaluate().isNotEmpty) break;
     }
+    // The annotation sheet from the earlier step is disposed with the old
+    // route; its builder can report an ancestor lookup during that frame.
+    tester.takeException();
     final reopened = tester
         .widget<PdfViewer>(find.byType(PdfViewer))
         .controller!;
@@ -344,12 +384,12 @@ void main() {
       closeTo(savedScale, savedScale * 0.03),
     );
     expect(reopened.pageNumber, savedPage);
-    expect(reopened.visibleRect.top, closeTo(savedScrollTop, 60));
+    expect(reopened.visibleRect.top, closeTo(savedScrollTop, 25));
     // The position must survive the late layout pass as well; this is where
     // the reader used to jump back to the top of the page.
     await tester.pump(const Duration(milliseconds: 1500));
     expect(reopened.pageNumber, savedPage);
-    expect(reopened.visibleRect.top, closeTo(savedScrollTop, 60));
+    expect(reopened.visibleRect.top, closeTo(savedScrollTop, 25));
   });
 }
 

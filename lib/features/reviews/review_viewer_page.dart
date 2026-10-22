@@ -68,19 +68,16 @@ class ReviewViewerPage extends StatefulWidget
   State<ReviewViewerPage> createState() => _ReviewViewerPageState();
 }
 
-class _ReviewViewerPageState extends State<ReviewViewerPage> {
+class _ReviewViewerPageState extends State<ReviewViewerPage>
+    with WidgetsBindingObserver {
   void _reviewLog(String message) {
     if (kDebugMode || const bool.fromEnvironment('PDG_REVIEW_TRACE')) {
       debugPrint(message);
     }
   }
 
-  /// Set as soon as the reader is touched, so the post-restore verification
-  /// never yanks the view back while the user is scrolling.
-  bool _userTouchedSinceRestore = false;
-
   void _handleViewerPointerDown(PointerDownEvent event) {
-    _userTouchedSinceRestore = true;
+    _userInteracted = true;
     _handleMacControlClick(event);
   }
 
@@ -110,6 +107,12 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   String _fitMode = '';
   double? _restoredZoom;
   Offset? _restoredScroll;
+  bool _restoreApplied = false;
+  bool _restoring = false;
+  bool _userInteracted = false;
+  int? _livePage;
+  Offset? _liveScroll;
+  double? _liveZoom;
   bool _mobileTextSelection = false;
   bool _regionMode = false;
   bool _searchOpen = false;
@@ -151,7 +154,33 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _controller.addListener(_onViewerChanged);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _persistReadingState();
+    }
+  }
+
+  /// Keeps the live triple fresh and saves shortly after any matrix change
+  /// (keyboard scrolling and inertia do not emit pointer events).
+  void _onViewerChanged() {
+    if (!_controller.isReady || _restoring) return;
+    _captureLive();
+    _schedulePersist();
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller.removeListener(_onViewerChanged);
     _persistDebounce?.cancel();
     _persistReadingState();
     _searcher?.dispose();
@@ -2296,6 +2325,20 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   }
 
   Future<void> _fitInitialPage(int pageNumber) async {
+    if (_restoreApplied) {
+      // The viewer was rebuilt; restore the live position instead of leaving
+      // the fresh viewer at the page top.
+      if (_controller.isReady) {
+        _applyFit(_controller.pageNumber ?? _currentPage ?? pageNumber);
+        final live = _liveScroll;
+        if (live != null) {
+          unawaited(
+            _controller.goToPosition(documentOffset: live, zoom: _liveZoom),
+          );
+        }
+      }
+      return;
+    }
     // Restoring must not animate: pdfrx keeps writing the matrix while a page
     // animation runs, so applying the saved scroll next to an animated
     // goToPage used to land on the top of the page once the animation ended.
@@ -2305,8 +2348,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         duration: Duration.zero,
       );
     }
-    if (!mounted) return;
+    if (!mounted || !_controller.isReady) return;
     final page = _controller.pageNumber ?? pageNumber;
+    _restoring = true;
     _applyFit(page);
     final scroll = _restoredScroll;
     final zoom = _restoredZoom;
@@ -2318,32 +2362,44 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       // A single pdfrx transaction places the saved document point at the
       // viewport origin and restores the zoom with it.
       await _controller.goToPosition(documentOffset: scroll, zoom: zoom);
+      if (!mounted || !_controller.isReady) return;
       _reviewLog(
         'REVIEW restore applied -> ${_controller.visibleRect.topLeft}',
       );
-      _verifyRestore(scroll, zoom);
-    } else if (zoom != null) {
-      _applyZoom(zoom);
+      _restoreApplied = true;
+      _restoredPage = null;
+      _restoredScroll = null;
+      _restoredZoom = null;
+      _captureLive();
+      _restoring = false;
+      _scheduleRestoreCheck(scroll, zoom);
+    } else {
+      if (zoom != null) _applyZoom(zoom);
+      _restoreApplied = true;
+      _restoredPage = null;
+      _restoredScroll = null;
+      _restoredZoom = null;
+      _captureLive();
+      _restoring = false;
     }
   }
 
-  /// iOS lays the document out slightly after `onViewerReady`; if that late
-  /// pass resets the matrix to the page top, re-apply the saved position once
-  /// the view has settled (unless the user already touched the reader).
-  void _verifyRestore(Offset target, double? zoom) {
+  /// One-shot safety net for a pdfrx layout pass that resets the matrix to the
+  /// page top after `onViewerReady`. It never fires once the user has touched
+  /// the reader (a trackpad scroll counts via PointerSignalEvent).
+  void _scheduleRestoreCheck(Offset target, double? zoom) {
     for (final delay in const [
-      Duration(milliseconds: 250),
-      Duration(milliseconds: 700),
-      Duration(milliseconds: 1400),
+      Duration(milliseconds: 600),
+      Duration(milliseconds: 1500),
     ]) {
       Future<void>.delayed(delay, () {
-        if (!mounted || !_controller.isReady || _userTouchedSinceRestore) {
+        if (!mounted || _userInteracted || _restoring || !_controller.isReady) {
           return;
         }
         final current = _controller.visibleRect.topLeft;
         final drift = (current - target).distance;
         _reviewLog(
-          'REVIEW restore check ${delay.inMilliseconds}ms drift=$drift '
+          'REVIEW settle ${delay.inMilliseconds}ms drift=$drift '
           'current=$current target=$target',
         );
         if (drift > 40) {
@@ -2358,10 +2414,25 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   /// Applies [mode] and remembers it for this document.
   void _fitPage(String mode) {
     if (!_controller.isReady) return;
-    setState(() => _fitMode = mode);
+    // Applying a fit puts the page top at the viewport origin; switching fit
+    // must not be a reading-position reset (or a save of that page top).
+    final keep = _controller.visibleRect.topLeft;
     final page = _controller.pageNumber ?? _currentPage ?? 1;
+    setState(() => _fitMode = mode);
+    _restoring = true;
     _applyFit(page);
-    _persistReadingState();
+    unawaited(() async {
+      if (keep != Offset.zero) {
+        await _controller.goToPosition(
+          documentOffset: keep,
+          zoom: _controller.value.getMaxScaleOnAxis(),
+        );
+      }
+      if (!mounted) return;
+      _captureLive();
+      _restoring = false;
+      _persistReadingState();
+    }());
   }
 
   void _applyFit(int pageNumber) {
@@ -2977,23 +3048,51 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     super.deactivate();
   }
 
+  int? _pageForDocumentPoint(Offset topLeft) {
+    final layouts = _controller.layout.pageLayouts;
+    for (var i = 0; i < layouts.length; i++) {
+      if (layouts[i].bottom >= topLeft.dy) return i + 1;
+    }
+    return layouts.isEmpty ? null : layouts.length;
+  }
+
+  /// Remembers the live page/scroll/zoom together, so a later teardown (when
+  /// the controller is already detached) still writes a consistent triple.
+  void _captureLive() {
+    if (!_controller.isReady) return;
+    try {
+      final zoom = _controller.value.getMaxScaleOnAxis();
+      if (zoom <= 0) return;
+      final top = _controller.visibleRect.topLeft;
+      _liveScroll = top;
+      _liveZoom = zoom;
+      _livePage = _pageForDocumentPoint(top) ?? _currentPage;
+    } catch (_) {
+      // Layout not initialized yet; keep the previous snapshot.
+    }
+  }
+
   void _persistReadingState() {
     final store = _userStore;
     if (store == null) return;
     final ready = _controller.isReady;
+    if (ready) _captureLive();
     // Once the viewer is gone (deactivate/dispose after the route pops) the
-    // controller cannot report a position. Keep the last good scroll/zoom
-    // instead of overwriting them with nothing.
+    // controller cannot report a position; keep the last live triple instead
+    // of overwriting it with nothing.
     final previous = store.reviewState(_fileName) ?? const <String, Object?>{};
-    final zoom = ready && _controller.value.getMaxScaleOnAxis() > 0
-        ? _controller.value.getMaxScaleOnAxis()
-        : previous['zoom'];
-    final scroll = ready
-        ? <double>[_controller.visibleRect.left, _controller.visibleRect.top]
+    final liveScroll = _liveScroll;
+    final zoom = ready ? _liveZoom : (_liveZoom ?? previous['zoom']);
+    final scroll = liveScroll != null
+        ? <double>[liveScroll.dx, liveScroll.dy]
         : previous['scroll'];
+    final page =
+        (ready ? _livePage : _livePage ?? previous['page']) ??
+        previous['page'] ??
+        1;
     unawaited(
       store.setReviewState(_fileName, <String, Object?>{
-        'page': _currentPage ?? _controller.pageNumber ?? previous['page'] ?? 1,
+        'page': page,
         'sidebarWidth': _sidebarWidth,
         'sidebarTab': _sidebarTab,
         'showAnnotations': _showAnnotations,
@@ -3003,10 +3102,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         'scroll': ?scroll,
       }),
     );
-    _reviewLog(
-      'REVIEW persist page=${_currentPage ?? _controller.pageNumber} '
-      'ready=$ready scroll=$scroll',
-    );
+    _reviewLog('REVIEW persist page=$page ready=$ready scroll=$scroll');
   }
 
   ReviewAnnotation? _annotationAtGlobal(Offset global) {
@@ -3140,11 +3236,17 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       behavior: HitTestBehavior.translucent,
       onPointerDown: _handleViewerPointerDown,
       onPointerUp: (_) => _schedulePersist(),
-      onPointerSignal: (_) => _schedulePersist(),
+      onPointerSignal: (_) {
+        _userInteracted = true;
+        _schedulePersist();
+      },
       child: PdfViewer(
         documentRef,
         key: ValueKey<String>('pdf-${widget.path}-$_pdfEpoch'),
         controller: _controller,
+        // Start on the saved page: pdfrx otherwise scrolls to page 1 in its
+        // first-layout microtask, racing the restore below.
+        initialPageNumber: _livePage ?? _currentPage ?? _restoredPage ?? 1,
         params: PdfViewerParams(
           margin: _pdfPageMargin,
           backgroundColor: _pdfDarkMode
@@ -3200,6 +3302,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
               _currentPage = page;
               if (changed) _selectedAnnotationId = null;
             });
+            if (!_restoring) _userInteracted = true;
             _schedulePersist();
           },
         ),

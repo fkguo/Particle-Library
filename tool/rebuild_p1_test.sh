@@ -17,6 +17,7 @@ echo "Building $sha ($stamp)…"
 flutter build macos --release \
   --dart-define=PDG_BUILD_STAMP="$stamp" \
   --dart-define=PDG_BUILD_COMMIT="$sha"
+  --dart-define=PDG_REVIEW_TRACE=true
 
 pkill -f "Particle Library P1 Test.app" 2>/dev/null || true
 sleep 1
