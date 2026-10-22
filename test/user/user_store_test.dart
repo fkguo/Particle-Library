@@ -135,4 +135,55 @@ void main() {
       await dir.delete(recursive: true);
     },
   );
+  group('reading state from untrusted JSON', () {
+    test('non-finite and out-of-range numbers are dropped on read', () async {
+      final dir = await Directory.systemTemp.createTemp('pdgapp-state-');
+      addTearDown(() => dir.delete(recursive: true));
+      final path = '${dir.path}/user_store.json';
+      // 1e999 decodes to infinity; write it the way a hand-edited or hostile
+      // file would carry it.
+      await File(path).writeAsString(
+        '{"reviewStates": {"bad.pdf": {"page": 1e999, "sidebarTab": 1e999, '
+        '"zoom": 1e999, "scroll": [1e999, 3], "dark": true, '
+        '"future": "kept"}, "ok.pdf": {"page": 7, "zoom": 1.5, '
+        '"scroll": [10.0, 200.5], "sidebarWidth": 380}}}',
+      );
+      final store = await UserStore.open(overridePath: path);
+
+      final bad = store.reviewState('bad.pdf')!;
+      expect(bad.containsKey('page'), isFalse);
+      expect(bad.containsKey('sidebarTab'), isFalse);
+      expect(bad.containsKey('zoom'), isFalse);
+      expect(bad.containsKey('scroll'), isFalse);
+      expect(bad['dark'], isTrue);
+      expect(bad['future'], 'kept');
+
+      final ok = store.reviewState('ok.pdf')!;
+      expect(ok['page'], 7);
+      expect(ok['zoom'], 1.5);
+      expect(ok['scroll'], [10.0, 200.5]);
+      expect(ok['sidebarWidth'], 380);
+    });
+
+    test('a zoom far outside the reader range is dropped', () {
+      final clean = UserStore.sanitizeReviewState({'zoom': 500.0, 'page': 0});
+      expect(clean, isEmpty);
+    });
+
+    test('restoring a backup does not carry unusable numbers in', () async {
+      final dir = await Directory.systemTemp.createTemp('pdgapp-state-');
+      addTearDown(() => dir.delete(recursive: true));
+      final store = await UserStore.open(
+        overridePath: '${dir.path}/user_store.json',
+      );
+      await store.importData({
+        'reviewStates': {
+          'x.pdf': {'page': double.infinity, 'dark': true},
+        },
+      });
+      final state = store.reviewState('x.pdf')!;
+      expect(state.containsKey('page'), isFalse);
+      expect(state['dark'], isTrue);
+    });
+  });
 }

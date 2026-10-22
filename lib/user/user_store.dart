@@ -283,7 +283,39 @@ class UserStore extends ChangeNotifier {
     if (raw is! Map) return null;
     final value = raw[key];
     if (value is! Map) return null;
-    return Map<String, Object?>.from(value);
+    return sanitizeReviewState(Map<String, Object?>.from(value));
+  }
+
+  /// Drops reading-state numbers the reader cannot use.
+  ///
+  /// The state also arrives through backups and files edited by hand, and JSON
+  /// such as `1e999` decodes to infinity, which makes `toInt()` throw every
+  /// time the review is opened. Fields that are not finite numbers in a sane
+  /// range are removed so the reader falls back to its defaults; unknown keys
+  /// are kept as they are.
+  static Map<String, Object?> sanitizeReviewState(Map<String, Object?> state) {
+    final clean = Map<String, Object?>.from(state);
+    bool usable(Object? value, double min, double max) =>
+        value is num && value.isFinite && value >= min && value <= max;
+    void keepOnly(String key, double min, double max) {
+      if (clean.containsKey(key) && !usable(clean[key], min, max)) {
+        clean.remove(key);
+      }
+    }
+
+    keepOnly('page', 1, 1000000);
+    keepOnly('sidebarTab', 0, 100);
+    keepOnly('sidebarWidth', 0, 100000);
+    keepOnly('zoom', 0.1, 8);
+    final scroll = clean['scroll'];
+    if (clean.containsKey('scroll') &&
+        !(scroll is List &&
+            scroll.length == 2 &&
+            usable(scroll[0], -1e7, 1e7) &&
+            usable(scroll[1], -1e7, 1e7))) {
+      clean.remove('scroll');
+    }
+    return clean;
   }
 
   Future<void> setReviewState(String key, Map<String, Object?> state) async {
@@ -451,15 +483,20 @@ class UserStore extends ChangeNotifier {
     }
     final rawStates = incoming['reviewStates'];
     if (rawStates is Map) {
+      final existing = _data['reviewStates'];
       final merged = <String, Object?>{
-        for (final entry
-            in ((_data['reviewStates'] as Map?) ?? const {}).entries)
-          entry.key.toString(): entry.value,
+        if (existing is Map)
+          for (final entry in existing.entries)
+            entry.key.toString(): entry.value,
       };
       for (final entry in rawStates.entries) {
         final key = entry.key.toString();
-        if (key.isEmpty || entry.value is! Map) continue;
-        merged.putIfAbsent(key, () => entry.value);
+        final value = entry.value;
+        if (key.isEmpty || value is! Map) continue;
+        merged.putIfAbsent(
+          key,
+          () => sanitizeReviewState(Map<String, Object?>.from(value)),
+        );
       }
       _data['reviewStates'] = merged;
     }
