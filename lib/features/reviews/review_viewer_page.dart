@@ -1425,6 +1425,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
                     store: store,
                     strings: strings,
                     compact: true,
+                    changeSignal: AppScope.of(context).notesChanges,
                     note: _splitNote,
                     draft: _splitNote == null,
                     autofocusTitle: _splitNote == null,

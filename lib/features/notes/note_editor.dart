@@ -149,6 +149,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     _bodyController.addListener(_onChanged);
     _tagController.addListener(_onChanged);
     WidgetsBinding.instance.addObserver(this);
+    widget.changeSignal?.addListener(_onExternalNotesChanged);
     unawaited(_loadCollections());
     if (widget.autofocusTitle) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -160,6 +161,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   @override
   void dispose() {
     _disposed = true;
+    widget.changeSignal?.removeListener(_onExternalNotesChanged);
     WidgetsBinding.instance.removeObserver(this);
     _autosaveTimer?.cancel();
     _linkHoverTimer?.cancel();
@@ -424,6 +426,26 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       if (identical(_activePersist, future)) _activePersist = null;
     });
     return future;
+  }
+
+  /// Another surface (PDG lookup, note links, the notes list) may add an
+  /// anchor to the note open here. Refresh its metadata without touching the
+  /// title/body the user is typing.
+  void _onExternalNotesChanged() {
+    final current = _record;
+    if (current == null || _saving) return;
+    unawaited(_refreshNoteMetadata(current.id));
+  }
+
+  Future<void> _refreshNoteMetadata(String id) async {
+    final fresh = await widget.store.noteById(id);
+    if (!mounted || fresh == null) return;
+    final current = _record;
+    if (current == null || fresh.revision == current.revision) return;
+    setState(() {
+      _record = fresh;
+      _savedAnchorSignature = _anchorSignature();
+    });
   }
 
   Future<NoteRecord?> _persistBody({
