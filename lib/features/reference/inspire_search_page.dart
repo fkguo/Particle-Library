@@ -15,6 +15,7 @@ import '../../data/zotero_bridge.dart';
 import '../../data/zotero_cache.dart';
 import '../../data/zotero_inspire_api.dart';
 import '../common/async_view.dart';
+
 import '../common/description_text.dart';
 import '../common/page.dart';
 import '../common/snack_bars.dart';
@@ -22,6 +23,27 @@ import '../common/ui.dart';
 import '../common/zotero_icon.dart';
 import 'zotero_setup_dialog.dart';
 import 'reference_page.dart';
+
+/// Filters that describe opposite states of the same property; enabling one
+/// switches its partner off instead of ANDing them into no results.
+const Map<String, String> inspireFilterOpposites = {
+  'local': 'notLocal',
+  'notLocal': 'local',
+  'zotero': 'notZotero',
+  'notZotero': 'zotero',
+  'published': 'preprint',
+  'preprint': 'published',
+};
+
+/// Toggles [value] in [active], clearing its opposite when enabling.
+Set<String> toggleInspireFilter(Set<String> active, String value) {
+  final next = Set<String>.of(active);
+  if (next.remove(value)) return next;
+  final opposite = inspireFilterOpposites[value];
+  if (opposite != null) next.remove(opposite);
+  next.add(value);
+  return next;
+}
 
 /// Online INSPIRE search for authors, titles and other bibliographic terms
 /// that are not present in the local PDG snapshot.
@@ -59,7 +81,7 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
   final Map<String, Future<int?>> _localFutures = <String, Future<int?>>{};
   int _page = 1;
   int _total = 0;
-  int _pageSize = 50;
+  int _pageSize = 20;
   static const List<int> _pageSizes = [20, 50, 100, 200];
   String _sort = 'mostcited';
   final TextEditingController _filterController = TextEditingController();
@@ -196,9 +218,11 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
   }
 
   void _toggleFilter(String value) {
-    setState(() {
-      if (!_activeFilters.add(value)) _activeFilters.remove(value);
-    });
+    setState(
+      () => _activeFilters
+        ..clear()
+        ..addAll(toggleInspireFilter(_activeFilters, value)),
+    );
   }
 
   List<InspireLiteratureHit> get _filteredHits {
@@ -745,9 +769,24 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
           if (!_loading && _error == null && _hits.isEmpty)
             Padding(
               padding: const EdgeInsets.only(top: Insets.l),
-              child: EmptyPanel(
-                message: strings.inspireSearchEmpty,
-                icon: Icons.search_off,
+              child: Column(
+                children: [
+                  EmptyPanel(
+                    message: strings.inspireSearchEmpty,
+                    icon: Icons.search_off,
+                  ),
+                  if (!_controller.text.contains(':') &&
+                      !_controller.text.contains('"'))
+                    Padding(
+                      padding: const EdgeInsets.only(top: Insets.s),
+                      child: Text(
+                        strings.inspireSearchAuthorHint,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: palette.textSecondary),
+                      ),
+                    ),
+                ],
               ),
             ),
           if (!_loading &&

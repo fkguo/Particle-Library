@@ -176,7 +176,7 @@ class InspireLiteratureSearchService {
       final body = await response
           .transform(utf8.decoder)
           .join()
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 40));
       if (response.statusCode != 200) {
         throw InspireSearchException('INSPIRE 返回 HTTP ${response.statusCode}');
       }

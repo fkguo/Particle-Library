@@ -581,6 +581,10 @@ class AppStrings {
   );
   String get inspireSearchEmpty =>
       _t('INSPIRE 没有找到匹配文献。', 'No matching INSPIRE records.');
+  String get inspireSearchAuthorHint => _t(
+    '按作者检索请加 a：例如 a "jiangyong"、a "Jia, Jiangyong"',
+    'Prefix author searches with a: e.g. a "jiangyong", a "Jia, Jiangyong"',
+  );
   String inspireSearchResults(int count) =>
       _t('找到 $count 条 INSPIRE 记录', '$count INSPIRE records');
   String inspireCitations(int count) => _t('引用 $count 次', '$count citations');
