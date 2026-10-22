@@ -23,7 +23,6 @@ import '../common/snack_bars.dart';
 import '../common/ui.dart';
 import '../common/zotero_icon.dart';
 import 'zotero_setup_dialog.dart';
-import 'pdg_note_reference_page.dart';
 import 'reference_page.dart';
 
 /// Filters that describe opposite states of the same property; enabling one
@@ -1048,7 +1047,7 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
                                 context,
                                 id != null
                                     ? ReferencePage(referenceId: id)
-                                    : PdgNoteReferencePage(reference: patch!),
+                                    : ReferencePage.patch(patch: patch!),
                               ),
                         icon: Icon(
                           enabled ? Icons.menu_book_outlined : Icons.menu_book,

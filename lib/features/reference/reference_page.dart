@@ -15,6 +15,7 @@ import '../../data/inspire_bibtex.dart';
 import '../../data/zotero_bridge.dart';
 import '../../data/zotero_cache.dart';
 import '../../data/zotero_inspire_api.dart';
+import '../../data/pdg_notes.dart';
 import '../../data/reference_metadata.dart';
 import '../../domain/labels.dart';
 import '../../domain/models.dart';
@@ -22,6 +23,7 @@ import '../../domain/reference_title.dart';
 import '../common/async_view.dart';
 import '../common/context_sidebar.dart';
 import '../common/description_text.dart';
+import '../common/math_text.dart';
 import '../common/favorite_button.dart';
 import '../common/page.dart';
 import '../common/page_outline.dart';
@@ -36,9 +38,15 @@ import '../notes/notes_entity.dart';
 import '../series/measurement_card.dart';
 
 class ReferencePage extends StatefulWidget {
-  const ReferencePage({super.key, required this.referenceId});
+  const ReferencePage({super.key, required this.referenceId}) : patch = null;
+
+  /// A work that appears only in a pdgLive summary. Its bibliographic data
+  /// comes from the notes patch; the page reuses the normal reference layout.
+  const ReferencePage.patch({super.key, required this.patch})
+    : referenceId = -1;
 
   final int referenceId;
+  final PdgNoteReference? patch;
 
   @override
   State<ReferencePage> createState() => _ReferencePageState();
@@ -50,6 +58,7 @@ class _ReferencePageState extends State<ReferencePage> {
       Reference reference,
       List<ReferenceSeriesGroup> groups,
       List<Reference> sameDoi,
+      List<Entry> citing,
     })
   >
   _future;
@@ -329,6 +338,7 @@ class _ReferencePageState extends State<ReferencePage> {
       Reference reference,
       List<ReferenceSeriesGroup> groups,
       List<Reference> sameDoi,
+      List<Entry> citing,
     })
   >
   _load() async {
@@ -336,6 +346,29 @@ class _ReferencePageState extends State<ReferencePage> {
     final repository = scope.repository;
     final database = scope.database;
     final store = scope.store;
+    final patch = widget.patch;
+    if (patch != null) {
+      final reference = Reference({
+        'id': -1,
+        'document_id': patch.documentId,
+        'publication_name': patch.publication ?? '',
+        'publication_year': patch.year,
+        'doi': patch.doi ?? '',
+        'inspire_id': patch.inspireRecid?.toString() ?? '',
+        'title': patch.title ?? '',
+      });
+      final citing = <Entry>[];
+      for (final id in await PdgNotes.entriesForCitation(patch.documentId)) {
+        final entry = await database.entryByPdgid(id);
+        if (entry != null) citing.add(entry);
+      }
+      return (
+        reference: reference,
+        groups: const <ReferenceSeriesGroup>[],
+        sameDoi: const <Reference>[],
+        citing: citing,
+      );
+    }
     final reference = await database.referenceById(widget.referenceId);
     if (reference == null) {
       throw NotFoundException('当前快照未收录文献记录 ${widget.referenceId}。');
@@ -356,7 +389,12 @@ class _ReferencePageState extends State<ReferencePage> {
       _enrichedTitle = cached?.title;
       _enrichedSource = cached?.source;
     }
-    return (reference: reference, groups: groups, sameDoi: sameDoi);
+    return (
+      reference: reference,
+      groups: groups,
+      sameDoi: sameDoi,
+      citing: const <Entry>[],
+    );
   }
 
   @override
@@ -387,6 +425,7 @@ class _ReferencePageState extends State<ReferencePage> {
             Reference reference,
             List<ReferenceSeriesGroup> groups,
             List<Reference> sameDoi,
+            List<Entry> citing,
           })
         >(
           future: _future,
@@ -436,6 +475,8 @@ class _ReferencePageState extends State<ReferencePage> {
           reference: data.reference,
           groups: data.groups,
           sameDoi: data.sameDoi,
+          citing: data.citing,
+          isPatch: widget.patch != null,
           displayTitle: _displayTitle(data.reference),
           enrichedTitle: _enrichedTitle,
           enrichedSource: _enrichedSource,
@@ -457,6 +498,8 @@ class _ReferenceBody extends StatelessWidget {
     required this.reference,
     required this.groups,
     required this.sameDoi,
+    required this.citing,
+    required this.isPatch,
     required this.displayTitle,
     required this.enrichedTitle,
     required this.enrichedSource,
@@ -472,6 +515,8 @@ class _ReferenceBody extends StatelessWidget {
   final Reference reference;
   final List<ReferenceSeriesGroup> groups;
   final List<Reference> sameDoi;
+  final List<Entry> citing;
+  final bool isPatch;
   final String displayTitle;
   final String? enrichedTitle;
   final String? enrichedSource;
@@ -511,6 +556,7 @@ class _ReferenceBody extends StatelessWidget {
     final documentsKey = GlobalKey();
     final notesKey = GlobalKey();
     final measurementsKey = GlobalKey();
+    final citingKey = GlobalKey();
     final outlineItems = <PageOutlineItem>[
       PageOutlineItem(
         label: strings.pageOverview,
@@ -522,16 +568,24 @@ class _ReferenceBody extends StatelessWidget {
         target: documentsKey,
         icon: Icons.description_outlined,
       ),
-      PageOutlineItem(
-        label: strings.notesTitle,
-        target: notesKey,
-        icon: Icons.sticky_note_2_outlined,
-      ),
-      PageOutlineItem(
-        label: strings.referenceReverseMeasurements,
-        target: measurementsKey,
-        icon: Icons.straighten,
-      ),
+      if (!isPatch)
+        PageOutlineItem(
+          label: strings.notesTitle,
+          target: notesKey,
+          icon: Icons.sticky_note_2_outlined,
+        ),
+      if (isPatch)
+        PageOutlineItem(
+          label: strings.referenceCitedByEntries,
+          target: citingKey,
+          icon: Icons.link,
+        )
+      else
+        PageOutlineItem(
+          label: strings.referenceReverseMeasurements,
+          target: measurementsKey,
+          icon: Icons.straighten,
+        ),
     ];
     final content = PageOutlineScaffold(
       label: strings.pageOutline,
@@ -560,7 +614,10 @@ class _ReferenceBody extends StatelessWidget {
                 ].join(' · '),
               ),
               meta: [
-                MetaChip('pdgreference #${reference.id}'),
+                if (isPatch)
+                  MetaChip(strings.referencePdgLiveNote, tone: BadgeTone.info)
+                else
+                  MetaChip('pdgreference #${reference.id}'),
                 if (reference.publicationYear != null)
                   MetaChip('${reference.publicationYear}'),
                 if (reference.doi.isNotEmpty)
@@ -569,12 +626,13 @@ class _ReferenceBody extends StatelessWidget {
                   MetaChip('INSPIRE', tone: BadgeTone.accent),
               ],
               actions: [
-                FavoriteButton(
-                  favorite: referenceFavorite(
-                    reference: reference,
-                    snapshotHash: scope.snapshotHash,
+                if (!isPatch)
+                  FavoriteButton(
+                    favorite: referenceFavorite(
+                      reference: reference,
+                      snapshotHash: scope.snapshotHash,
+                    ),
                   ),
-                ),
                 CopyIconButton(
                   text: _citation(reference, displayTitle),
                   tooltip: strings.referenceCopyCitation,
@@ -835,47 +893,97 @@ class _ReferenceBody extends StatelessWidget {
               ),
             ),
             const SizedBox(height: Insets.m),
-            EntityNotesSection(
-              key: notesKey,
-              targets: notes.targets,
-              anchors: notes.anchors,
-            ),
+            if (isPatch) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.l,
+                  Insets.s,
+                  Insets.l,
+                  0,
+                ),
+                child: Text(
+                  strings.referencePdgLiveExplanation,
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: palette.textSecondary),
+                ),
+              ),
+              const SizedBox(height: Insets.m),
+              SectionHeading(strings.referenceCitedByEntries, key: citingKey),
+              if (citing.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Insets.l),
+                  child: EmptyPanel(
+                    message: strings.referencePdgLiveNoEntries,
+                    icon: Icons.link_off,
+                  ),
+                )
+              else
+                for (final entry in citing)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      Insets.l,
+                      0,
+                      Insets.l,
+                      Insets.s,
+                    ),
+                    child: Card(
+                      child: ListTile(
+                        leading: Icon(
+                          Icons.science_outlined,
+                          size: 20,
+                          color: palette.textSecondary,
+                        ),
+                        title: ParticleSymbol(entry.description, fontSize: 16),
+                        subtitle: Text('PDG ${entry.pdgid}'),
+                        trailing: const Icon(Icons.chevron_right, size: 18),
+                        onTap: () => AppNav.openPdgid(context, entry.pdgid),
+                      ),
+                    ),
+                  ),
+            ] else ...[
+              EntityNotesSection(
+                key: notesKey,
+                targets: notes.targets,
+                anchors: notes.anchors,
+              ),
+              const SizedBox(height: Insets.m),
+              SectionHeading(
+                strings.referenceReverseMeasurements,
+                key: measurementsKey,
+                subtitle: strings.referenceGroupsHint,
+              ),
+              if (groups.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Insets.l),
+                  child: EmptyPanel(
+                    message: strings.referenceNoReverse,
+                    icon: Icons.link_off,
+                  ),
+                )
+              else
+                for (final group in groups)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      Insets.l,
+                      0,
+                      Insets.l,
+                      Insets.s,
+                    ),
+                    child: _ReferenceGroupCard(
+                      referenceId: reference.id,
+                      group: group,
+                    ),
+                  ),
+            ],
             const SizedBox(height: Insets.m),
-            SectionHeading(
-              strings.referenceReverseMeasurements,
-              key: measurementsKey,
-              subtitle: strings.referenceGroupsHint,
-            ),
-            if (groups.isEmpty)
+            if (!isPatch)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: Insets.l),
-                child: EmptyPanel(
-                  message: strings.referenceNoReverse,
-                  icon: Icons.link_off,
+                child: RawFieldsPanel(
+                  fields: reference.rawFields,
+                  title: strings.referenceRaw,
                 ),
-              )
-            else
-              for (final group in groups)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    Insets.l,
-                    0,
-                    Insets.l,
-                    Insets.s,
-                  ),
-                  child: _ReferenceGroupCard(
-                    referenceId: reference.id,
-                    group: group,
-                  ),
-                ),
-            const SizedBox(height: Insets.m),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Insets.l),
-              child: RawFieldsPanel(
-                fields: reference.rawFields,
-                title: strings.referenceRaw,
               ),
-            ),
             const SizedBox(height: Insets.m),
             SnapshotFooter(hash: scope.snapshotHash),
           ],
@@ -933,7 +1041,7 @@ class _ReferenceBody extends StatelessWidget {
     'PDG document_id: ${reference.documentId}',
     if (reference.doi.isNotEmpty) 'DOI: ${reference.doi}',
     if (reference.inspireId.isNotEmpty) 'INSPIRE: ${reference.inspireId}',
-    'pdgreference #${reference.id}',
+    if (reference.id >= 0) 'pdgreference #${reference.id}',
   ].where((line) => line.isNotEmpty).join('\n');
 }
 

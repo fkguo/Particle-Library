@@ -562,6 +562,8 @@ class AppStrings {
       _t('通用名称，展开为 $count 个粒子', 'Generic name; expands to $count particles');
 
   String get referenceTitle => _t('文献', 'Publication');
+  String get referencePdgLiveNoEntries =>
+      _t('没有找到引用这条文献的 PDG 条目。', 'No PDG entry cites this work.');
   String get referenceCitedByEntries =>
       _t('在 PDG 中引用它的条目', 'PDG entries that cite it');
   String get referencePdgLiveNote =>

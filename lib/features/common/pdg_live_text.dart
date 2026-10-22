@@ -8,7 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/app_theme.dart';
 import '../../app/navigation.dart';
 import '../../data/pdg_notes.dart';
-import '../reference/pdg_note_reference_page.dart';
+import '../reference/reference_page.dart';
 
 /// pdgLive uses the plain-TeX font switch `{\mit i}` for the imaginary unit.
 /// flutter_math has no `\mit`, and math letters are italic already, so the
@@ -161,7 +161,7 @@ class PdgLiveText extends StatelessWidget {
     }
     final reference = citation.reference;
     if (reference != null) {
-      AppNav.push<void>(context, PdgNoteReferencePage(reference: reference));
+      AppNav.push<void>(context, ReferencePage.patch(patch: reference));
       return;
     }
     final recid = citation.inspireRecid;
