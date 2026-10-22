@@ -310,7 +310,7 @@ const reviewGroups = <ReviewGroup>[
       'Review of multibody charm analyses',
       'rpp2026-rev-d-meson-dalitz-plot-analyses.pdf',
     ),
-    ReviewEntry('D 0 —Dbar 0 mixing', 'rpp2026-rev-d-dbar-mixing.pdf'),
+    ReviewEntry(r'$D_0$–$\bar{D}_0$ mixing', 'rpp2026-rev-d-dbar-mixing.pdf'),
     ReviewEntry(
       'Leptonic decays of charged pseudoscalar mesons',
       'rpp2026-rev-pseudoscalar-meson-decay-cons.pdf',
@@ -324,7 +324,7 @@ const reviewGroups = <ReviewGroup>[
       'Polarization in B decays',
       'rpp2026-rev-b-decays-polarization.pdf',
     ),
-    ReviewEntry('B 0 —Bbar 0 mixing', 'rpp2026-rev-b-bar-mixing.pdf'),
+    ReviewEntry(r'$B_0$–$\bar{B}_0$ mixing', 'rpp2026-rev-b-bar-mixing.pdf'),
     ReviewEntry(
       'Semileptonic B-hadron decays, determination of V(cb), V(ub)',
       'rpp2026-rev-vcb-vub.pdf',

@@ -3,6 +3,15 @@ import 'package:pdgapp/domain/latex.dart';
 import 'package:pdgapp/domain/pdg_math.dart';
 
 void main() {
+  test('review titles can typeset a neutral-meson pair', () {
+    final segments = segmentPdgText(r'$D_0$–$\bar{D}_0$ mixing');
+    expect(segments.where((s) => s.latex != null).map((s) => s.latex), [
+      r'D_0',
+      r'\bar{D}_0',
+    ]);
+    expect(segments.map((s) => s.text).whereType<String>().join(), '– mixing');
+  });
+
   test('PDG text is segmented into whole math fragments or literal text', () {
     final segments = segmentPdgText(r'coupling g**nu_{{{{\mathit \ell}}}} at');
     expect(segments.map((s) => s.latex).whereType<String>(), [
@@ -362,9 +371,7 @@ void main() {
     expect(plain, isNot(contains('K*(892)-')));
   });
   test('measurement uncertainties are typeset with pm', () {
-    final segments = segmentPdgText(
-      'The mass difference is 185.54+-0.06 MeV',
-    );
+    final segments = segmentPdgText('The mass difference is 185.54+-0.06 MeV');
     expect(segments.where((s) => s.latex != null).map((s) => s.latex), [
       r'185.54 \pm 0.06',
     ]);
