@@ -138,7 +138,8 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${strings.settingsFullBackupDone}: ${strings.settingsFullBackupSummary(result.notes, result.pdfs, result.regions)}',
+            '${strings.settingsFullBackupDone}: ${strings.settingsFullBackupSummary(result.notes, result.pdfs, result.regions)}'
+            '${result.missingRegions == 0 ? '' : '\n${strings.settingsFullBackupMissingRegions(result.missingRegions)}'}',
           ),
         ),
       );

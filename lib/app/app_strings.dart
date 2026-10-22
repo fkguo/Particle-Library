@@ -1518,6 +1518,11 @@ class AppStrings {
       _t('完整备份已导入', 'Full backup imported');
   String get settingsFullBackupFailed =>
       _t('完整备份操作失败', 'Full backup operation failed');
+  String settingsFullBackupMissingRegions(int count) => _t(
+    '$count 张区域截图不在本机，对应标注已存为“截图待刷新”，可在阅读器里重新生成。',
+    '$count region screenshots are not on this device; those annotations are '
+        'saved as needing a refresh and can be regenerated in the reader.',
+  );
   String settingsFullBackupSummary(int notes, int pdfs, [int regions = 0]) {
     final regionSuffix = regions == 0
         ? ''
