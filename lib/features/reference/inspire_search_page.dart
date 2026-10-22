@@ -15,6 +15,7 @@ import '../../data/pdg_notes.dart';
 import '../../data/zotero_bridge.dart';
 import '../../data/zotero_cache.dart';
 import '../../data/zotero_inspire_api.dart';
+import 'inspire_search_field.dart';
 import 'inspire_search_help.dart';
 import '../common/async_view.dart';
 
@@ -704,99 +705,25 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
               Row(
                 children: [
                   Expanded(
-                    child: RawAutocomplete<String>(
-                      textEditingController: _controller,
+                    child: InspireSearchField(
+                      controller: _controller,
                       focusNode: _searchFocus,
-                      optionsBuilder: (value) {
-                        final history = _inspireHistory();
-                        final text = value.text.trim().toLowerCase();
-                        if (text.isEmpty) return history;
-                        return history.where(
-                          (query) => query.toLowerCase().contains(text),
-                        );
-                      },
-                      onSelected: (value) {
-                        _controller.text = value;
-                        _search(page: 1);
-                      },
-                      fieldViewBuilder:
-                          (
-                            context,
-                            controller,
-                            focusNode,
-                            onSubmitted,
-                          ) => TextField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            autofocus: true,
-                            textInputAction: TextInputAction.search,
-                            onSubmitted: (_) => _search(page: 1),
-                            decoration: InputDecoration(
-                              hintText: strings.inspireSearchHint,
-                              prefixIcon: const Icon(Icons.search, size: 20),
-                              suffixIcon: IconButton(
-                                tooltip: strings.inspireSearchAction,
-                                onPressed: _loading
-                                    ? null
-                                    : () => _search(page: 1),
-                                icon: const Icon(Icons.arrow_forward, size: 18),
-                              ),
-                            ),
-                          ),
-                      optionsViewBuilder: (context, onSelected, options) {
-                        final entries = options.toList();
-                        return Align(
-                          alignment: Alignment.topLeft,
-                          child: Material(
-                            elevation: 6,
-                            borderRadius: BorderRadius.circular(10),
-                            clipBehavior: Clip.antiAlias,
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxHeight: 260),
-                              child: ListView(
-                                padding: EdgeInsets.zero,
-                                shrinkWrap: true,
-                                children: [
-                                  for (final query in entries)
-                                    ListTile(
-                                      dense: true,
-                                      leading: const Icon(
-                                        Icons.history,
-                                        size: 18,
-                                      ),
-                                      title: Text(
-                                        query,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      onTap: () => onSelected(query),
-                                    ),
-                                  if (entries.isNotEmpty)
-                                    const Divider(height: 1),
-                                  ListTile(
-                                    dense: true,
-                                    leading: const Icon(
-                                      Icons.delete_sweep_outlined,
-                                      size: 18,
-                                    ),
-                                    title: Text(strings.inspireClearHistory),
-                                    onTap: () {
-                                      unawaited(_clearInspireHistory());
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+                      hintText: strings.inspireSearchHint,
+                      searchTooltip: strings.inspireSearchAction,
+                      history: _inspireHistory,
+                      onSearch: () => _search(page: 1),
+                      onClearHistory: () => unawaited(_clearInspireHistory()),
                     ),
                   ),
-                  IconButton(
-                    tooltip: strings.inspireHelpTitle,
-                    onPressed: () => _openInspireHelp(context),
-                    icon: const Icon(Icons.help_outline, size: 20),
-                  ),
+                  if (!showContextSidebar(
+                    context,
+                    MediaQuery.sizeOf(context).width,
+                  ))
+                    IconButton(
+                      tooltip: strings.inspireHelpTitle,
+                      onPressed: () => _openInspireHelp(context),
+                      icon: const Icon(Icons.help_outline, size: 20),
+                    ),
                 ],
               ),
               const SizedBox(height: Insets.s),

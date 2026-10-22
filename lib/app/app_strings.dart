@@ -590,6 +590,7 @@ class AppStrings {
   String get inspireHelpOpenDocs => _t('INSPIRE 搜索帮助', 'INSPIRE search help');
   String get inspireHelpOpenAllTerms =>
       _t('完整搜索项列表', 'Full list of search terms');
+  String get inspireSearchHistory => _t('搜索历史', 'Search history');
   String get inspireClearHistory =>
       _t('清除 INSPIRE 搜索历史', 'Clear INSPIRE search history');
   String get inspireSearchEntryHint => _t(
