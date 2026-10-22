@@ -105,11 +105,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   bool _zenMode = false;
   bool _pdfDarkMode = false;
 
-  /// 'auto' | 'width' | 'page'; remembered per document.
-  ///
-  /// Auto matters on the same device: resizing a macOS window or putting an
-  /// iPad app in Split View changes the width class, and Auto follows it.
-  String _fitMode = 'auto';
+  /// 'width' | 'page'; remembered per document. Empty until the saved state
+  /// or the window class decides the first value.
+  String _fitMode = '';
   double? _restoredZoom;
   Offset? _restoredScroll;
   bool _mobileTextSelection = false;
@@ -139,6 +137,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   bool _pdfReady = false;
   int _pdfEpoch = 0;
   Timer? _pdfRetryTimer;
+  Timer? _persistDebounce;
   PdfDocumentRef? _pdfDocumentRef;
   late final Future<void> _ready;
   final Stopwatch _openWatch = Stopwatch()..start();
@@ -153,6 +152,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
 
   @override
   void dispose() {
+    _persistDebounce?.cancel();
     _persistReadingState();
     _searcher?.dispose();
     _searchController.dispose();
@@ -201,6 +201,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
           _restoredScroll = Offset(x.toDouble(), y.toDouble());
         }
       }
+    }
+    // No saved choice: phone reads fitted to width, larger windows to the page.
+    if (_fitMode.isEmpty) {
+      _fitMode = context.isCompactLayout ? 'width' : 'page';
     }
     _ready = _loadAnnotations(scope.notes).then((_) {
       _reviewLog(
@@ -2352,9 +2356,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   }
 
   /// Applies [mode] and remembers it for this document.
-  ///
-  /// `auto` follows the width class, which changes when the same device gets a
-  /// different window (macOS resize, iPad Split View).
   void _fitPage(String mode) {
     if (!_controller.isReady) return;
     setState(() => _fitMode = mode);
@@ -2364,15 +2365,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   }
 
   void _applyFit(int pageNumber) {
-    switch (_fitMode) {
-      case 'width':
-        _fitWidthInSafeArea(pageNumber);
-      case 'page':
-        _fitPageMatrix(pageNumber);
-      default:
-        context.isCompactLayout
-            ? _fitWidthInSafeArea(pageNumber)
-            : _fitPageMatrix(pageNumber);
+    if (_fitMode == 'page') {
+      _fitPageMatrix(pageNumber);
+    } else {
+      _fitWidthInSafeArea(pageNumber);
     }
   }
 
@@ -2480,8 +2476,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         unawaited(_undo());
       case 'redo':
         unawaited(_redo());
-      case 'fit-auto':
-        _fitPage('auto');
       case 'fit-width':
         _fitPage('width');
       case 'fit-page':
@@ -2764,10 +2758,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
                       ),
                       const PopupMenuDivider(),
                       PopupMenuItem(
-                        value: 'fit-auto',
-                        child: Text(strings.reviewFitAuto),
-                      ),
-                      PopupMenuItem(
                         value: 'fit-width',
                         child: Text(strings.reviewFitWidth),
                       ),
@@ -2969,6 +2959,24 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     );
   }
 
+  /// Saves the position shortly after scrolling or a page change, so closing
+  /// the reader does not depend on the controller still being alive in
+  /// `dispose` (on device the viewer is torn down first and `isReady` is
+  /// already false, which used to drop the scroll position).
+  void _schedulePersist() {
+    _persistDebounce?.cancel();
+    _persistDebounce = Timer(
+      const Duration(milliseconds: 500),
+      _persistReadingState,
+    );
+  }
+
+  @override
+  void deactivate() {
+    _persistReadingState();
+    super.deactivate();
+  }
+
   void _persistReadingState() {
     final store = _userStore;
     if (store == null) return;
@@ -2985,6 +2993,11 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
         if (_controller.isReady)
           'scroll': [_controller.visibleRect.left, _controller.visibleRect.top],
       }),
+    );
+    _reviewLog(
+      'REVIEW persist page=${_currentPage ?? _controller.pageNumber} '
+      'ready=${_controller.isReady} '
+      'scroll=${_controller.isReady ? _controller.visibleRect.topLeft : null}',
     );
   }
 
@@ -3118,6 +3131,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     Widget viewer = Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _handleViewerPointerDown,
+      onPointerUp: (_) => _schedulePersist(),
+      onPointerSignal: (_) => _schedulePersist(),
       child: PdfViewer(
         documentRef,
         key: ValueKey<String>('pdf-${widget.path}-$_pdfEpoch'),
@@ -3177,6 +3192,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
               _currentPage = page;
               if (changed) _selectedAnnotationId = null;
             });
+            _schedulePersist();
           },
         ),
       ),

@@ -1215,7 +1215,6 @@ class AppStrings {
   String get reviewPreviousMatch => _t('上一项', 'Previous');
   String get reviewNextMatch => _t('下一项', 'Next');
   String get reviewPageNumber => _t('页码', 'Page');
-  String get reviewFitAuto => _t('自动', 'Auto fit');
   String get reviewFitWidth => _t('适宽', 'Fit width');
   String get reviewFitPage => _t('整页', 'Fit page');
   String get reviewSaveImage => _t('保存区域图片', 'Save region image');

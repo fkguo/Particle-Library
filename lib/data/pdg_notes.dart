@@ -64,6 +64,7 @@ class PdgNotes {
   static Map<String, PdgNote>? _cache;
   static Map<String, PdgNoteReference>? _references;
   static Map<String, List<String>>? _citedByEntries;
+  static Map<String, List<String>>? _reviewFiles;
 
   static Future<PdgNote?> forPdgid(String pdgid) async {
     await _ensureLoaded();
@@ -79,6 +80,12 @@ class PdgNotes {
   static Future<List<String>> entriesForCitation(String documentId) async {
     await _ensureLoaded();
     return _citedByEntries![documentId] ?? const <String>[];
+  }
+
+  /// Review PDFs that pdgLive lists for [pdgid] (empty when unknown).
+  static Future<List<String>> reviewFilesFor(String pdgid) async {
+    await _ensureLoaded();
+    return _reviewFiles![pdgid] ?? const <String>[];
   }
 
   static Future<String?> citeKeyFor(String documentId) async {
@@ -103,6 +110,7 @@ class PdgNotes {
     _cache = loaded.notes;
     _references = loaded.references;
     _citedByEntries = loaded.citedByEntries;
+    _reviewFiles = loaded.reviewFiles;
   }
 
   @visibleForTesting
@@ -110,6 +118,7 @@ class PdgNotes {
     _cache = null;
     _references = null;
     _citedByEntries = null;
+    _reviewFiles = null;
   }
 
   static Future<
@@ -117,6 +126,7 @@ class PdgNotes {
       Map<String, PdgNote> notes,
       Map<String, PdgNoteReference> references,
       Map<String, List<String>> citedByEntries,
+      Map<String, List<String>> reviewFiles,
     })
   >
   _load() async {
@@ -162,6 +172,18 @@ class PdgNotes {
           final label = row['label'] as String;
           (citedByEntries[label] ??= <String>[]).add(row['pdgid'] as String);
         }
+        final reviewFiles = <String, List<String>>{};
+        try {
+          for (final row in database.select(
+            'SELECT pdgid, file FROM pdg_note_reviews',
+          )) {
+            (reviewFiles[row['pdgid'] as String] ??= <String>[]).add(
+              row['file'] as String,
+            );
+          }
+        } on SqliteException {
+          // Older assets have no related-review table.
+        }
         final references = <String, PdgNoteReference>{};
         try {
           for (final row in database.select(
@@ -187,6 +209,7 @@ class PdgNotes {
           notes: notes,
           references: references,
           citedByEntries: citedByEntries,
+          reviewFiles: reviewFiles,
         );
       } finally {
         database.dispose();
@@ -198,6 +221,7 @@ class PdgNotes {
         notes: const <String, PdgNote>{},
         references: const <String, PdgNoteReference>{},
         citedByEntries: const <String, List<String>>{},
+        reviewFiles: const <String, List<String>>{},
       );
     }
   }

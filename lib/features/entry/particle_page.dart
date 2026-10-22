@@ -161,6 +161,21 @@ class _ParticleBodyState extends State<_ParticleBody> {
     });
   }
 
+  Future<void> _openRelatedReviews(
+    BuildContext context,
+    CategoryInfo? category,
+  ) async {
+    final related = await PdgNotes.reviewFilesFor(widget.view.entry.pdgid);
+    if (!mounted) return;
+    final files = related.isNotEmpty
+        ? related.toSet()
+        : (category == null
+              ? const <String>{}
+              : categoryReviewFiles[category.category]?.toSet() ??
+                    const <String>{});
+    await AppNav.push<void>(context, ReviewsPage(initialFiles: files));
+  }
+
   void _selectTab(int tab) {
     setState(() => _tab = tab);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -306,15 +321,8 @@ class _ParticleBodyState extends State<_ParticleBody> {
                 IconButton(
                   tooltip: strings.reviewsTitle,
                   icon: const Icon(Icons.menu_book_outlined, size: 19),
-                  onPressed: () => AppNav.push<void>(
-                    context,
-                    ReviewsPage(
-                      initialFiles: category == null
-                          ? const <String>{}
-                          : categoryReviewFiles[category.category]?.toSet() ??
-                                const <String>{},
-                    ),
-                  ),
+                  onPressed: () =>
+                      unawaited(_openRelatedReviews(context, category)),
                 ),
                 CopyIconButton(
                   text: _copyParticle(context, view),

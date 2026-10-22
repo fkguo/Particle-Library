@@ -124,8 +124,8 @@ void main() {
       closeTo(readingViewport.height, 1),
     );
 
-    // Fit is a per-document decision: under Auto a medium window starts at
-    // fit page, and an explicit fit is what reopening restores later.
+    // Fit is a per-document decision: a medium window starts at fit page and
+    // an explicit fit is what reopening restores later.
     final fitWidthScale = controller
         .calcMatrixFitWidthForPage(pageNumber: 1)!
         .getMaxScaleOnAxis();
