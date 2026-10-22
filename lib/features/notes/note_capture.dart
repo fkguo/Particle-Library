@@ -4,6 +4,7 @@ import '../../app/app_scope.dart';
 import '../../app/error_text.dart';
 import '../../app/navigation.dart';
 import '../../notes/notes.dart';
+import '../common/floating_panel.dart';
 import 'note_editor.dart';
 import 'notes_anchor.dart';
 import 'notes_format.dart';
@@ -63,8 +64,13 @@ Future<void> captureTextToNote(
 
   if (!context.mounted) return;
   final searchController = TextEditingController();
+  // The capture dialog is modal: hide floating lookup panels first, otherwise
+  // they sit above the dialog (overlay entries) and cover part of it.
+  final rootNavigator = Navigator.of(context, rootNavigator: true);
+  final dialogContext = rootNavigator.context;
+  FloatingPanelHost.suspendAll();
   final choice = await showDialog<_CaptureChoice>(
-    context: context,
+    context: dialogContext,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setDialogState) {
         final query = searchController.text.trim();
@@ -225,7 +231,15 @@ Future<void> captureTextToNote(
     ),
   );
   searchController.dispose();
-  if (choice == null) return;
+  if (choice == null) {
+    FloatingPanelHost.resumeAll();
+    return;
+  }
+  if (choice.openAfterSave) {
+    FloatingPanelHost.closeAll();
+  } else {
+    FloatingPanelHost.resumeAll();
+  }
 
   final sourceLines = <String>[];
   final seenSources = <String>{};
@@ -300,8 +314,8 @@ Future<void> captureTextToNote(
     NoteCaptureDefaults.lastCollectionId = selectedCollectionId;
     scope.notesChanges.value++;
   } catch (error) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    if (!dialogContext.mounted) return;
+    ScaffoldMessenger.of(dialogContext).showSnackBar(
       SnackBar(
         content: Text(
           '${strings.notesSaveFailed}: ${errorText(error, strings)}',
@@ -310,11 +324,11 @@ Future<void> captureTextToNote(
     );
     return;
   }
-  if (!context.mounted) return;
+  if (!dialogContext.mounted) return;
   if (choice.openAfterSave) {
-    await AppNav.push<void>(context, NoteEditorPage(note: record));
+    await AppNav.push<void>(dialogContext, NoteEditorPage(note: record));
   } else {
-    ScaffoldMessenger.of(context)
+    ScaffoldMessenger.of(dialogContext)
         .showSnackBar(SnackBar(content: Text(strings.notesCaptured)));
   }
 }

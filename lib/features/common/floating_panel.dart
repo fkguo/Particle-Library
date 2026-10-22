@@ -7,6 +7,39 @@ import 'package:flutter/material.dart';
 /// Unlike a dialog it has no barrier: the page below stays interactive, which
 /// is what the notes editor needs for a PDG lookup window that can sit next to
 /// the text while the user keeps typing.
+/// Tracks the floating panels currently inserted in overlays so a modal
+/// dialog can hide them (they sit above route overlays) and restore them.
+class FloatingPanelHost {
+  static final List<({OverlayEntry entry, OverlayState overlay})> _active = [];
+
+  static void register(OverlayEntry entry, OverlayState overlay) {
+    _active.add((entry: entry, overlay: overlay));
+  }
+
+  static void unregister(OverlayEntry entry) {
+    _active.removeWhere((item) => identical(item.entry, entry));
+  }
+
+  static void suspendAll() {
+    for (final item in List.of(_active)) {
+      if (item.entry.mounted) item.entry.remove();
+    }
+  }
+
+  static void resumeAll() {
+    for (final item in List.of(_active)) {
+      if (!item.entry.mounted) item.overlay.insert(item.entry);
+    }
+  }
+
+  static void closeAll() {
+    for (final item in List.of(_active)) {
+      if (item.entry.mounted) item.entry.remove();
+    }
+    _active.clear();
+  }
+}
+
 class FloatingPanel extends StatefulWidget {
   const FloatingPanel({
     super.key,

@@ -1164,8 +1164,11 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
 
   void _toggleFloatingLookup(AppServices scope, Size size) {
     if (_lookupOverlay != null) {
-      _closeFloatingLookup();
-      return;
+      if (_lookupOverlay!.mounted) {
+        _closeFloatingLookup();
+        return;
+      }
+      _lookupOverlay = null;
     }
     final overlay = Overlay.of(context, rootOverlay: true);
     final width = math.min(520.0, size.width - 48);
@@ -1182,11 +1185,16 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       ),
     );
     _lookupOverlay = entry;
+    FloatingPanelHost.register(entry, overlay);
     overlay.insert(entry);
   }
 
   void _closeFloatingLookup() {
-    _lookupOverlay?.remove();
+    final entry = _lookupOverlay;
+    if (entry != null) {
+      FloatingPanelHost.unregister(entry);
+      entry.remove();
+    }
     _lookupOverlay = null;
   }
 
