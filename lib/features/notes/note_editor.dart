@@ -52,6 +52,7 @@ class NoteEditor extends StatefulWidget {
     this.onCopyBibtex,
     this.draft = false,
     this.autofocusTitle = false,
+    this.compact = false,
     this.debounce = const Duration(milliseconds: 500),
   });
 
@@ -68,6 +69,10 @@ class NoteEditor extends StatefulWidget {
   final Future<void> Function(NoteRecord note)? onCopyBibtex;
   final bool draft;
   final bool autofocusTitle;
+
+  /// Narrow embedding (the reader's split pane): the PDG rail would take most
+  /// of the width, so the lookup opens as a dialog instead.
+  final bool compact;
   final Duration debounce;
 
   @override
@@ -1341,6 +1346,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                   Builder(
                     builder: (context) {
                       final railVisible =
+                          !widget.compact &&
                           MediaQuery.sizeOf(context).width >= 1360 &&
                           _showPdgRail &&
                           _linkPreviewTarget == null;
@@ -1356,7 +1362,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                           ),
                         ),
                         onPressed: () {
-                          if (MediaQuery.sizeOf(context).width >= 1360) {
+                          if (!widget.compact &&
+                              MediaQuery.sizeOf(context).width >= 1360) {
                             setState(() {
                               _linkPreviewTarget = null;
                               _showPdgRail = !_showPdgRail;
@@ -1673,6 +1680,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                   ),
                 ),
                 if (scope != null &&
+                    !widget.compact &&
                     MediaQuery.sizeOf(context).width >= 1360 &&
                     (_showPdgRail || _linkPreviewTarget != null))
                   SizedBox(

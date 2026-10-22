@@ -1371,7 +1371,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
     AppPalette palette,
   ) {
     final store = _notes;
-    final width = (MediaQuery.sizeOf(context).width * 0.36).clamp(320.0, 440.0);
+    final width = (MediaQuery.sizeOf(context).width * 0.40).clamp(360.0, 560.0);
     return Container(
       width: width,
       decoration: BoxDecoration(
@@ -1424,6 +1424,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
                     ),
                     store: store,
                     strings: strings,
+                    compact: true,
                     note: _splitNote,
                     draft: _splitNote == null,
                     autofocusTitle: _splitNote == null,
