@@ -102,13 +102,13 @@ void main() {
     // Contents / Annotations / Notes tabs.
     await tester.tap(find.byIcon(Icons.more_vert));
     await tester.pump(const Duration(milliseconds: 500));
-    if (find.text('Annotation sidebar').evaluate().isEmpty) {
+    if (find.text('Sidebar').evaluate().isEmpty) {
       debugPrint('TEST no sidebar item; texts:');
       for (final e in find.byType(Text).evaluate()) {
         debugPrint('  ${(e.widget as Text).data}');
       }
     }
-    await tester.tap(find.text('Annotation sidebar').last);
+    await tester.tap(find.text('Sidebar').last);
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Annotations'), findsWidgets);
     expect(find.text('Contents'), findsWidgets);

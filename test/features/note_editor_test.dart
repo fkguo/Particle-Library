@@ -422,6 +422,41 @@ void main() {
     expect(saved.bodyMarkdown, contains('[Source]'));
   });
 
+  testWidgets('a re-created editor loads an append made while closed', (
+    tester,
+  ) async {
+    final note = await store.create(
+      title: 'Target',
+      bodyMarkdown: 'first paragraph',
+    );
+    await pumpEditor(tester, note: note);
+    await tester.pump();
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: SizedBox())),
+    );
+    await tester.pump();
+
+    await store.update(
+      note.id,
+      bodyMarkdown: 'first paragraph\n\n[Source](review:2026/x.pdf)',
+    );
+
+    await pumpEditor(tester, note: note);
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pump();
+
+    final fields = tester.widgetList<TextField>(find.byType(TextField));
+    expect(
+      fields.any(
+        (field) => (field.controller?.text ?? '').contains('[Source]'),
+      ),
+      isTrue,
+    );
+  });
+
   testWidgets('an external append is merged into the open note', (
     tester,
   ) async {

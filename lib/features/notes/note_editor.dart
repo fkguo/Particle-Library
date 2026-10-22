@@ -151,6 +151,10 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     widget.changeSignal?.addListener(_onExternalNotesChanged);
     unawaited(_loadCollections());
+    // The passed record can be a snapshot taken before another surface
+    // appended to the note; refresh from the store so a re-created editor does
+    // not show (and later save) the stale body.
+    if (_record != null) unawaited(_refreshNoteMetadata(_record!.id));
     if (widget.autofocusTitle) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _titleFocus.requestFocus();

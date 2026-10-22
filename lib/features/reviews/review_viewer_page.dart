@@ -86,6 +86,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
   final PdfViewerController _controller = PdfViewerController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ReadingHistory _readingHistory = ReadingHistory();
+  ValueNotifier<int>? _notesChanges;
   bool _notesSplit = false;
   NoteRecord? _splitNote;
   int _splitSession = 0;
@@ -180,6 +181,30 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
 
   /// Keeps the live triple fresh and saves shortly after any matrix change
   /// (keyboard scrolling and inertia do not emit pointer events).
+  /// Keeps the sidebar's note list (and the record it would re-open) in sync
+  /// when another surface appends to a note.
+  void _onNotesChanged() {
+    final notes = _notes;
+    if (notes == null) return;
+    unawaited(_loadAnnotations(notes));
+    final inspectorId = _inspectorNote?.id;
+    if (inspectorId != null) {
+      unawaited(
+        notes.noteById(inspectorId).then((fresh) {
+          if (mounted && fresh != null) setState(() => _inspectorNote = fresh);
+        }),
+      );
+    }
+    final splitId = _splitNote?.id;
+    if (splitId != null) {
+      unawaited(
+        notes.noteById(splitId).then((fresh) {
+          if (mounted && fresh != null) setState(() => _splitNote = fresh);
+        }),
+      );
+    }
+  }
+
   void _onViewerChanged() {
     if (!_controller.isReady || _restoring) return;
     _captureLive();
@@ -189,6 +214,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _notesChanges?.removeListener(_onNotesChanged);
     _controller.removeListener(_onViewerChanged);
     _persistDebounce?.cancel();
     _persistReadingState();
@@ -210,6 +236,11 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
     _reviewLog('REVIEW open: didChangeDependencies');
     final scope = AppScope.of(context);
     _userStore = scope.store;
+    final notesChanges = scope.notesChanges;
+    if (!identical(notesChanges, _notesChanges)) {
+      _notesChanges?.removeListener(_onNotesChanged);
+      _notesChanges = notesChanges..addListener(_onNotesChanged);
+    }
     final state = scope.store.reviewState(_fileName);
     if (state != null) {
       _hadReadingState = true;
