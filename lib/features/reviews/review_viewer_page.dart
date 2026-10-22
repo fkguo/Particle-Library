@@ -89,6 +89,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
   bool _notesSplit = false;
   NoteRecord? _splitNote;
   int _splitSession = 0;
+  bool _inspectorEditing = false;
+  NoteRecord? _inspectorNote;
+  int _inspectorSession = 0;
   PdfTextSearcher? _searcher;
   UserStore? _userStore;
   int? _currentPage;
@@ -879,20 +882,6 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
       _rememberForBack();
       unawaited(_controller.goToPage(pageNumber: annotation.pageNumber));
     }
-  }
-
-  Future<void> _openNoteRecord(NoteRecord note) async {
-    if (_notesSplit && context.layoutClass != LayoutClass.compact) {
-      setState(() {
-        _splitNote = note;
-        _splitSession++;
-      });
-      return;
-    }
-    await AppNav.push<void>(context, NoteEditorPage(note: note));
-    if (!mounted) return;
-    final notes = _notes;
-    if (notes != null) await _loadAnnotations(notes);
   }
 
   Future<void> _openAnnotationNote(ReviewAnnotation annotation) async {
@@ -2726,6 +2715,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
         _openInspector(tab: 1);
       case 'inspector':
         _openInspector(toggle: true);
+      case 'split':
+        _toggleNotesSplit();
       case 'official':
         _openExternally();
     }
@@ -2838,12 +2829,32 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
     VoidCallback? refresh,
     VoidCallback? onCollapse,
   }) {
+    if (_inspectorEditing) {
+      return _inlineNoteEditor(
+        context,
+        strings: strings,
+        palette: palette,
+        onCollapse: onCollapse,
+      );
+    }
     return _ReviewAnnotationSidebar(
       annotations: _annotations,
       notes: _reviewNotes,
       onOpenNoteRecord: (note) {
-        close();
-        unawaited(_openNoteRecord(note));
+        setState(() {
+          _inspectorEditing = true;
+          _inspectorNote = note;
+          _inspectorSession++;
+        });
+        refresh?.call();
+      },
+      onNewNote: () {
+        setState(() {
+          _inspectorEditing = true;
+          _inspectorNote = null;
+          _inspectorSession++;
+        });
+        refresh?.call();
       },
       palette: palette,
       strings: strings,
@@ -2881,7 +2892,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
       },
       tabIndex: _sidebarTab,
       onTabChanged: (index) {
-        setState(() => _sidebarTab = index);
+        setState(() {
+          _sidebarTab = index;
+          _inspectorEditing = false;
+        });
         refresh?.call();
       },
       outline: _outline,
@@ -2900,6 +2914,86 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
       onShowActions: (annotation) =>
           unawaited(_showAnnotationActions(annotation)),
       onCollapse: onCollapse,
+    );
+  }
+
+  /// New/edit a note inside the inspector, so the sidebar (Annotations /
+  /// Contents / Notes) stays the single place where notes are handled.
+  Widget _inlineNoteEditor(
+    BuildContext context, {
+    required AppStrings strings,
+    required AppPalette palette,
+    VoidCallback? onCollapse,
+  }) {
+    final store = _notes;
+    final title = _inspectorNote == null ? strings.notesNew : strings.notesEdit;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 44,
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: strings.commonBack,
+                onPressed: () => setState(() => _inspectorEditing = false),
+                icon: const Icon(Icons.arrow_back, size: 18),
+              ),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              if (onCollapse != null)
+                IconButton(
+                  tooltip: strings.commonClose,
+                  onPressed: onCollapse,
+                  icon: const Icon(Icons.keyboard_double_arrow_right, size: 18),
+                ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: store == null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(strings.notesUnavailable),
+                  ),
+                )
+              : NoteEditor(
+                  key: ValueKey<String>(
+                    'inspector-note-${_inspectorNote?.id ?? 'draft'}-$_inspectorSession',
+                  ),
+                  store: store,
+                  strings: strings,
+                  compact: true,
+                  changeSignal: AppScope.of(context).notesChanges,
+                  note: _inspectorNote,
+                  draft: _inspectorNote == null,
+                  autofocusTitle: _inspectorNote == null,
+                  initialAnchors: _inspectorNote == null
+                      ? _splitAnchors()
+                      : const <NoteAnchorInput>[],
+                  onSaved: (note) {
+                    setState(() => _inspectorNote = note);
+                    unawaited(_loadAnnotations(store));
+                  },
+                  onDeleted: () {
+                    setState(() {
+                      _inspectorEditing = false;
+                      _inspectorNote = null;
+                    });
+                    unawaited(_loadAnnotations(store));
+                  },
+                  onCancel: () => setState(() => _inspectorEditing = false),
+                ),
+        ),
+      ],
     );
   }
 
@@ -2972,13 +3066,9 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
                     ),
                   ),
                   IconButton(
-                    tooltip: _notesSplit
-                        ? strings.commonClose
-                        : strings.notesTitle,
-                    isSelected: _notesSplit,
-                    onPressed: _toggleNotesSplit,
-                    icon: const Icon(Icons.vertical_split_outlined, size: 20),
-                    selectedIcon: const Icon(Icons.vertical_split, size: 20),
+                    tooltip: strings.notesTitle,
+                    onPressed: () => _openInspector(tab: 2),
+                    icon: const Icon(Icons.sticky_note_2_outlined, size: 20),
                   ),
                   IconButton(
                     tooltip: strings.reviewSearch,
@@ -3026,6 +3116,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
                       PopupMenuItem(
                         value: 'inspector',
                         child: Text(strings.reviewAnnotationSidebar),
+                      ),
+                      PopupMenuItem(
+                        value: 'split',
+                        child: Text(strings.reviewSplitNotes),
                       ),
                       PopupMenuItem(
                         value: 'dark',
@@ -3558,6 +3652,7 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
     required this.annotations,
     required this.notes,
     required this.onOpenNoteRecord,
+    required this.onNewNote,
     required this.palette,
     required this.strings,
     required this.onOpen,
@@ -3586,6 +3681,7 @@ class _ReviewAnnotationSidebar extends StatefulWidget {
   final List<ReviewAnnotation> annotations;
   final List<NoteRecord> notes;
   final ValueChanged<NoteRecord> onOpenNoteRecord;
+  final VoidCallback onNewNote;
   final AppPalette palette;
   final AppStrings strings;
   final ValueChanged<ReviewAnnotation> onOpen;
@@ -3624,6 +3720,7 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
   List<ReviewAnnotation> get annotations => widget.annotations;
   List<NoteRecord> get notes => widget.notes;
   ValueChanged<NoteRecord> get onOpenNoteRecord => widget.onOpenNoteRecord;
+  VoidCallback get onNewNote => widget.onNewNote;
   AppPalette get palette => widget.palette;
   AppStrings get strings => widget.strings;
   ValueChanged<ReviewAnnotation> get onOpen => widget.onOpen;
@@ -3690,6 +3787,26 @@ class _ReviewAnnotationSidebarState extends State<_ReviewAnnotationSidebar> {
       _tagFilter != null;
 
   Widget _notesList(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+          child: SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onNewNote,
+              icon: const Icon(Icons.add, size: 16),
+              label: Text(strings.notesNew),
+            ),
+          ),
+        ),
+        Expanded(child: _notesListBody(context)),
+      ],
+    );
+  }
+
+  Widget _notesListBody(BuildContext context) {
     if (notes.isEmpty) {
       return Center(
         child: Padding(
