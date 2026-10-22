@@ -17,6 +17,7 @@ import '../common/ui.dart';
 import 'note_tag_field.dart';
 import 'notes_format.dart';
 import 'tag_tools.dart';
+import '../entry/entry_route_page.dart';
 import '../reference/reference_page.dart';
 import '../../search/search_service.dart';
 import '../../app/navigation.dart';
@@ -1126,20 +1127,12 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     final rect = Rect.fromLTWH((size.width - width) / 2, 80, width, height);
     late final OverlayEntry entry;
     entry = OverlayEntry(
-      builder: (context) => FloatingPanel(
-        title: widget.strings.notesPdgLookup,
+      builder: (context) => _FloatingLookupHost(
+        search: scope.search,
+        strings: widget.strings,
         initialRect: rect,
         maxSize: Size(size.width - 24, size.height - 60),
         onClose: _closeFloatingLookup,
-        child: NotePdgRail(
-          search: scope.search,
-          strings: widget.strings,
-          autofocus: true,
-          onOpen: (hit) {
-            _closeFloatingLookup();
-            _openPdgHit(hit);
-          },
-        ),
       ),
     );
     _lookupOverlay = entry;
@@ -2027,6 +2020,77 @@ class _StatusIndicator extends StatelessWidget {
 
 /// Standalone editor route used by the narrow Notes page and by entity
 /// backlinks/composers.
+/// Content of the wide-screen floating lookup: a nested [Navigator] so a
+/// result opens *inside* the panel and the note editor underneath keeps its
+/// text and focus.
+class _FloatingLookupHost extends StatefulWidget {
+  const _FloatingLookupHost({
+    required this.search,
+    required this.strings,
+    required this.initialRect,
+    required this.maxSize,
+    required this.onClose,
+  });
+
+  final SearchService search;
+  final AppStrings strings;
+  final Rect initialRect;
+  final Size maxSize;
+  final VoidCallback onClose;
+
+  @override
+  State<_FloatingLookupHost> createState() => _FloatingLookupHostState();
+}
+
+class _FloatingLookupHostState extends State<_FloatingLookupHost> {
+  final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
+  int _depth = 0;
+
+  void _push(SearchHit hit) {
+    final page = _pageFor(hit);
+    final navigator = _navigator.currentState;
+    if (page == null || navigator == null) return;
+    setState(() => _depth++);
+    navigator.push(MaterialPageRoute<void>(builder: (_) => page)).whenComplete(
+      () {
+        if (mounted && _depth > 0) setState(() => _depth--);
+      },
+    );
+  }
+
+  Widget? _pageFor(SearchHit hit) {
+    if (hit.note != null) return NoteEditorPage(note: hit.note);
+    if (hit.referenceId != null) {
+      return ReferencePage(referenceId: hit.referenceId!);
+    }
+    final pdgid = hit.pdgid;
+    if (pdgid == null) return null;
+    return EntryRoutePage(pdgid: pdgid);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FloatingPanel(
+      title: widget.strings.notesPdgLookup,
+      initialRect: widget.initialRect,
+      maxSize: widget.maxSize,
+      onClose: widget.onClose,
+      onBack: _depth > 0 ? () => _navigator.currentState?.maybePop() : null,
+      child: Navigator(
+        key: _navigator,
+        onGenerateRoute: (_) => MaterialPageRoute<void>(
+          builder: (_) => NotePdgRail(
+            search: widget.search,
+            strings: widget.strings,
+            autofocus: true,
+            onOpen: _push,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class NoteEditorPage extends StatelessWidget implements ImmersivePage {
   const NoteEditorPage({
     super.key,

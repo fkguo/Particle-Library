@@ -16,6 +16,7 @@ class FloatingPanel extends StatefulWidget {
     this.minSize = const Size(320, 240),
     this.maxSize,
     this.onClose,
+    this.onBack,
   });
 
   final String title;
@@ -24,6 +25,7 @@ class FloatingPanel extends StatefulWidget {
   final Size minSize;
   final Size? maxSize;
   final VoidCallback? onClose;
+  final VoidCallback? onBack;
 
   @override
   State<FloatingPanel> createState() => _FloatingPanelState();
@@ -90,7 +92,16 @@ class _FloatingPanelState extends State<FloatingPanel> {
                   height: 44,
                   child: Row(
                     children: [
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 6),
+                      if (widget.onBack != null)
+                        IconButton(
+                          tooltip: MaterialLocalizations.of(context)
+                              .backButtonTooltip,
+                          onPressed: widget.onBack,
+                          icon: const Icon(Icons.arrow_back, size: 18),
+                        )
+                      else
+                        const SizedBox(width: 6),
                       const Icon(Icons.drag_indicator, size: 16),
                       Expanded(
                         child: GestureDetector(
