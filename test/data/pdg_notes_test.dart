@@ -38,6 +38,14 @@ void main() {
     expect(entries, contains('M252'));
   });
 
+  test('related reviews for a particle come from the patch', () async {
+    final files = await PdgNotes.reviewFilesFor('S010');
+    expect(files, hasLength(3));
+    expect(files, contains('rpp2026-rev-rare-kaon-decays.pdf'));
+    expect(files, contains('rpp2026-rev-charged-kaon-mass.pdf'));
+    expect(files, contains('rpp2026-rev-dalitz-params-k3pi-decays.pdf'));
+  });
+
   test('identifiers without notes return null', () async {
     expect(await PdgNotes.forPdgid('NOT-A-PDGID'), isNull);
   });

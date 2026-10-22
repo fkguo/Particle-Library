@@ -236,9 +236,10 @@ class PdgNotes {
       directory = Directory.systemTemp;
     }
     final file = File('${directory.path}/pdg_notes_2026.sqlite');
-    if (!file.existsSync() || file.lengthSync() != bytes.length) {
-      file.writeAsBytesSync(bytes, flush: true);
-    }
+    // Always rewrite: the size can stay identical while the content changes
+    // (a new review table, updated cite keys), and the file is only a few
+    // hundred kilobytes.
+    file.writeAsBytesSync(bytes, flush: true);
     return file;
   }
 }

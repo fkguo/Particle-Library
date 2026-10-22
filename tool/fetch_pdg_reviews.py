@@ -86,9 +86,13 @@ def main() -> int:
             "pdgid TEXT NOT NULL, file TEXT NOT NULL,"
             "PRIMARY KEY (pdgid, file))"
         )
+        # Remember every scanned node, including those with no related review,
+        # so a rerun only retries missing nodes (or all with --force).
+        store.execute("CREATE TABLE IF NOT EXISTS pdg_review_scan (pdgid TEXT PRIMARY KEY)")
         done = set()
         if not args.force:
-            done = {row[0] for row in store.execute("SELECT DISTINCT pdgid FROM pdg_note_reviews")}
+            done = {row[0] for row in store.execute("SELECT pdgid FROM pdg_review_scan")}
+            done |= {row[0] for row in store.execute("SELECT DISTINCT pdgid FROM pdg_note_reviews")}
         fetched = failed = 0
         for index, node in enumerate(nodes, 1):
             if node in done:
@@ -100,6 +104,7 @@ def main() -> int:
                 print(f"[{index}/{len(nodes)}] {node}: FAILED {error}", file=sys.stderr)
                 continue
             fetched += 1
+            store.execute("INSERT OR REPLACE INTO pdg_review_scan(pdgid) VALUES (?)", (node,))
             if files:
                 store.executemany(
                     "INSERT OR REPLACE INTO pdg_note_reviews(pdgid, file) VALUES (?, ?)",
