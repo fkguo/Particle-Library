@@ -8,6 +8,7 @@ import '../../app/app_scope.dart';
 import '../../app/error_text.dart';
 import '../../app/app_strings.dart';
 import '../../app/app_theme.dart';
+import '../../app/layout.dart';
 import '../../app/navigation.dart';
 import '../../data/inspire_bibtex.dart';
 import '../../data/inspire_literature_search.dart';
@@ -15,6 +16,7 @@ import '../../data/pdg_notes.dart';
 import '../../data/zotero_bridge.dart';
 import '../../data/zotero_cache.dart';
 import '../../data/zotero_inspire_api.dart';
+import '../../domain/labels.dart';
 import '../common/async_view.dart';
 
 import '../common/description_text.dart';
@@ -238,6 +240,50 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
     // Close the suggestion overlay once the history is empty.
     _searchFocus.unfocus();
     _searchFocus.requestFocus();
+  }
+
+  Future<void> _openInspireHelp(BuildContext context) async {
+    final panel = const _InspireSearchHelpPanel();
+    if (context.isCompactLayout) {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (sheetContext) => SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.85,
+          child: panel,
+        ),
+      );
+      return;
+    }
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: AppScope.of(context).strings.commonClose,
+      barrierColor: Colors.black26,
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (context, animation, secondaryAnimation) => Align(
+        alignment: Alignment.centerRight,
+        child: Material(
+          color: context.palette.surface,
+          child: SafeArea(
+            left: false,
+            child: SizedBox(width: 400, child: panel),
+          ),
+        ),
+      ),
+      transitionBuilder: (context, animation, secondaryAnimation, child) =>
+          SlideTransition(
+            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+                .animate(
+                  CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                  ),
+                ),
+            child: child,
+          ),
+    );
   }
 
   void _toggleFilter(String value) {
@@ -681,81 +727,95 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
           Insets.xxl,
         ),
         children: [
-          RawAutocomplete<String>(
-            textEditingController: _controller,
-            focusNode: _searchFocus,
-            optionsBuilder: (value) {
-              final history = _inspireHistory();
-              final text = value.text.trim().toLowerCase();
-              if (text.isEmpty) return history;
-              return history.where(
-                (query) => query.toLowerCase().contains(text),
-              );
-            },
-            onSelected: (value) {
-              _controller.text = value;
-              _search(page: 1);
-            },
-            fieldViewBuilder: (context, controller, focusNode, onSubmitted) =>
-                TextField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  autofocus: true,
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: (_) => _search(page: 1),
-                  decoration: InputDecoration(
-                    hintText: strings.inspireSearchHint,
-                    prefixIcon: const Icon(Icons.search, size: 20),
-                    suffixIcon: IconButton(
-                      tooltip: strings.inspireSearchAction,
-                      onPressed: _loading ? null : () => _search(page: 1),
-                      icon: const Icon(Icons.arrow_forward, size: 18),
-                    ),
-                  ),
-                ),
-            optionsViewBuilder: (context, onSelected, options) {
-              final entries = options.toList();
-              return Align(
-                alignment: Alignment.topLeft,
-                child: Material(
-                  elevation: 6,
-                  borderRadius: BorderRadius.circular(10),
-                  clipBehavior: Clip.antiAlias,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 260),
-                    child: ListView(
-                      padding: EdgeInsets.zero,
-                      shrinkWrap: true,
-                      children: [
-                        for (final query in entries)
-                          ListTile(
-                            dense: true,
-                            leading: const Icon(Icons.history, size: 18),
-                            title: Text(
-                              query,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              Expanded(
+                child: RawAutocomplete<String>(
+                  textEditingController: _controller,
+                  focusNode: _searchFocus,
+                  optionsBuilder: (value) {
+                    final history = _inspireHistory();
+                    final text = value.text.trim().toLowerCase();
+                    if (text.isEmpty) return history;
+                    return history.where(
+                      (query) => query.toLowerCase().contains(text),
+                    );
+                  },
+                  onSelected: (value) {
+                    _controller.text = value;
+                    _search(page: 1);
+                  },
+                  fieldViewBuilder:
+                      (context, controller, focusNode, onSubmitted) =>
+                          TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            autofocus: true,
+                            textInputAction: TextInputAction.search,
+                            onSubmitted: (_) => _search(page: 1),
+                            decoration: InputDecoration(
+                              hintText: strings.inspireSearchHint,
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                              suffixIcon: IconButton(
+                                tooltip: strings.inspireSearchAction,
+                                onPressed: _loading
+                                    ? null
+                                    : () => _search(page: 1),
+                                icon: const Icon(Icons.arrow_forward, size: 18),
+                              ),
                             ),
-                            onTap: () => onSelected(query),
                           ),
-                        if (entries.isNotEmpty) const Divider(height: 1),
-                        ListTile(
-                          dense: true,
-                          leading: const Icon(
-                            Icons.delete_sweep_outlined,
-                            size: 18,
+                  optionsViewBuilder: (context, onSelected, options) {
+                    final entries = options.toList();
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 6,
+                        borderRadius: BorderRadius.circular(10),
+                        clipBehavior: Clip.antiAlias,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 260),
+                          child: ListView(
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: true,
+                            children: [
+                              for (final query in entries)
+                                ListTile(
+                                  dense: true,
+                                  leading: const Icon(Icons.history, size: 18),
+                                  title: Text(
+                                    query,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  onTap: () => onSelected(query),
+                                ),
+                              if (entries.isNotEmpty) const Divider(height: 1),
+                              ListTile(
+                                dense: true,
+                                leading: const Icon(
+                                  Icons.delete_sweep_outlined,
+                                  size: 18,
+                                ),
+                                title: Text(strings.inspireClearHistory),
+                                onTap: () {
+                                  unawaited(_clearInspireHistory());
+                                },
+                              ),
+                            ],
                           ),
-                          title: Text(strings.inspireClearHistory),
-                          onTap: () {
-                            unawaited(_clearInspireHistory());
-                          },
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
+              ),
+              IconButton(
+                tooltip: strings.inspireHelpTitle,
+                onPressed: () => _openInspireHelp(context),
+                icon: const Icon(Icons.help_outline, size: 20),
+              ),
+            ],
           ),
           const SizedBox(height: Insets.s),
           Row(
@@ -1159,6 +1219,119 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Operator cheat sheet shown from the search box's help button. Opens as a
+/// right-hand sheet on wide windows and as a bottom sheet on phones.
+class _InspireSearchHelpPanel extends StatelessWidget {
+  const _InspireSearchHelpPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppScope.of(context).strings;
+    final palette = context.palette;
+    final lang = strings.lang;
+    final theme = Theme.of(context);
+    final secondary = theme.textTheme.bodySmall?.copyWith(
+      color: palette.textSecondary,
+    );
+    final rows = <(String, String)>[
+      ('a "Jia, Jiangyong"', pick(lang, '作者', 'Author')),
+      ('ea "Jia, Jiangyong"', pick(lang, '精确作者', 'Exact author')),
+      ('t "muon"', pick(lang, '题名', 'Title')),
+      ('cn BESIII', pick(lang, '合作组', 'Collaboration')),
+      ('doi 10.1103/...', 'DOI'),
+      ('arxiv:0902.4759', 'arXiv'),
+      ('recid 1245023', pick(lang, '记录号', 'Record id')),
+      ('de 2020->2024', pick(lang, '日期', 'Date')),
+      ('topcite 100+', pick(lang, '引用数', 'Citations')),
+      ('fulltext "..."', pick(lang, '全文', 'Full text')),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Insets.l, Insets.m, Insets.s, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  strings.inspireHelpTitle,
+                  style: theme.textTheme.titleMedium,
+                ),
+              ),
+              IconButton(
+                tooltip: strings.commonClose,
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close, size: 18),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Insets.l, 0, Insets.l, Insets.s),
+          child: Text(strings.inspireHelpIntro, style: secondary),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: Insets.l),
+            children: [
+              for (final row in rows)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: Insets.s),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 180,
+                        child: SelectableText(
+                          row.$1,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: palette.textPrimary,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: Insets.s),
+                      Expanded(child: Text(row.$2, style: secondary)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(Insets.l),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => launchUrl(
+                  Uri.parse(
+                    'https://help.inspirehep.net/knowledge-base/inspire-paper-search/',
+                  ),
+                  mode: LaunchMode.externalApplication,
+                ),
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: Text(strings.inspireHelpOpenDocs),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => launchUrl(
+                  Uri.parse(
+                    'https://help.inspirehep.net/knowledge-base/full-listing-of-search-terms/',
+                  ),
+                  mode: LaunchMode.externalApplication,
+                ),
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: Text(strings.inspireHelpOpenAllTerms),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

@@ -582,6 +582,15 @@ class AppStrings {
     'Enter INSPIRE syntax or keywords, e.g. cn BESIII, t "muon"',
   );
   String get inspireSearchAction => _t('搜索 INSPIRE', 'Search INSPIRE');
+  String get inspireHelpTitle => _t('INSPIRE 搜索语法', 'INSPIRE search syntax');
+  String get inspireHelpIntro => _t(
+    '搜索框把内容原样发给 INSPIRE；下面是最常用的写法。',
+    'The box sends your text to INSPIRE unchanged; these are the most common forms.',
+  );
+  String get inspireHelpOpenDocs =>
+      _t('INSPIRE 搜索帮助', 'INSPIRE search help');
+  String get inspireHelpOpenAllTerms =>
+      _t('完整搜索项列表', 'Full list of search terms');
   String get inspireClearHistory =>
       _t('清除 INSPIRE 搜索历史', 'Clear INSPIRE search history');
   String get inspireSearchEntryHint => _t(
