@@ -442,8 +442,32 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     if (!mounted || fresh == null) return;
     final current = _record;
     if (current == null || fresh.revision == current.revision) return;
+    final savedBody = current.bodyMarkdown;
+    final freshBody = fresh.bodyMarkdown;
     setState(() {
       _record = fresh;
+      // Another surface appended a quote/source line (the PDG lookup): merge
+      // the suffix into the text being edited instead of losing it on the next
+      // autosave, which would write our older body back.
+      if (freshBody != savedBody) {
+        final suffix = freshBody.startsWith(savedBody)
+            ? freshBody.substring(savedBody.length)
+            : '\n\n$freshBody';
+        final text = _bodyController.text;
+        if (text == savedBody) {
+          _bodyController.value = TextEditingValue(
+            text: freshBody,
+            selection: TextSelection.collapsed(offset: freshBody.length),
+          );
+          _savedBody = freshBody;
+        } else {
+          final merged = '$text$suffix';
+          _bodyController.value = TextEditingValue(
+            text: merged,
+            selection: TextSelection.collapsed(offset: merged.length),
+          );
+        }
+      }
       _savedAnchorSignature = _anchorSignature();
     });
   }

@@ -3066,9 +3066,12 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
                     ),
                   ),
                   IconButton(
-                    tooltip: strings.notesTitle,
-                    onPressed: () => _openInspector(tab: 2),
-                    icon: const Icon(Icons.sticky_note_2_outlined, size: 20),
+                    tooltip: strings.reviewSidebar,
+                    isSelected: expandedLayout ? _showAnnotations : null,
+                    onPressed: () =>
+                        _openInspector(tab: _sidebarTab, toggle: true),
+                    icon: const Icon(Icons.vertical_split_outlined, size: 20),
+                    selectedIcon: const Icon(Icons.vertical_split, size: 20),
                   ),
                   IconButton(
                     tooltip: strings.reviewSearch,
@@ -3115,7 +3118,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
                       ),
                       PopupMenuItem(
                         value: 'inspector',
-                        child: Text(strings.reviewAnnotationSidebar),
+                        child: Text(strings.reviewSidebar),
                       ),
                       PopupMenuItem(
                         value: 'split',
