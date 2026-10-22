@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
@@ -5,6 +7,7 @@ import '../../app/app_strings.dart';
 import '../../app/app_theme.dart';
 import '../../app/navigation.dart';
 import '../../data/pdg_database.dart';
+import '../../data/pdg_notes.dart';
 import '../../domain/aliases.dart';
 import '../../domain/display.dart';
 import '../../domain/labels.dart';
@@ -108,12 +111,25 @@ class _ParticleBody extends StatefulWidget {
 
 class _ParticleBodyState extends State<_ParticleBody> {
   int _tab = 0;
+  PdgNote? _pdgNote;
   final GlobalKey _overviewKey = GlobalKey();
   final GlobalKey _tabsKey = GlobalKey();
   final GlobalKey _identityKey = GlobalKey();
   final GlobalKey _keyPropertiesKey = GlobalKey();
   final GlobalKey _notesKey = GlobalKey();
   final GlobalKey _textsKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadPdgNote());
+  }
+
+  Future<void> _loadPdgNote() async {
+    final note = await PdgNotes.forPdgid(widget.view.entry.pdgid);
+    if (!mounted || note == null || note.isEmpty) return;
+    setState(() => _pdgNote = note);
+  }
 
   void _selectTab(int tab) {
     setState(() => _tab = tab);
@@ -276,6 +292,38 @@ class _ParticleBodyState extends State<_ParticleBody> {
                 ),
               ],
             ),
+            if (_pdgNote?.was case final was?)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.l,
+                  Insets.s,
+                  Insets.l,
+                  0,
+                ),
+                child: CitationText(
+                  'was $was',
+                  selectable: true,
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: palette.textSecondary),
+                ),
+              ),
+            if (_pdgNote?.summary case final summary?)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.l,
+                  Insets.m,
+                  Insets.l,
+                  0,
+                ),
+                child: SectionCard(
+                  title: strings.particleSummarySection,
+                  child: CitationText(
+                    summary,
+                    selectable: true,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ),
             if (!view.hasIdentity)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: Insets.l),

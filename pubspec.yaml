@@ -35,4 +35,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/pdgall-2026.0.sqlite
+    - assets/pdg_notes_2026.sqlite
     - assets/brand/

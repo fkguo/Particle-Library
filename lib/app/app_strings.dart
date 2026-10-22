@@ -273,6 +273,7 @@ class AppStrings {
   String get particleSelfConjugate => _t('自共轭', 'Self-conjugate');
   String get particleQuantumNumbers => _t('量子数（原始字段）', 'Quantum numbers (raw)');
   String get particleProperties => _t('性质', 'Properties');
+  String get particleSummarySection => _t('摘要', 'Summary');
   String get particleDecays => _t('衰变', 'Decays');
   String get particleReferences => _t('文献', 'References');
   String get particleMainProperties => _t('主要性质', 'Key properties');
