@@ -70,7 +70,18 @@ class ReviewViewerPage extends StatefulWidget
 
 class _ReviewViewerPageState extends State<ReviewViewerPage> {
   void _reviewLog(String message) {
-    if (kDebugMode) debugPrint(message);
+    if (kDebugMode || const bool.fromEnvironment('PDG_REVIEW_TRACE')) {
+      debugPrint(message);
+    }
+  }
+
+  /// Set as soon as the reader is touched, so the post-restore verification
+  /// never yanks the view back while the user is scrolling.
+  bool _userTouchedSinceRestore = false;
+
+  void _handleViewerPointerDown(PointerDownEvent event) {
+    _userTouchedSinceRestore = true;
+    _handleMacControlClick(event);
   }
 
   final PdfViewerController _controller = PdfViewerController();
@@ -179,6 +190,10 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
       final zoom = state['zoom'];
       if (zoom is num && zoom > 0) _restoredZoom = zoom.toDouble();
       final scroll = state['scroll'];
+      _reviewLog(
+        'REVIEW load state page=${state['page']} scroll=$scroll '
+        'zoom=${state['zoom']} fit=${state['fit']}',
+      );
       if (scroll is List && scroll.length == 2) {
         final x = scroll[0];
         final y = scroll[1];
@@ -2291,12 +2306,48 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     _applyFit(page);
     final scroll = _restoredScroll;
     final zoom = _restoredZoom;
+    _reviewLog(
+      'REVIEW restore page=$page scroll=$scroll zoom=$zoom '
+      'current=${_controller.visibleRect.topLeft}',
+    );
     if (scroll != null) {
       // A single pdfrx transaction places the saved document point at the
       // viewport origin and restores the zoom with it.
       await _controller.goToPosition(documentOffset: scroll, zoom: zoom);
+      _reviewLog(
+        'REVIEW restore applied -> ${_controller.visibleRect.topLeft}',
+      );
+      _verifyRestore(scroll, zoom);
     } else if (zoom != null) {
       _applyZoom(zoom);
+    }
+  }
+
+  /// iOS lays the document out slightly after `onViewerReady`; if that late
+  /// pass resets the matrix to the page top, re-apply the saved position once
+  /// the view has settled (unless the user already touched the reader).
+  void _verifyRestore(Offset target, double? zoom) {
+    for (final delay in const [
+      Duration(milliseconds: 250),
+      Duration(milliseconds: 700),
+      Duration(milliseconds: 1400),
+    ]) {
+      Future<void>.delayed(delay, () {
+        if (!mounted || !_controller.isReady || _userTouchedSinceRestore) {
+          return;
+        }
+        final current = _controller.visibleRect.topLeft;
+        final drift = (current - target).distance;
+        _reviewLog(
+          'REVIEW restore check ${delay.inMilliseconds}ms drift=$drift '
+          'current=$current target=$target',
+        );
+        if (drift > 40) {
+          unawaited(
+            _controller.goToPosition(documentOffset: target, zoom: zoom),
+          );
+        }
+      });
     }
   }
 
@@ -3066,7 +3117,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
     final documentRef = _pdfDocumentRef ??= PdfDocumentRefFile(widget.path);
     Widget viewer = Listener(
       behavior: HitTestBehavior.translucent,
-      onPointerDown: _handleMacControlClick,
+      onPointerDown: _handleViewerPointerDown,
       child: PdfViewer(
         documentRef,
         key: ValueKey<String>('pdf-${widget.path}-$_pdfEpoch'),
