@@ -311,6 +311,13 @@ Future<void> captureTextToNote(
             : <String>[selectedCollectionId!],
       );
     }
+    if (const bool.fromEnvironment('PDG_REVIEW_TRACE')) {
+      debugPrint(
+        'NOTE capture existing=${choice.existing?.id} saved=${record.id} '
+        'bodyLen=${record.bodyMarkdown.length} rev=${record.revision} '
+        'anchors=${record.anchors.length}',
+      );
+    }
     NoteCaptureDefaults.lastCollectionId = selectedCollectionId;
     scope.notesChanges.value++;
   } catch (error) {

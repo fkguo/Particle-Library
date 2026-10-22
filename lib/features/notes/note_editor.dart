@@ -160,6 +160,12 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    if (const bool.fromEnvironment('PDG_REVIEW_TRACE')) {
+      debugPrint(
+        'NOTE editor dispose id=${_record?.id} changes=$_hasChanges '
+        'discarded=$_discarded bodyLen=${_bodyController.text.length}',
+      );
+    }
     _disposed = true;
     widget.changeSignal?.removeListener(_onExternalNotesChanged);
     WidgetsBinding.instance.removeObserver(this);
@@ -433,6 +439,9 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   /// title/body the user is typing.
   void _onExternalNotesChanged() {
     final current = _record;
+    if (const bool.fromEnvironment('PDG_REVIEW_TRACE')) {
+      debugPrint('NOTE change signal id=${current?.id} saving=$_saving');
+    }
     if (current == null || _saving) return;
     unawaited(_refreshNoteMetadata(current.id));
   }
@@ -521,6 +530,13 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         var anchorsToSave = anchorsChanged ? _allAnchors() : null;
         var expectedRevision = force ? null : _record?.revision;
         final latest = await widget.store.noteById(existing.id);
+        if (const bool.fromEnvironment('PDG_REVIEW_TRACE')) {
+          debugPrint(
+            'NOTE save id=${existing.id} rev=${existing.revision} '
+            'latestRev=${latest?.revision} bodyLen=${body.length} '
+            'titleChanged=${latest != null && latest.title != existing.title}',
+          );
+        }
         final base = _record?.bodyMarkdown ?? '';
         if (latest != null &&
             _record != null &&
@@ -533,6 +549,12 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
           final suffix = latestBody.substring(base.length);
           if (suffix.isNotEmpty) {
             bodyToSave = '${bodyToSave.trimRight()}$suffix';
+          }
+          if (const bool.fromEnvironment('PDG_REVIEW_TRACE')) {
+            debugPrint(
+              'NOTE save merged id=${existing.id} suffixLen=${suffix.length} '
+              'finalLen=${bodyToSave.length}',
+            );
           }
           final merged = <String, NoteAnchorInput>{};
           for (final anchor in latest.anchors) {
@@ -1179,6 +1201,10 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   Future<void> _openPdgLookup() async {
     final scope = AppScope.maybeOf(context);
     if (scope == null) return;
+    // Make sure a draft exists in the store before the lookup's capture
+    // dialog lists notes, otherwise the user cannot append to this note.
+    if (_hasChanges) await _persist();
+    if (!mounted) return;
     final size = MediaQuery.sizeOf(context);
     if (size.width >= 900) {
       _toggleFloatingLookup(scope.services, size);
