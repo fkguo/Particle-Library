@@ -777,24 +777,9 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
           if (!_loading && _error == null && _hits.isEmpty)
             Padding(
               padding: const EdgeInsets.only(top: Insets.l),
-              child: Column(
-                children: [
-                  EmptyPanel(
-                    message: strings.inspireSearchEmpty,
-                    icon: Icons.search_off,
-                  ),
-                  if (!_controller.text.contains(':') &&
-                      !_controller.text.contains('"'))
-                    Padding(
-                      padding: const EdgeInsets.only(top: Insets.s),
-                      child: Text(
-                        strings.inspireSearchAuthorHint,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: palette.textSecondary),
-                      ),
-                    ),
-                ],
+              child: EmptyPanel(
+                message: strings.inspireSearchEmpty,
+                icon: Icons.search_off,
               ),
             ),
           if (!_loading &&
