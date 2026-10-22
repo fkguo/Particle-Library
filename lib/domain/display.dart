@@ -78,15 +78,11 @@ class DisplayQuantity {
     final hasRaw = rawValueText != null && rawValueText.trim().isNotEmpty;
     var number = displayText.trim();
     final rawText = (rawValueText ?? '').trim();
-    // PDG sometimes stores a complex pole in `value_text` but truncates
-    // `display_value_text` to the real part (e.g. T_cc(3875)+ pole); keep the
-    // full pole instead of silently dropping the width.
-    final polePattern = RegExp(r'\bi\s*\(');
-    if ((number.isEmpty || !polePattern.hasMatch(number)) &&
-        polePattern.hasMatch(rawText)) {
-      number = rawText;
-    }
-    if (number.isEmpty) {
+    // A complex pole must never be shortened to its real part: PDG stores the
+    // full value in `value_text` but sometimes puts only the mass in
+    // `display_value_text` (e.g. the T_cc(3875)+ pole). The raw text wins
+    // whenever it contains a pole, even if the display text has one too.
+    if (isComplexPole(rawText) || number.isEmpty) {
       number = rawText;
     }
     if (number.isEmpty && value != null) {
@@ -301,12 +297,18 @@ String prettyUnit(String unit) {
       .replaceAll('**3', '³');
 }
 
+/// True when [text] carries a complex pole, in either PDG spelling:
+/// `(445 ± 25)- i(278 +22-18)` or `517- i 240`.
+final RegExp _complexPolePattern = RegExp(
+  r'(\bi\s*\()|([-\u2212]\s*i\s*[-+]?\d)',
+);
+
+bool isComplexPole(String text) => _complexPolePattern.hasMatch(text);
+
 /// Values whose source text uses asymmetric errors, ranges or a complex
 /// notation need a math line; simple values keep the tabular selectable text.
 bool displayNumberNeedsMath(String number) {
-  if (number.contains('--') || RegExp(r'\bi\s*\(').hasMatch(number)) {
-    return true;
-  }
+  if (number.contains('--') || isComplexPole(number)) return true;
   if (RegExp(r'[Ee][+-]?[0-9]+').hasMatch(number)) return true;
   return RegExp(r'\+\s*[0-9]+(?:\.[0-9]+)?\s*-\s*[0-9]+(?:\.[0-9]+)?')
       .hasMatch(number);
@@ -321,6 +323,7 @@ bool displayNumberNeedsMath(String number) {
 String displayNumberLatex(String number) {
   var text = number
       .replaceAll('±', r'\pm ')
+      .replaceAllMapped(RegExp(r'-\s*i\s*'), (match) => r' - i\,')
       .replaceAllMapped(
         RegExp(r'\+\s*([0-9]+(?:\.[0-9]+)?)\s*-\s*([0-9]+(?:\.[0-9]+)?)'),
         (match) => '\\;{}^{+${match.group(1)}}_{-${match.group(2)}}',

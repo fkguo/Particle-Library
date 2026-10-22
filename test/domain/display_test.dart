@@ -206,12 +206,25 @@ void main() {
     expect(quantity.text, '(9 ± 5)×10⁻⁵');
   });
 
+  test('a pole without parentheses keeps the full value', () {
+    final quantity = DisplayQuantity.fromSummary(
+      summary(
+        display: '517- i 240',
+        valueText: '517- i 240',
+        unit: 'MeV',
+        value: null,
+      ),
+    );
+    expect(quantity.numberText, '517- i 240');
+    expect(displayNumberNeedsMath(quantity.numberText), isTrue);
+  });
+
   test('complex values and units get readable math', () {
     expect(displayNumberNeedsMath('5.3 +0.9-0.7'), isTrue);
     expect(displayNumberLatex('5.3 +0.9-0.7'), r'5.3\;{}^{+0.9}_{-0.7}');
     expect(
       displayNumberLatex('(445 ± 25)- i(278 +22-18)'),
-      r'(445 \pm 25)- i(278\;{}^{+22}_{-18})',
+      r'(445 \pm 25) - i\,(278\;{}^{+22}_{-18})',
     );
     expect(prettyUnit('GeV**-1'), 'GeV⁻¹');
     expect(prettyUnit('MeV/c**2'), 'MeV/c²');
