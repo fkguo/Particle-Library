@@ -2980,24 +2980,32 @@ class _ReviewViewerPageState extends State<ReviewViewerPage> {
   void _persistReadingState() {
     final store = _userStore;
     if (store == null) return;
+    final ready = _controller.isReady;
+    // Once the viewer is gone (deactivate/dispose after the route pops) the
+    // controller cannot report a position. Keep the last good scroll/zoom
+    // instead of overwriting them with nothing.
+    final previous = store.reviewState(_fileName) ?? const <String, Object?>{};
+    final zoom = ready && _controller.value.getMaxScaleOnAxis() > 0
+        ? _controller.value.getMaxScaleOnAxis()
+        : previous['zoom'];
+    final scroll = ready
+        ? <double>[_controller.visibleRect.left, _controller.visibleRect.top]
+        : previous['scroll'];
     unawaited(
       store.setReviewState(_fileName, <String, Object?>{
-        'page': _currentPage ?? _controller.pageNumber ?? 1,
+        'page': _currentPage ?? _controller.pageNumber ?? previous['page'] ?? 1,
         'sidebarWidth': _sidebarWidth,
         'sidebarTab': _sidebarTab,
         'showAnnotations': _showAnnotations,
         'dark': _pdfDarkMode,
         'fit': _fitMode,
-        if (_controller.isReady && _controller.value.getMaxScaleOnAxis() > 0)
-          'zoom': _controller.value.getMaxScaleOnAxis(),
-        if (_controller.isReady)
-          'scroll': [_controller.visibleRect.left, _controller.visibleRect.top],
+        'zoom': ?zoom,
+        'scroll': ?scroll,
       }),
     );
     _reviewLog(
       'REVIEW persist page=${_currentPage ?? _controller.pageNumber} '
-      'ready=${_controller.isReady} '
-      'scroll=${_controller.isReady ? _controller.visibleRect.topLeft : null}',
+      'ready=$ready scroll=$scroll',
     );
   }
 
