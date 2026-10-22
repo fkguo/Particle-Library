@@ -10,6 +10,7 @@ class InspireLiteratureHit {
     required this.recid,
     required this.title,
     required this.authors,
+    required this.collaborations,
     required this.doi,
     required this.arxivId,
     required this.year,
@@ -22,6 +23,7 @@ class InspireLiteratureHit {
   final int recid;
   final String title;
   final List<String> authors;
+  final List<String> collaborations;
   final String doi;
   final String arxivId;
   final int? year;
@@ -32,7 +34,29 @@ class InspireLiteratureHit {
 
   String get inspireUrl => 'https://inspirehep.net/literature/$recid';
 
-  String get authorLine => authors.isEmpty ? '' : authors.join(', ');
+  /// The byline INSPIRE prints under a title: individual authors when the
+  /// record lists them, otherwise the collaboration (collaboration-only
+  /// papers have an empty author list but a collaboration entry).
+  String get byline {
+    if (authors.isNotEmpty) return authors.join(', ');
+    return collaborations.map(_collaborationLabel).join(', ');
+  }
+
+  /// Byline for a compact result card: first five authors, or the
+  /// collaboration when there are no individual authors.
+  String get bylineShort {
+    if (authors.isEmpty) return byline;
+    final shown = authors.take(5).join(', ');
+    return authors.length > 5 ? '$shown et al.' : shown;
+  }
+
+  static String _collaborationLabel(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+    return trimmed.toLowerCase().endsWith('collaboration')
+        ? trimmed
+        : '$trimmed Collaboration';
+  }
 }
 
 class InspireLiteraturePage {
@@ -131,8 +155,8 @@ class InspireLiteratureSearchService {
       'page': '$page',
       'sort': sort,
       'fields':
-          'titles,authors.full_name,dois,publication_info,arxiv_eprints,'
-          'citation_count,control_number',
+          'titles,authors.full_name,collaborations,dois,publication_info,'
+          'arxiv_eprints,citation_count,control_number',
     });
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 8)
@@ -242,6 +266,17 @@ class InspireLiteratureSearchService {
         if (name.isNotEmpty) authors.add(name);
       }
     }
+    final collaborations = <String>[];
+    final rawCollaborations = metadata['collaborations'];
+    if (rawCollaborations is List) {
+      for (final collaboration in rawCollaborations) {
+        final value = collaboration is Map
+            ? collaboration['value']?.toString() ?? ''
+            : collaboration?.toString() ?? '';
+        final trimmed = value.trim();
+        if (trimmed.isNotEmpty) collaborations.add(trimmed);
+      }
+    }
     final dois = metadata['dois'];
     final doi = dois is List && dois.isNotEmpty && dois.first is Map
         ? (dois.first as Map)['value']?.toString() ?? ''
@@ -286,6 +321,7 @@ class InspireLiteratureSearchService {
       recid: recid,
       title: title.isEmpty ? '(untitled INSPIRE record)' : title,
       authors: authors,
+      collaborations: collaborations,
       doi: doi,
       arxivId: arxivId,
       year: year,
@@ -296,3 +332,8 @@ class InspireLiteratureSearchService {
     );
   }
 }
+
+/// Parses one INSPIRE API hit. Exposed for tests; the service uses the same
+/// code path.
+InspireLiteratureHit? parseInspireLiteratureHit(Object? raw) =>
+    InspireLiteratureSearchService()._parse(raw);

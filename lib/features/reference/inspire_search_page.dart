@@ -208,7 +208,7 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
           if (text.isNotEmpty) {
             final haystack = [
               hit.title,
-              hit.authors.join(' '),
+              hit.byline,
               hit.doi,
               hit.arxivId,
               hit.journal,
@@ -958,11 +958,10 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
               style: Theme.of(context).textTheme.titleSmall
                   ?.copyWith(fontWeight: FontWeight.w600),
             ),
-            if (hit.authors.isNotEmpty) ...[
+            if (hit.bylineShort.isNotEmpty) ...[
               const SizedBox(height: 4),
               SelectableText(
-                hit.authors.take(5).join(', ') +
-                    (hit.authors.length > 5 ? ' et al.' : ''),
+                hit.bylineShort,
                 style: Theme.of(context).textTheme.bodySmall
                     ?.copyWith(color: palette.textSecondary),
               ),
