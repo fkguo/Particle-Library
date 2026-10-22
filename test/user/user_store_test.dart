@@ -34,6 +34,23 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('recent searches are kept per scope', () async {
+    final dir = await Directory.systemTemp.createTemp('pdgapp-store-');
+    final path = '${dir.path}/user_store.json';
+    final store = await UserStore.open(overridePath: path);
+    await store.addRecent('ea "Jia, Jiangyong"', 'inspire');
+    await store.addRecent('D0 lifetime', 'all');
+    await store.addRecent('ea "Jia, Jiangyong"', 'inspire');
+    expect(
+      store.recents
+          .where((item) => item.scope == 'inspire')
+          .map((item) => item.query),
+      ['ea "Jia, Jiangyong"'],
+    );
+    expect(store.recents.first.query, 'ea "Jia, Jiangyong"');
+    await dir.delete(recursive: true);
+  });
+
   test('individual recent searches can be removed', () async {
     final dir = await Directory.systemTemp.createTemp('pdgapp-store-');
     final path = '${dir.path}/user_store.json';

@@ -87,6 +87,7 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
   static const List<int> _pageSizes = [20, 50, 100, 200];
   String _sort = 'mostcited';
   final TextEditingController _filterController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
   final Set<String> _activeFilters = <String>{};
   final Map<int, bool> _zoteroPresence = <int, bool>{};
   ZoteroCacheIndex? _zoteroCache;
@@ -126,6 +127,7 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
   void dispose() {
     _controller.dispose();
     _filterController.dispose();
+    _searchFocus.dispose();
     _zoteroProbeTimer?.cancel();
     super.dispose();
   }
@@ -133,6 +135,7 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
   Future<void> _search({int? page}) async {
     final query = _controller.text.trim();
     if (query.isEmpty) return;
+    unawaited(AppScope.of(context).store.addRecent(query, 'inspire'));
     final targetPage = page ?? _page;
     final generation = ++_generation;
     setState(() {
@@ -218,6 +221,23 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
       _localTargets.addAll(localResults);
       _zoteroPresence.addAll(zoteroResults);
     });
+  }
+
+  List<String> _inspireHistory() => [
+    for (final recent in AppScope.of(context).store.recents)
+      if (recent.scope == 'inspire') recent.query,
+  ];
+
+  Future<void> _clearInspireHistory() async {
+    final store = AppScope.of(context).store;
+    for (final query in _inspireHistory()) {
+      await store.removeRecent(query, 'inspire');
+    }
+    if (!mounted) return;
+    setState(() {});
+    // Close the suggestion overlay once the history is empty.
+    _searchFocus.unfocus();
+    _searchFocus.requestFocus();
   }
 
   void _toggleFilter(String value) {
@@ -661,20 +681,81 @@ class _InspireSearchPageState extends State<InspireSearchPage> {
           Insets.xxl,
         ),
         children: [
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _search(page: 1),
-            decoration: InputDecoration(
-              hintText: strings.inspireSearchHint,
-              prefixIcon: const Icon(Icons.search, size: 20),
-              suffixIcon: IconButton(
-                tooltip: strings.inspireSearchAction,
-                onPressed: _loading ? null : () => _search(page: 1),
-                icon: const Icon(Icons.arrow_forward, size: 18),
-              ),
-            ),
+          RawAutocomplete<String>(
+            textEditingController: _controller,
+            focusNode: _searchFocus,
+            optionsBuilder: (value) {
+              final history = _inspireHistory();
+              final text = value.text.trim().toLowerCase();
+              if (text.isEmpty) return history;
+              return history.where(
+                (query) => query.toLowerCase().contains(text),
+              );
+            },
+            onSelected: (value) {
+              _controller.text = value;
+              _search(page: 1);
+            },
+            fieldViewBuilder: (context, controller, focusNode, onSubmitted) =>
+                TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  autofocus: true,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => _search(page: 1),
+                  decoration: InputDecoration(
+                    hintText: strings.inspireSearchHint,
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    suffixIcon: IconButton(
+                      tooltip: strings.inspireSearchAction,
+                      onPressed: _loading ? null : () => _search(page: 1),
+                      icon: const Icon(Icons.arrow_forward, size: 18),
+                    ),
+                  ),
+                ),
+            optionsViewBuilder: (context, onSelected, options) {
+              final entries = options.toList();
+              return Align(
+                alignment: Alignment.topLeft,
+                child: Material(
+                  elevation: 6,
+                  borderRadius: BorderRadius.circular(10),
+                  clipBehavior: Clip.antiAlias,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 260),
+                    child: ListView(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      children: [
+                        for (final query in entries)
+                          ListTile(
+                            dense: true,
+                            leading: const Icon(Icons.history, size: 18),
+                            title: Text(
+                              query,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            onTap: () => onSelected(query),
+                          ),
+                        if (entries.isNotEmpty) const Divider(height: 1),
+                        ListTile(
+                          dense: true,
+                          leading: const Icon(
+                            Icons.delete_sweep_outlined,
+                            size: 18,
+                          ),
+                          title: Text(strings.inspireClearHistory),
+                          onTap: () {
+                            unawaited(_clearInspireHistory());
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
           const SizedBox(height: Insets.s),
           Row(

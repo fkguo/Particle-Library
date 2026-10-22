@@ -582,6 +582,8 @@ class AppStrings {
     'Enter INSPIRE syntax or keywords, e.g. cn BESIII, t "muon"',
   );
   String get inspireSearchAction => _t('搜索 INSPIRE', 'Search INSPIRE');
+  String get inspireClearHistory =>
+      _t('清除 INSPIRE 搜索历史', 'Clear INSPIRE search history');
   String get inspireSearchEntryHint => _t(
     '题名、期刊和年份可离线搜索；作者、合作组和 INSPIRE 语法需联网检索。',
     'Titles, journals and years work offline; authors, collaborations and INSPIRE syntax require the online search.',
