@@ -75,6 +75,14 @@ void main() {
     await service.dispose();
   });
 
+  test('catalog fallback matches the LaTeX B0 title', () async {
+    final service = ReviewSearchService(store: _FailingStore());
+    final result = await service.search('B⁰');
+    expect(result.hits, isNotEmpty);
+    expect(result.hits.first.file, 'rpp2026-rev-b-bar-mixing.pdf');
+    await service.dispose();
+  });
+
   test('title fallback respects the caller limit', () async {
     final repository = ReviewSearchRepository(_TitleOnlyExecutor());
     final result = await repository.search('physics', limit: 1);

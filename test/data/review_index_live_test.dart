@@ -66,6 +66,11 @@ void main() {
     expect(rows.single['title_norm'], contains('wprime'));
   });
 
+  test('canonical title tokens are not substring matches', () async {
+    final result = await repository.search('rime');
+    expect(result.hits, isEmpty);
+  });
+
   test('empty query is controlled and does not run SQL', () async {
     final result = await repository.search('""');
     expect(result.hits, isEmpty);

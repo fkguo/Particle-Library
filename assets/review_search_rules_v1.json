@@ -55,32 +55,58 @@
       "canonical": [
         "cg|clebsch gordan",
         "coefficients"
-      ]
+      ],
+      "expression": "(\"cg\" OR \"clebsch gordan\") AND \"coefficients\""
+    },
+    {
+      "raw": "\"CG coefficients\"",
+      "canonical": [
+        "cg coefficients|clebsch gordan coefficients"
+      ],
+      "expression": "(\"cg coefficients\" OR \"clebsch gordan coefficients\")"
     },
     {
       "raw": "HVP",
       "canonical": [
         "hvp|hadronic vacuum polarization"
-      ]
+      ],
+      "expression": "(\"hvp\" OR \"hadronic vacuum polarization\")"
     },
     {
       "raw": "muon g-2",
       "canonical": [
         "muon",
         "gminus2|anomalous magnetic moment"
-      ]
+      ],
+      "expression": "\"muon\" AND (\"gminus2\" OR \"anomalous magnetic moment\")"
     },
     {
       "raw": "e+e-",
       "canonical": [
         "electronpositronpair"
-      ]
+      ],
+      "expression": "(\"electronpositronpair\" OR \"electron positron\")"
+    },
+    {
+      "raw": "E⁺E⁻",
+      "canonical": [
+        "electronpositronpair"
+      ],
+      "expression": "(\"electronpositronpair\" OR \"electron positron\")"
     },
     {
       "raw": "W'",
       "canonical": [
         "wprime"
-      ]
+      ],
+      "expression": "\"wprime\""
+    },
+    {
+      "raw": "B⁰",
+      "canonical": [
+        "bzero"
+      ],
+      "expression": "\"bzero\""
     }
   ]
 }

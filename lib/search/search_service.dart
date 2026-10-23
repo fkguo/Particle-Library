@@ -372,7 +372,7 @@ class SearchService {
     );
     // A degraded/unavailable review result must be retried on the next
     // submit; caching it under the same key would bypass the lazy loader.
-    if (result.notice != 'unavailable' && result.notice != 'degraded') {
+    if (isCacheable(result)) {
       if (_cache.length >= _cacheLimit) _cache.remove(_cache.keys.first);
       _cache[key] = result;
     }
@@ -524,6 +524,11 @@ class SearchService {
       }
     }
     return SearchResults(query: query, groups: groups, notice: notice);
+  }
+
+  @visibleForTesting
+  static bool isCacheable(SearchResults result) {
+    return result.notice != 'unavailable' && result.notice != 'degraded';
   }
 
   static String? _reviewSnippet(String caption) {

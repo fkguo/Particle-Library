@@ -66,6 +66,18 @@ class ReviewNotation {
   /// This is only for titles; body text keeps the original abbreviations.
   static String titleKey(String input) {
     var text = input;
+    // The review directory contains LaTeX for a few titles, e.g.
+    // `$B_0$–$\bar{B}_0$ mixing`.  Normalize the subscript/bar before the
+    // generic punctuation pass so `B0` becomes the canonical `bzero`.
+    text = text.replaceAll(r'$', '');
+    text = text.replaceAllMapped(
+      RegExp(r'\\bar\{([^}]*)\}'),
+      (match) => match[1]!,
+    );
+    text = text.replaceAllMapped(
+      RegExp(r'_\{?([0-9])\}?'),
+      (match) => match[1]!,
+    );
     text = text.replaceAll(
       RegExp(r'\bcoeff\.', caseSensitive: false),
       'coefficients',
@@ -77,14 +89,18 @@ class ReviewNotation {
     return normalize(text);
   }
 
+  static Set<String> titleTerms(String title) {
+    return titleKey(title).split(' ').where((word) => word.isNotEmpty).toSet();
+  }
+
   static bool titleMatches(String title, List<String> words) {
-    final key = titleKey(title);
     if (words.isEmpty) return false;
-    return words.every(key.contains);
+    final terms = titleTerms(title);
+    return words.every(terms.contains);
   }
 
   static bool titleHasPhrase(String title, List<String> words) {
     if (words.isEmpty) return false;
-    return titleKey(title).contains(words.join(' '));
+    return ' ${titleKey(title)} '.contains(' ${words.join(' ')} ');
   }
 }

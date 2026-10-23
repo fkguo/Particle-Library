@@ -1,4 +1,5 @@
 import '../data/sql_executor.dart';
+import 'review_notation.dart';
 import 'review_query.dart';
 import 'review_ranker.dart';
 
@@ -90,9 +91,10 @@ class ReviewSearchRepository {
     final hits = <ReviewRankedHit>[];
     for (final row in rows) {
       final titleNorm = row['title_norm'] as String;
-      final phrase = words.join(' ');
-      final allWords = words.every(titleNorm.contains);
-      if (!allWords && !titleNorm.contains(phrase)) continue;
+      final allWords = ReviewNotation.titleMatches(titleNorm, words);
+      if (!allWords && !ReviewNotation.titleHasPhrase(titleNorm, words)) {
+        continue;
+      }
       hits.add(
         ReviewRankedHit(
           file: row['file'] as String,

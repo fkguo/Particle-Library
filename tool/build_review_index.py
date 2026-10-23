@@ -496,11 +496,46 @@ def build(repo: Path, pdf_dir: Path, out: Path, manifest: Path, rules: Path, con
                     "bzero": ["B0", "B⁰"],
                 },
                 "golden": [
-                    {"raw": "CG coefficients", "canonical": ["cg|clebsch gordan", "coefficients"]},
-                    {"raw": "HVP", "canonical": ["hvp|hadronic vacuum polarization"]},
-                    {"raw": "muon g-2", "canonical": ["muon", "gminus2|anomalous magnetic moment"]},
-                    {"raw": "e+e-", "canonical": ["electronpositronpair"]},
-                    {"raw": "W'", "canonical": ["wprime"]},
+                    {
+                        "raw": "CG coefficients",
+                        "canonical": ["cg|clebsch gordan", "coefficients"],
+                        "expression": '("cg" OR "clebsch gordan") AND "coefficients"',
+                    },
+                    {
+                        "raw": '"CG coefficients"',
+                        "canonical": ["cg coefficients|clebsch gordan coefficients"],
+                        "expression": '("cg coefficients" OR "clebsch gordan coefficients")',
+                    },
+                    {
+                        "raw": "HVP",
+                        "canonical": ["hvp|hadronic vacuum polarization"],
+                        "expression": '("hvp" OR "hadronic vacuum polarization")',
+                    },
+                    {
+                        "raw": "muon g-2",
+                        "canonical": ["muon", "gminus2|anomalous magnetic moment"],
+                        "expression": '"muon" AND ("gminus2" OR "anomalous magnetic moment")',
+                    },
+                    {
+                        "raw": "e+e-",
+                        "canonical": ["electronpositronpair"],
+                        "expression": '("electronpositronpair" OR "electron positron")',
+                    },
+                    {
+                        "raw": "E⁺E⁻",
+                        "canonical": ["electronpositronpair"],
+                        "expression": '("electronpositronpair" OR "electron positron")',
+                    },
+                    {
+                        "raw": "W'",
+                        "canonical": ["wprime"],
+                        "expression": '"wprime"',
+                    },
+                    {
+                        "raw": "B⁰",
+                        "canonical": ["bzero"],
+                        "expression": '"bzero"',
+                    },
                 ],
             },
             ensure_ascii=False,
@@ -593,9 +628,13 @@ def verify(
     text = contract.read_text()
     expected_size = re.search(r"expectedSizeBytes\s*=\s*(\d+)", text)
     expected_sha = re.search(r"expectedSha256\s*=\s*'([0-9a-f]{64})'", text)
-    if expected_size and int(expected_size.group(1)) != len(data):
+    if not expected_size:
+        raise SystemExit("contract missing expectedSizeBytes")
+    if not expected_sha:
+        raise SystemExit("contract missing expectedSha256")
+    if int(expected_size.group(1)) != len(data):
         raise SystemExit("contract size mismatch")
-    if expected_sha and expected_sha.group(1) != sha256_bytes(data):
+    if expected_sha.group(1) != sha256_bytes(data):
         raise SystemExit("contract sha256 mismatch")
     expected_rules = re.search(r"expectedRulesSha256\s*=\s*'([0-9a-f]{64})'", text)
     expected_manifest = re.search(
