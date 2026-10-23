@@ -91,5 +91,11 @@ void main() {
     final mixed = ReviewQuery.parse('cleb cleb*');
     expect(mixed.prefixWord, 'cleb');
     expect(mixed.exactWords, contains('cleb'));
+    final quoted = ReviewQuery.parse('"cleb" cleb*');
+    expect(quoted.prefixWord, 'cleb');
+    expect(quoted.exactWords, contains('cleb'));
+    for (final raw in ['cleb μ*', 'cleb 中文*', 'cleb "x"*', 'cleb "HVP"*']) {
+      expect(ReviewQuery.parse(raw).prefixWord, isNull, reason: raw);
+    }
   });
 }

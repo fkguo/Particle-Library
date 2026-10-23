@@ -123,6 +123,10 @@ void main() {
     );
     expect((await catalog.search('cleb cleb*')).hits, isEmpty);
     expect((await catalog.search('wpr wpr*')).hits, isEmpty);
+    expect((await catalog.search('"cleb" cleb*')).hits, isEmpty);
+    for (final raw in ['cleb μ*', 'cleb 中文*', 'cleb "x"*', 'cleb "HVP"*']) {
+      expect((await catalog.search(raw)).hits, isEmpty, reason: raw);
+    }
     await catalog.dispose();
 
     final repository = ReviewSearchRepository(_PrefixTitleExecutor());

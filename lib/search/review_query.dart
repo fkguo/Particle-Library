@@ -37,28 +37,38 @@ class ReviewQuery {
 
     var notice = '"'.allMatches(source).length.isOdd ? noticeQuote : null;
 
+    // Resolve the star against the RAW trailing item before quote extraction
+    // or lossy normalization; otherwise `cleb μ*`, `cleb 中文*` and
+    // `cleb "x"*` would silently move the star to `cleb`.
+    var starOnQuote = false;
+    String? starOwner;
+    var body = source;
+    if (body.endsWith('*')) {
+      body = body.substring(0, body.length - 1).trimRight();
+      if (body.endsWith('"') || body.endsWith('”')) {
+        starOnQuote = true;
+      } else {
+        final match = RegExp(r'(\S+)$').firstMatch(body);
+        starOwner = match?.group(1);
+      }
+    }
+    final ownerTokens = starOwner == null
+        ? const <String>[]
+        : ReviewNotation.allTokens(starOwner);
+    final owner = ownerTokens.length == 1 ? ownerTokens.single : null;
+    final canPrefix =
+        !starOnQuote &&
+        owner != null &&
+        owner.length >= 3 &&
+        !_reserved.contains(owner) &&
+        !ReviewNotation.aliases.containsKey(owner);
+
     final phrases = <String>[];
-    var rest = source.replaceAllMapped(RegExp(r'"([^"]*)"'), (match) {
+    var rest = body.replaceAllMapped(RegExp(r'"([^"]*)"'), (match) {
       phrases.add(match[1]!);
       return ' ';
     });
     rest = rest.replaceAll('"', ' ');
-
-    var prefix = false;
-    final trimmedRight = rest.trimRight();
-    if (trimmedRight.endsWith('*')) {
-      prefix = true;
-      rest = trimmedRight.substring(0, trimmedRight.length - 1);
-    }
-    final rawTokens = prefix
-        ? ReviewNotation.allTokens(rest)
-        : const <String>[];
-    final starToken = prefix && rawTokens.isNotEmpty ? rawTokens.last : null;
-    final canPrefix =
-        starToken != null &&
-        starToken.length >= 3 &&
-        !_reserved.contains(starToken) &&
-        !ReviewNotation.aliases.containsKey(starToken);
 
     final parts = <String>[];
     final rankWords = <String>[];
@@ -108,16 +118,20 @@ class ReviewQuery {
       }
     }
 
-    if (canPrefix && lastPartIsToken && lastToken == starToken) {
+    if (canPrefix && lastPartIsToken && lastToken == owner) {
       parts[parts.length - 1] = '$lastToken*';
       prefixApplied = true;
       // The prefixed occurrence itself is not an exact-word requirement; only
-      // an earlier, non-prefixed occurrence of the same word is.
-      final prior = tokens
+      // an earlier phrase or non-prefixed token occurrence of the same word is.
+      final phrasePrior = phrases
+          .expand(ReviewNotation.tokens)
+          .where((token) => token == lastToken)
+          .length;
+      final tokenPrior = tokens
           .take(tokens.length - 1)
           .where((token) => token == lastToken)
           .length;
-      if (prior == 0) exactWords.remove(lastToken);
+      if (phrasePrior + tokenPrior == 0) exactWords.remove(lastToken);
     }
 
     if (parts.isEmpty) {
