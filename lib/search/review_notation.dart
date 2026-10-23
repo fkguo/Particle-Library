@@ -93,10 +93,19 @@ class ReviewNotation {
     return titleKey(title).split(' ').where((word) => word.isNotEmpty).toSet();
   }
 
-  static bool titleMatches(String title, List<String> words) {
+  static bool titleMatches(
+    String title,
+    List<String> words, {
+    String? prefixWord,
+  }) {
     if (words.isEmpty) return false;
     final terms = titleTerms(title);
-    return words.every(terms.contains);
+    return words.every((word) {
+      if (word == prefixWord) {
+        return terms.any((term) => term.startsWith(word));
+      }
+      return terms.contains(word);
+    });
   }
 
   static bool titleHasPhrase(String title, List<String> words) {

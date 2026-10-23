@@ -23,6 +23,34 @@ class _FlakyStore extends ReviewIndexStore {
   }
 }
 
+class _PrefixTitleExecutor implements SqlExecutor {
+  @override
+  Future<List<RawRow>> select(
+    String sql, [
+    List<Object?> params = const [],
+  ]) async {
+    if (sql.contains('page_fts MATCH')) {
+      throw StateError('fts unavailable');
+    }
+    if (sql.contains('FROM review')) {
+      return [
+        <String, Object?>{
+          'file': 'rpp2026-rev-wprime-searches.pdf',
+          'title': "W'-boson searches",
+          'title_norm': "w'-boson searches wprime",
+          'full_title': "W'-boson searches",
+          'pages': 1,
+          'sha256': 'x',
+        },
+      ];
+    }
+    return const [];
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
+
 class _TitleOnlyExecutor implements SqlExecutor {
   @override
   Future<List<RawRow>> select(
@@ -81,6 +109,25 @@ void main() {
     expect(result.hits, isNotEmpty);
     expect(result.hits.first.file, 'rpp2026-rev-b-bar-mixing.pdf');
     await service.dispose();
+  });
+
+  test('explicit prefix survives both title fallbacks', () async {
+    final catalog = ReviewSearchService(store: _FailingStore());
+    expect(
+      (await catalog.search('cleb*')).hits.first.file,
+      'rpp2026-rev-clebsch-gordan-coefs.pdf',
+    );
+    expect(
+      (await catalog.search('wpr*')).hits.first.file,
+      'rpp2026-rev-wprime-searches.pdf',
+    );
+    await catalog.dispose();
+
+    final repository = ReviewSearchRepository(_PrefixTitleExecutor());
+    final result = await repository.search('wpr*', limit: 1);
+    expect(result.hits, hasLength(1));
+    expect(result.hits.first.file, 'rpp2026-rev-wprime-searches.pdf');
+    await repository.dispose();
   });
 
   test('title fallback respects the caller limit', () async {

@@ -37,16 +37,7 @@ void main() {
       final query = ReviewQuery.parse(raw);
       expect(query.isEmpty, isFalse, reason: raw);
       expect(query.rankWords, isNotEmpty, reason: raw);
-      final expression = query.expression!;
-      for (final group in (item['canonical'] as List).cast<String>()) {
-        for (final alternative in group.split('|')) {
-          expect(
-            expression,
-            contains(alternative),
-            reason: '$raw / $alternative',
-          );
-        }
-      }
+      expect(query.expression, item['expression'] as String, reason: raw);
     }
   });
 }

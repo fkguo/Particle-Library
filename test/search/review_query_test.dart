@@ -81,5 +81,6 @@ void main() {
   test('explicit trailing star is the only prefix', () {
     final query = ReviewQuery.parse('hadronic cross sect*');
     expect(query.expression, '"hadronic" AND "cross" AND sect*');
+    expect(query.prefixWord, 'sect');
   });
 }

@@ -7,11 +7,13 @@ class ReviewQuery {
   const ReviewQuery._({
     this.expression,
     this.rankWords = const [],
+    this.prefixWord,
     this.notice,
   });
 
   final String? expression;
   final List<String> rankWords;
+  final String? prefixWord;
   final String? notice;
 
   bool get isEmpty => expression == null;
@@ -70,6 +72,7 @@ class ReviewQuery {
         .where((token) => !_reserved.contains(token))
         .toList(growable: false);
     var lastPartIsToken = false;
+    var prefixApplied = false;
     String? lastToken;
 
     for (var i = 0; i < tokens.length; i++) {
@@ -94,6 +97,7 @@ class ReviewQuery {
         lastToken != null &&
         lastToken.length >= 3) {
       parts[parts.length - 1] = '$lastToken*';
+      prefixApplied = true;
     }
 
     if (parts.isEmpty) {
@@ -102,6 +106,7 @@ class ReviewQuery {
     return ReviewQuery._(
       expression: parts.join(' AND '),
       rankWords: _unique(rankWords),
+      prefixWord: prefixApplied ? lastToken : null,
       notice: notice,
     );
   }

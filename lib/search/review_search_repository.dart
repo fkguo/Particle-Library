@@ -30,7 +30,11 @@ class ReviewSearchRepository {
     try {
       final rows = await _pageRows(query.expression!);
       if (rows.isEmpty) {
-        final titles = await _titleRows(query.rankWords, limit);
+        final titles = await _titleRows(
+          query.rankWords,
+          limit,
+          prefixWord: query.prefixWord,
+        );
         return ReviewSearchResult(hits: titles, notice: query.notice);
       }
       return ReviewSearchResult(
@@ -38,7 +42,11 @@ class ReviewSearchRepository {
         notice: query.notice,
       );
     } catch (_) {
-      final titles = await _titleRows(query.rankWords, limit);
+      final titles = await _titleRows(
+        query.rankWords,
+        limit,
+        prefixWord: query.prefixWord,
+      );
       return ReviewSearchResult(
         hits: titles,
         notice: 'degraded',
@@ -82,8 +90,9 @@ class ReviewSearchRepository {
 
   Future<List<ReviewRankedHit>> _titleRows(
     List<String> words,
-    int limit,
-  ) async {
+    int limit, {
+    String? prefixWord,
+  }) async {
     if (words.isEmpty) return const [];
     final rows = await executor.select(
       'SELECT file, title, title_norm, full_title, pages, sha256 FROM review',
@@ -91,7 +100,11 @@ class ReviewSearchRepository {
     final hits = <ReviewRankedHit>[];
     for (final row in rows) {
       final titleNorm = row['title_norm'] as String;
-      final allWords = ReviewNotation.titleMatches(titleNorm, words);
+      final allWords = ReviewNotation.titleMatches(
+        titleNorm,
+        words,
+        prefixWord: prefixWord,
+      );
       if (!allWords && !ReviewNotation.titleHasPhrase(titleNorm, words)) {
         continue;
       }

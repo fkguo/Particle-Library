@@ -90,7 +90,11 @@ class ReviewSearchService {
     for (final group in reviewGroups) {
       for (final entry in group.entries) {
         final title = entry.title;
-        final all = ReviewNotation.titleMatches(title, query.rankWords);
+        final all = ReviewNotation.titleMatches(
+          title,
+          query.rankWords,
+          prefixWord: query.prefixWord,
+        );
         if (!all && !ReviewNotation.titleHasPhrase(title, query.rankWords)) {
           continue;
         }
