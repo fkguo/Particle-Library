@@ -121,12 +121,15 @@ void main() {
       (await catalog.search('wpr*')).hits.first.file,
       'rpp2026-rev-wprime-searches.pdf',
     );
+    expect((await catalog.search('cleb cleb*')).hits, isEmpty);
+    expect((await catalog.search('wpr wpr*')).hits, isEmpty);
     await catalog.dispose();
 
     final repository = ReviewSearchRepository(_PrefixTitleExecutor());
     final result = await repository.search('wpr*', limit: 1);
     expect(result.hits, hasLength(1));
     expect(result.hits.first.file, 'rpp2026-rev-wprime-searches.pdf');
+    expect((await repository.search('wpr wpr*')).hits, isEmpty);
     await repository.dispose();
   });
 

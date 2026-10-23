@@ -34,6 +34,7 @@ class ReviewSearchRepository {
           query.rankWords,
           limit,
           prefixWord: query.prefixWord,
+          exactWords: query.exactWords,
         );
         return ReviewSearchResult(hits: titles, notice: query.notice);
       }
@@ -46,6 +47,7 @@ class ReviewSearchRepository {
         query.rankWords,
         limit,
         prefixWord: query.prefixWord,
+        exactWords: query.exactWords,
       );
       return ReviewSearchResult(
         hits: titles,
@@ -92,6 +94,7 @@ class ReviewSearchRepository {
     List<String> words,
     int limit, {
     String? prefixWord,
+    Set<String> exactWords = const {},
   }) async {
     if (words.isEmpty) return const [];
     final rows = await executor.select(
@@ -104,6 +107,7 @@ class ReviewSearchRepository {
         titleNorm,
         words,
         prefixWord: prefixWord,
+        exactWords: exactWords,
       );
       if (!allWords && !ReviewNotation.titleHasPhrase(titleNorm, words)) {
         continue;

@@ -54,10 +54,15 @@ class ReviewNotation {
     return text.trim();
   }
 
-  static List<String> tokens(String input) {
+  static List<String> allTokens(String input) {
     return normalize(input)
         .split(' ')
         .where((token) => token.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static List<String> tokens(String input) {
+    return allTokens(input)
         .where((token) => token.length > 1 || aliases.containsKey(token))
         .toList(growable: false);
   }
@@ -97,11 +102,13 @@ class ReviewNotation {
     String title,
     List<String> words, {
     String? prefixWord,
+    Set<String> exactWords = const {},
   }) {
     if (words.isEmpty) return false;
     final terms = titleTerms(title);
     return words.every((word) {
       if (word == prefixWord) {
+        if (exactWords.contains(word) && !terms.contains(word)) return false;
         return terms.any((term) => term.startsWith(word));
       }
       return terms.contains(word);

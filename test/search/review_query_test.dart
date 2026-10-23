@@ -83,4 +83,13 @@ void main() {
     expect(query.expression, '"hadronic" AND "cross" AND sect*');
     expect(query.prefixWord, 'sect');
   });
+
+  test('a star binds only to a valid final token', () {
+    expect(ReviewQuery.parse('cleb x*').prefixWord, isNull);
+    expect(ReviewQuery.parse('cleb OR*').prefixWord, isNull);
+    expect(ReviewQuery.parse('cleb*').prefixWord, 'cleb');
+    final mixed = ReviewQuery.parse('cleb cleb*');
+    expect(mixed.prefixWord, 'cleb');
+    expect(mixed.exactWords, contains('cleb'));
+  });
 }

@@ -94,6 +94,7 @@ class ReviewSearchService {
           title,
           query.rankWords,
           prefixWord: query.prefixWord,
+          exactWords: query.exactWords,
         );
         if (!all && !ReviewNotation.titleHasPhrase(title, query.rankWords)) {
           continue;

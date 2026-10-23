@@ -8,12 +8,14 @@ class ReviewQuery {
     this.expression,
     this.rankWords = const [],
     this.prefixWord,
+    this.exactWords = const {},
     this.notice,
   });
 
   final String? expression;
   final List<String> rankWords;
   final String? prefixWord;
+  final Set<String> exactWords;
   final String? notice;
 
   bool get isEmpty => expression == null;
@@ -48,9 +50,19 @@ class ReviewQuery {
       prefix = true;
       rest = trimmedRight.substring(0, trimmedRight.length - 1);
     }
+    final rawTokens = prefix
+        ? ReviewNotation.allTokens(rest)
+        : const <String>[];
+    final starToken = prefix && rawTokens.isNotEmpty ? rawTokens.last : null;
+    final canPrefix =
+        starToken != null &&
+        starToken.length >= 3 &&
+        !_reserved.contains(starToken) &&
+        !ReviewNotation.aliases.containsKey(starToken);
 
     final parts = <String>[];
     final rankWords = <String>[];
+    final exactWords = <String>{};
 
     for (final phrase in phrases) {
       final words = ReviewNotation.tokens(phrase);
@@ -62,9 +74,11 @@ class ReviewQuery {
             .join(' ');
         parts.add('("$original" OR "$expanded")');
         rankWords.addAll(expanded.split(' '));
+        exactWords.addAll(expanded.split(' '));
       } else {
         parts.add('"${words.join(' ')}"');
         rankWords.addAll(words);
+        exactWords.addAll(words);
       }
     }
 
@@ -83,21 +97,27 @@ class ReviewQuery {
         parts.add('($alternatives)');
         final expansion = alias.length > 1 ? alias.last : alias.first;
         rankWords.addAll(expansion.split(' '));
+        exactWords.addAll(expansion.split(' '));
         lastPartIsToken = false;
       } else {
         parts.add('"$token"');
         rankWords.add(token);
+        exactWords.add(token);
         lastPartIsToken = true;
         lastToken = token;
       }
     }
 
-    if (prefix &&
-        lastPartIsToken &&
-        lastToken != null &&
-        lastToken.length >= 3) {
+    if (canPrefix && lastPartIsToken && lastToken == starToken) {
       parts[parts.length - 1] = '$lastToken*';
       prefixApplied = true;
+      // The prefixed occurrence itself is not an exact-word requirement; only
+      // an earlier, non-prefixed occurrence of the same word is.
+      final prior = tokens
+          .take(tokens.length - 1)
+          .where((token) => token == lastToken)
+          .length;
+      if (prior == 0) exactWords.remove(lastToken);
     }
 
     if (parts.isEmpty) {
@@ -107,6 +127,7 @@ class ReviewQuery {
       expression: parts.join(' AND '),
       rankWords: _unique(rankWords),
       prefixWord: prefixApplied ? lastToken : null,
+      exactWords: exactWords,
       notice: notice,
     );
   }
