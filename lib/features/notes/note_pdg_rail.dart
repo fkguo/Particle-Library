@@ -75,6 +75,7 @@ class _NotePdgRailState extends State<NotePdgRail> {
         query,
         SearchScope.all,
         limit: 8,
+        includeReviews: false,
       );
       if (!mounted || generation != _generation) return;
       final hits = <SearchHit>[];

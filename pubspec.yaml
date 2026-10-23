@@ -36,4 +36,7 @@ flutter:
   assets:
     - assets/pdgall-2026.0.sqlite
     - assets/pdg_notes_2026.sqlite
+    - assets/review_index_2026.sqlite
+    - assets/review_sources_2026.json
+    - assets/review_search_rules_v1.json
     - assets/brand/

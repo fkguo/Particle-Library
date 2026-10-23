@@ -7,8 +7,9 @@ import '../domain/models.dart';
 import '../domain/reference_title.dart';
 import '../notes/notes.dart';
 import 'name_syntax.dart';
+import 'review_search_service.dart';
 
-enum SearchScope { all, particles, titles, decays, references, notes }
+enum SearchScope { all, particles, titles, decays, references, reviews, notes }
 
 enum SearchGroupKind {
   identifier,
@@ -17,6 +18,7 @@ enum SearchGroupKind {
   decay,
   reference,
   text,
+  review,
   note,
 }
 
@@ -29,6 +31,10 @@ enum SearchReason {
   mcNumber,
   titleMatch,
   textMatch,
+  reviewTitle,
+  reviewHeading,
+  reviewBody,
+  reviewCaption,
   decayText,
   referenceIdentifier,
   referenceTitle,
@@ -47,6 +53,11 @@ class SearchHit {
     this.reason = SearchReason.titleMatch,
     this.snippet,
     this.note,
+    this.reviewFile,
+    this.reviewPage,
+    this.reviewHeading,
+    this.reviewCaption,
+    this.reviewMatchCount = 0,
   });
 
   final SearchGroupKind kind;
@@ -60,6 +71,14 @@ class SearchHit {
   final SearchReason reason;
   final String? snippet;
   final NoteRecord? note;
+
+  /// Set when [kind] is [SearchGroupKind.review].  [reviewFile] is the PDG
+  /// file name, [reviewPage] is a 1-based physical PDF page.
+  final String? reviewFile;
+  final int? reviewPage;
+  final String? reviewHeading;
+  final String? reviewCaption;
+  final int reviewMatchCount;
 
   String get openPdgid => pdgid ?? entry?.pdgid ?? '';
 }
@@ -81,10 +100,17 @@ class SearchGroup {
 }
 
 class SearchResults {
-  const SearchResults({required this.query, required this.groups});
+  const SearchResults({
+    required this.query,
+    required this.groups,
+    this.notice,
+  });
 
   final String query;
   final List<SearchGroup> groups;
+
+  /// Non-fatal status shown above the groups, even when there are no hits.
+  final String? notice;
 
   bool get isEmpty => groups.every((group) => group.hits.isEmpty);
   int get total => groups.fold(0, (sum, group) => sum + group.total);
@@ -298,10 +324,12 @@ class SearchService {
     this.db, {
     this.notes,
     this.notesChanges,
+    this.reviewSearch,
     this.language = TextLang.zh,
   }) : names = NameIndex(db);
 
   final NotesStore? notes;
+  final ReviewSearchService? reviewSearch;
   final ValueListenable<int>? notesChanges;
   TextLang language;
 
@@ -329,12 +357,21 @@ class SearchService {
     String rawQuery,
     SearchScope scope, {
     int limit = 25,
+    bool includeReviews = true,
   }) async {
+    final reviewState = reviewSearch == null
+        ? 'none'
+        : '${reviewSearch!.isReady}:${reviewSearch!.revision}';
     final key =
-        '${scope.name}|$limit|${notesChanges?.value ?? 0}|${rawQuery.trim()}';
+        '${scope.name}|$limit|$includeReviews|${notesChanges?.value ?? 0}|$reviewState|${rawQuery.trim()}';
     final cached = _cache[key];
     if (cached != null) return cached;
-    final result = await _searchUncached(rawQuery, scope, limit: limit);
+    final result = await _searchUncached(
+      rawQuery,
+      scope,
+      limit: limit,
+      includeReviews: includeReviews,
+    );
     if (_cache.length >= _cacheLimit) _cache.remove(_cache.keys.first);
     _cache[key] = result;
     return result;
@@ -344,6 +381,7 @@ class SearchService {
     String rawQuery,
     SearchScope scope, {
     int limit = 25,
+    bool includeReviews = true,
   }) async {
     final query = rawQuery.trim();
     if (query.isEmpty) return SearchResults(query: query, groups: const []);
@@ -354,6 +392,9 @@ class SearchService {
     final runReferences =
         scope == SearchScope.all || scope == SearchScope.references;
     final runNotes = scope == SearchScope.all || scope == SearchScope.notes;
+    final runReviews = includeReviews &&
+        (scope == SearchScope.all || scope == SearchScope.reviews);
+    String? notice;
     // Loading the in-memory name index costs ~80 ms and is only needed for
     // particle-name lookups. A references-only search must not pay for it.
     if (runNames) await names.ensureLoaded();
@@ -439,7 +480,63 @@ class SearchService {
       final textGroup = await _textHits(query, limit);
       if (textGroup != null) groups.add(textGroup);
     }
-    return SearchResults(query: query, groups: groups);
+    if (runReviews && reviewSearch != null) {
+      try {
+        final result = await reviewSearch!.search(query, limit: limit);
+        notice = result.notice;
+        if (result.hits.isNotEmpty) {
+          groups.add(
+            SearchGroup(
+              kind: SearchGroupKind.review,
+              total: result.hits.length,
+              hits: [
+                for (final hit in result.hits)
+                  SearchHit(
+                    kind: SearchGroupKind.review,
+                    title: hit.title,
+                    subtitle: [
+                      _strings.searchReviewPage(hit.page),
+                      if (hit.heading.trim().isNotEmpty) hit.heading,
+                    ].join(' · '),
+                    reviewFile: hit.file,
+                    reviewPage: hit.page,
+                    reviewHeading: hit.heading,
+                    reviewCaption: hit.caption,
+                    reviewMatchCount: hit.matchCount,
+                    snippet: _reviewSnippet(
+                      switch (hit.matchField) {
+                        'title' => hit.title,
+                        'heading' => hit.heading,
+                        _ => hit.caption,
+                      },
+                    ),
+                    reason: _reviewReason(hit.matchField),
+                  ),
+              ],
+            ),
+          );
+        }
+      } catch (_) {
+        // A broken review index must never drop the other search groups.
+        notice ??= 'degraded';
+      }
+    }
+    return SearchResults(query: query, groups: groups, notice: notice);
+  }
+
+  static String? _reviewSnippet(String caption) {
+    final text = caption.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (text.isEmpty) return null;
+    return text.length > 240 ? '${text.substring(0, 240)}…' : text;
+  }
+
+  static SearchReason _reviewReason(String field) {
+    return switch (field) {
+      'caption' => SearchReason.reviewCaption,
+      'heading' => SearchReason.reviewHeading,
+      'title' => SearchReason.reviewTitle,
+      _ => SearchReason.reviewBody,
+    };
   }
 
   Future<SearchGroup?> _nameHits(String query, int limit) async {

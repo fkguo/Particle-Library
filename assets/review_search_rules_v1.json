@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "aliases": {
+    "cg": [
+      "cg",
+      "clebsch gordan"
+    ],
+    "hvp": [
+      "hvp",
+      "hadronic vacuum polarization"
+    ],
+    "hlbl": [
+      "hlbl",
+      "hadronic light by light"
+    ],
+    "qcd": [
+      "qcd",
+      "quantum chromodynamics"
+    ],
+    "gminus2": [
+      "gminus2",
+      "anomalous magnetic moment"
+    ],
+    "electronpositronpair": [
+      "electronpositronpair",
+      "electron positron"
+    ]
+  },
+  "notation": {
+    "electronpositronpair": [
+      "e+e-",
+      "e+e−",
+      "e⁺e⁻"
+    ],
+    "wprime": [
+      "W'",
+      "W′"
+    ],
+    "zprime": [
+      "Z'",
+      "Z′"
+    ],
+    "gminus2": [
+      "g-2",
+      "g−2"
+    ],
+    "bzero": [
+      "B0",
+      "B⁰"
+    ]
+  },
+  "golden": [
+    {
+      "raw": "CG coefficients",
+      "canonical": [
+        "cg|clebsch gordan",
+        "coefficients"
+      ]
+    },
+    {
+      "raw": "HVP",
+      "canonical": [
+        "hvp|hadronic vacuum polarization"
+      ]
+    },
+    {
+      "raw": "muon g-2",
+      "canonical": [
+        "muon",
+        "gminus2|anomalous magnetic moment"
+      ]
+    },
+    {
+      "raw": "e+e-",
+      "canonical": [
+        "electronpositronpair"
+      ]
+    },
+    {
+      "raw": "W'",
+      "canonical": [
+        "wprime"
+      ]
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
@@ -44,6 +45,7 @@ class _PdgAppState extends State<PdgApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_services?.reviewSearch?.dispose() ?? Future<void>.value());
     super.dispose();
   }
 

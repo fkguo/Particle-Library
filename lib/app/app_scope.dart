@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../data/pdg_database.dart';
 import '../data/pdg_repository.dart';
 import '../notes/notes.dart';
+import '../search/review_search_service.dart';
 import '../search/search_service.dart';
 import '../user/user_store.dart';
 import 'app_strings.dart';
@@ -18,6 +19,7 @@ class AppServices {
     required this.snapshotHash,
     required this.snapshotPath,
     required this.copiedFromBundle,
+    this.reviewSearch,
     this.notes,
     this.notesError,
     ValueNotifier<int>? notesChanges,
@@ -35,6 +37,10 @@ class AppServices {
   final String snapshotHash;
   final String snapshotPath;
   final bool copiedFromBundle;
+
+  /// Lazily opened full-text index for the PDG reviews; `null` when the
+  /// feature is disabled (for example in a widget test).
+  final ReviewSearchService? reviewSearch;
 
   /// The local notes database, or `null` when it could not be opened.
   ///
@@ -80,6 +86,7 @@ class AppScope extends InheritedWidget {
   String get snapshotHash => services.snapshotHash;
 
   /// Local notes storage; `null` when the notes database failed to open.
+  ReviewSearchService? get reviewSearch => services.reviewSearch;
   NotesStore? get notes => services.notes;
 
   /// The notes open failure, if any (never a reason to hide PDG data).

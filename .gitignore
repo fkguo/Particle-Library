@@ -30,6 +30,8 @@ android/local.properties
 *.sqlite
 # The small pdgLive-notes sidecar is shipped in git; the official snapshot is not.
 !assets/pdg_notes_*.sqlite
+# The derived review text index is a small, reviewed asset; PDFs stay unbundled.
+!assets/review_index_*.sqlite
 
 # SQLite runtime journals and Python caches
 *.sqlite-wal

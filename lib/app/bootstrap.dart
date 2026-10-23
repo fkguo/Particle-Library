@@ -7,6 +7,7 @@ import '../data/pdg_repository.dart';
 import '../data/snapshot_store.dart';
 import '../data/sql_executor.dart';
 import '../notes/notes.dart';
+import '../search/review_search_service.dart';
 import '../search/search_service.dart';
 import '../user/user_store.dart';
 import 'app_scope.dart';
@@ -63,6 +64,7 @@ class AppBootstrap {
       boot.mark('total');
       boot.dump();
       final notesChanges = ValueNotifier<int>(0);
+      final reviewSearch = ReviewSearchService();
       return AppServices(
         database: database,
         repository: PdgRepository(database),
@@ -70,6 +72,7 @@ class AppBootstrap {
           database,
           notes: notesStore,
           notesChanges: notesChanges,
+          reviewSearch: reviewSearch,
           language: settings.language,
         ),
         userStore: userStore,
@@ -80,6 +83,7 @@ class AppBootstrap {
         notes: notesStore,
         notesError: notesError,
         notesChanges: notesChanges,
+        reviewSearch: reviewSearch,
       );
     } catch (error) {
       final notesResult = await notesFuture;
