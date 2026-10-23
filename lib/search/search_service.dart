@@ -370,8 +370,12 @@ class SearchService {
       limit: limit,
       includeReviews: includeReviews,
     );
-    if (_cache.length >= _cacheLimit) _cache.remove(_cache.keys.first);
-    _cache[key] = result;
+    // A degraded/unavailable review result must be retried on the next
+    // submit; caching it under the same key would bypass the lazy loader.
+    if (result.notice != 'unavailable' && result.notice != 'degraded') {
+      if (_cache.length >= _cacheLimit) _cache.remove(_cache.keys.first);
+      _cache[key] = result;
+    }
     return result;
   }
 

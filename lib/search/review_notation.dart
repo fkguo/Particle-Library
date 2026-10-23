@@ -34,18 +34,21 @@ class ReviewNotation {
       text = text.replaceAll(from, to);
     });
     text = text.replaceAll(
-      RegExp(r'g\s*[-−]\s*2', caseSensitive: false),
+      RegExp(r'g\s*[−\-⁻]\s*[2²]', caseSensitive: false),
       ' gminus2 ',
     );
     text = text.replaceAll(
-      RegExp(r'e\s*[+⁺]\s*e\s*[-−⁻]'),
+      RegExp(r'e\s*[+⁺]\s*e\s*[-−⁻]', caseSensitive: false),
       ' electronpositronpair ',
     );
     text = text.replaceAllMapped(
-      RegExp(r"([WZ])\s*['′]", caseSensitive: false),
+      RegExp(r"([WZ])\s*['′’ʹ]", caseSensitive: false),
       (match) => ' ${match[1]!.toLowerCase()}prime ',
     );
-    text = text.replaceAll(RegExp(r'B\s*[⁰0]'), ' bzero ');
+    text = text.replaceAll(
+      RegExp(r'B\s*[⁰0]', caseSensitive: false),
+      ' bzero ',
+    );
     text = text.toLowerCase();
     text = text.replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
     return text.trim();

@@ -2,7 +2,7 @@
 abstract final class ReviewIndexContract {
   static const String assetName = 'assets/review_index_2026.sqlite';
   static const int expectedSizeBytes = 15003648;
-  static const String expectedSha256 = '0f292cd15c6940446d72b9476cd92e964bd46213fb3b1a7de133fa29d1204930';
+  static const String expectedSha256 = '839d4989e2078d274c5dcab7dc13d9791d78e71e624fac1b49bc1a9166efa296';
   static const String expectedEdition = '2026';
   static const String expectedSchemaVersion = '2';
   static const String expectedRulesVersion = '1';

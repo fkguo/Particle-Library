@@ -41,6 +41,18 @@ void main() {
     );
     expect(ReviewQuery.parse("W'").expression, '"wprime"');
     expect(ReviewQuery.parse("w'").expression, '"wprime"');
+    expect(ReviewQuery.parse('W’').expression, '"wprime"');
+    expect(ReviewQuery.parse('Wʹ').expression, '"wprime"');
+    expect(
+      ReviewQuery.parse('E+E-').expression,
+      '("electronpositronpair" OR "electron positron")',
+    );
+    expect(
+      ReviewQuery.parse('E⁺E⁻').expression,
+      '("electronpositronpair" OR "electron positron")',
+    );
+    expect(ReviewNotation.normalize('b⁰'), contains('bzero'));
+    expect(ReviewNotation.normalize('g⁻²'), contains('gminus2'));
   });
 
   test('title keys preserve prime before lowercasing', () {

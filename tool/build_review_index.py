@@ -107,15 +107,15 @@ def clean_text(raw: str) -> str:
 def notation_tokens(text: str) -> str:
     """Supplementary canonical tokens; never a second copy of the page."""
     out: list[str] = []
-    if re.search(r"e\s*\+\s*e\s*[−\-]", text, re.I):
+    if re.search(r"e\s*[+⁺]\s*e\s*[−\-⁻]", text, re.I):
         out.append("electronpositronpair")
-    if re.search(r"W\s*[′']", text):
+    if re.search(r"W\s*[′'’ʹ]", text, re.I):
         out.append("wprime")
-    if re.search(r"Z\s*[′']", text):
+    if re.search(r"Z\s*[′'’ʹ]", text, re.I):
         out.append("zprime")
-    if re.search(r"g\s*[−\-]\s*2", text, re.I):
+    if re.search(r"g\s*[−\-⁻]\s*[2²]", text, re.I):
         out.append("gminus2 anomalous magnetic moment")
-    if re.search(r"B\s*[⁰0]", text):
+    if re.search(r"B\s*[⁰0]", text, re.I):
         out.append("bzero")
     return " ".join(dict.fromkeys(out))
 
@@ -126,7 +126,9 @@ def normalize_title(text: str) -> str:
     text = re.sub(r"\bsph\.", "spherical", text)
     text = re.sub(r"\bqm\.", "quantum mechanics", text)
     text = re.sub(r"\bext\.", "external", text)
-    return re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
+    canonical = notation_tokens(text)
+    return f"{text} {canonical}".strip()
 
 
 def flatten_outline(reader: PdfReader) -> list[tuple[int, str]]:
@@ -599,10 +601,16 @@ def verify(
     expected_manifest = re.search(
         r"expectedManifestSha256\s*=\s*'([0-9a-f]{64})'", text
     )
-    if rules and expected_rules and sha256_file(rules) != expected_rules.group(1):
-        raise SystemExit("contract rules sha256 mismatch")
-    if manifest and expected_manifest and sha256_file(manifest) != expected_manifest.group(1):
-        raise SystemExit("contract manifest sha256 mismatch")
+    if rules:
+        if not expected_rules:
+            raise SystemExit("contract missing expectedRulesSha256")
+        if sha256_file(rules) != expected_rules.group(1):
+            raise SystemExit("contract rules sha256 mismatch")
+    if manifest:
+        if not expected_manifest:
+            raise SystemExit("contract missing expectedManifestSha256")
+        if sha256_file(manifest) != expected_manifest.group(1):
+            raise SystemExit("contract manifest sha256 mismatch")
     con = sqlite3.connect(f"file:{db}?mode=ro&immutable=1", uri=True)
     review_count = con.execute("SELECT COUNT(*) FROM review").fetchone()[0]
     page_count = con.execute("SELECT COUNT(*) FROM page").fetchone()[0]

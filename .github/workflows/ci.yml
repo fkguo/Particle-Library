@@ -41,9 +41,12 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Verify the review index contract and U1-U3
         run: |
-          python3 -m pip install --user -r tool/requirements-review-index.txt
+          python3 -m pip install -r tool/requirements-review-index.txt
           python3 tool/build_review_index.py verify \
             --db assets/review_index_2026.sqlite \
             --contract lib/core/review_index_contract.dart \

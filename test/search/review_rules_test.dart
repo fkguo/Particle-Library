@@ -31,11 +31,22 @@ void main() {
     }
   });
 
-  test('every golden query parses to a non-empty AST', () {
+  test('every golden query parses to the expected canonical structure', () {
     for (final item in (rules['golden'] as List).cast<Map<String, dynamic>>()) {
-      final query = ReviewQuery.parse(item['raw'] as String);
-      expect(query.isEmpty, isFalse, reason: item['raw'] as String);
-      expect(query.rankWords, isNotEmpty, reason: item['raw'] as String);
+      final raw = item['raw'] as String;
+      final query = ReviewQuery.parse(raw);
+      expect(query.isEmpty, isFalse, reason: raw);
+      expect(query.rankWords, isNotEmpty, reason: raw);
+      final expression = query.expression!;
+      for (final group in (item['canonical'] as List).cast<String>()) {
+        for (final alternative in group.split('|')) {
+          expect(
+            expression,
+            contains(alternative),
+            reason: '$raw / $alternative',
+          );
+        }
+      }
     }
   });
 }

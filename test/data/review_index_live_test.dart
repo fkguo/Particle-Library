@@ -58,6 +58,14 @@ void main() {
     expect(result.hits.first.file, 'rpp2026-rev-wprime-searches.pdf');
   });
 
+  test('title_norm carries the canonical W prime token', () async {
+    final rows = await executor.select(
+      'SELECT title_norm FROM review WHERE file = ?',
+      ['rpp2026-rev-wprime-searches.pdf'],
+    );
+    expect(rows.single['title_norm'], contains('wprime'));
+  });
+
   test('empty query is controlled and does not run SQL', () async {
     final result = await repository.search('""');
     expect(result.hits, isEmpty);
