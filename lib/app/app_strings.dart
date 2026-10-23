@@ -89,6 +89,11 @@ class AppStrings {
     'Review text index unavailable; title search only',
   );
   String get searchReviewDownloading => _t('正在下载综述…', 'Downloading review…');
+  String get searchReviewPreparing => _t('正在连接…', 'Connecting…');
+  String searchReviewReceived(String bytes) =>
+      _t('已下载 $bytes', '$bytes downloaded');
+  String get searchReviewDownloadHint =>
+      _t('下载完成后自动打开', 'Opens automatically when the download finishes');
   String get searchReviewDownloadFailed =>
       _t('综述下载失败。', 'Review download failed.');
   String get searchReviewOpenFailed =>

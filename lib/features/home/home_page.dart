@@ -25,6 +25,7 @@ import '../notes/note_editor.dart';
 import '../notes/notes_format.dart';
 import '../reference/inspire_search_page.dart';
 import '../reference/reference_page.dart';
+import '../reviews/review_download_dialog.dart';
 import '../reviews/review_index.dart';
 import '../reviews/review_viewer_page.dart';
 
@@ -266,17 +267,42 @@ class _HomePageState extends State<HomePage> {
       var local = cache.fileFor(file);
       if (!await local.exists()) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.searchReviewDownloading)),
+        final progress = ValueNotifier<ReviewDownloadProgress>(
+          const ReviewDownloadProgress(received: 0),
+        );
+        final navigator = Navigator.of(context, rootNavigator: true);
+        var dialogOpen = true;
+        unawaited(
+          showDialog<void>(
+            context: context,
+            useRootNavigator: true,
+            barrierDismissible: false,
+            builder: (_) => ReviewDownloadDialog(
+              title: title,
+              progress: progress,
+              strings: strings,
+            ),
+          ).then((_) => dialogOpen = false),
         );
         try {
-          local = await cache.download(fileName: file, url: url);
+          local = await cache.download(
+            fileName: file,
+            url: url,
+            onProgress: (received, total) {
+              progress.value = ReviewDownloadProgress(
+                received: received,
+                total: total,
+              );
+            },
+          );
         } catch (_) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(strings.searchReviewDownloadFailed)),
           );
           return;
+        } finally {
+          if (dialogOpen && navigator.mounted) navigator.pop();
         }
       }
       var page = hit.reviewPage;

@@ -7,10 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'app_strings.dart';
+import 'app_version.g.dart';
 
-/// Current application version. Keep in sync with `pubspec.yaml`
-/// (`test/app/app_version_test.dart` fails when they differ).
-const String appVersion = '0.2.0';
+/// Current application version. Generated from `pubspec.yaml` by
+/// `tool/generate_app_version.py`; do not hardcode it here.
+const String appVersion = generatedAppVersion;
 
 /// Optional override for testing or for a self-hosted release manifest.
 ///

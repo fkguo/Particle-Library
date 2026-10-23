@@ -21,6 +21,8 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Check generated app version
+        run: python3 tool/generate_app_version.py --check
       - name: Analyze (snapshot intentionally absent)
         run: |
           # pubspec declares the runtime snapshot as an asset. The analyzer

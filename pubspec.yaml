@@ -1,7 +1,7 @@
 name: pdgapp
 description: "Particle Library: an offline PDG particle-data library."
 publish_to: 'none'
-version: 0.2.1+18
+version: 0.2.1+19
 
 environment:
   sdk: ^3.13.5
