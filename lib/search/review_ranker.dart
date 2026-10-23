@@ -15,6 +15,7 @@ class ReviewPageRow {
     required this.isReference,
     required this.caption,
     required this.rank,
+    this.sha256,
   });
 
   final String file;
@@ -27,6 +28,7 @@ class ReviewPageRow {
   final int isReference;
   final String caption;
   final double rank;
+  final String? sha256;
 }
 
 class ReviewRankedHit {
@@ -39,6 +41,7 @@ class ReviewRankedHit {
     required this.matchCount,
     required this.score,
     required this.matchField,
+    this.sha256,
   });
 
   final String file;
@@ -49,6 +52,7 @@ class ReviewRankedHit {
   final int matchCount;
   final double score;
   final String matchField;
+  final String? sha256;
 }
 
 class ReviewRanker {
@@ -100,19 +104,18 @@ class ReviewRanker {
           .length;
       final phrase = ReviewNotation.titleHasPhrase(titleText, words);
       final matchCount = pages.map((row) => row.page).toSet().length;
-      final score = bestScore +
+      final score =
+          bestScore +
           6 * titleHits +
           (phrase ? 10 : 0) +
           0.8 * (math.log(1 + matchCount) / math.ln2);
       final matchField = titleMatched && best.page == 1
           ? 'title'
-          : words.any(
-                (word) => best!.caption.toLowerCase().contains(word),
-              )
-              ? 'caption'
-              : words.any((word) => _has(best!.heading.toLowerCase(), word))
-              ? 'heading'
-              : 'body';
+          : words.any((word) => best!.caption.toLowerCase().contains(word))
+          ? 'caption'
+          : words.any((word) => _has(best!.heading.toLowerCase(), word))
+          ? 'heading'
+          : 'body';
       hits.add(
         ReviewRankedHit(
           file: entry.key,
@@ -123,6 +126,7 @@ class ReviewRanker {
           matchCount: matchCount,
           score: score,
           matchField: matchField,
+          sha256: best.sha256,
         ),
       );
     }

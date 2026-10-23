@@ -14,7 +14,8 @@ ReviewPageRow row({
     titleNorm: 'plots of cross sections and related quantities',
     fullTitle: 'Plots of Cross Sections and Related Quantities',
     page: page,
-    heading: 'Average Hadron Multiplicities in Hadronic e+ e- Annihilation Events',
+    heading:
+        'Average Hadron Multiplicities in Hadronic e+ e- Annihilation Events',
     sectionStartPage: sectionStart,
     isReference: isReference,
     caption: caption,
@@ -26,7 +27,12 @@ void main() {
   test('adjusted page score prefers the table page over references', () {
     final hits = ReviewRanker.rank(
       [
-        row(page: 2, rank: -9.18, sectionStart: 2, caption: 'Table 53.1: Average hadron multiplicities'),
+        row(
+          page: 2,
+          rank: -9.18,
+          sectionStart: 2,
+          caption: 'Table 53.1: Average hadron multiplicities',
+        ),
         row(page: 3, rank: -8.93, sectionStart: 2),
         row(page: 4, rank: -9.34, sectionStart: 2, isReference: 1),
       ],

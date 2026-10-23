@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/app_scope.dart';
@@ -277,6 +279,19 @@ class _HomePageState extends State<HomePage> {
           return;
         }
       }
+      var page = hit.reviewPage;
+      final expected = hit.reviewSha256;
+      if (expected != null && expected.isNotEmpty) {
+        final actual = await _sha256Of(local);
+        if (actual != expected) {
+          page = 1;
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(strings.searchReviewPdfMismatch)),
+            );
+          }
+        }
+      }
       if (!mounted) return;
       await AppNav.push<void>(
         context,
@@ -284,15 +299,20 @@ class _HomePageState extends State<HomePage> {
           title: title,
           path: local.path,
           officialUrl: url,
-          initialPage: hit.reviewPage,
+          initialPage: page,
         ),
       );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(strings.searchReviewOpenFailed)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(strings.searchReviewOpenFailed)));
     }
+  }
+
+  Future<String> _sha256Of(File file) async {
+    final digest = await sha256.bind(file.openRead()).first;
+    return digest.toString();
   }
 
   @override
@@ -607,8 +627,8 @@ class _SearchPanel extends StatelessWidget {
           builder: (context, value, _) {
             if (value != null) {
               final notice = switch (value.notice) {
-                'unavailable' || 'degraded' =>
-                  strings.searchReviewIndexUnavailable,
+                'unavailable' ||
+                'degraded' => strings.searchReviewIndexUnavailable,
                 _ => null,
               };
               if (value.isEmpty) {
@@ -621,9 +641,7 @@ class _SearchPanel extends StatelessWidget {
                         child: Text(
                           notice,
                           style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: context.palette.textSecondary,
-                              ),
+                              ?.copyWith(color: context.palette.textSecondary),
                         ),
                       ),
                     Padding(

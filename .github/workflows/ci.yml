@@ -29,6 +29,34 @@ jobs:
           : > assets/pdgall-2026.0.sqlite
           flutter analyze
 
+  review-index:
+    # The review index is committed (~15 MB) and must stay independent of the
+    # 64 MB PDG snapshot variable; these tests never open the main snapshot.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Verify the review index contract and U1-U3
+        run: |
+          python3 -m pip install --user -r tool/requirements-review-index.txt
+          python3 tool/build_review_index.py verify \
+            --db assets/review_index_2026.sqlite \
+            --contract lib/core/review_index_contract.dart \
+            --rules assets/review_search_rules_v1.json \
+            --manifest assets/review_sources_2026.json
+      - name: Review search tests (no PDG snapshot required)
+        run: |
+          # pubspec lists the main snapshot as an asset; these tests do not
+          # open it, so a zero-byte placeholder keeps the bundle build happy.
+          mkdir -p assets
+          : > assets/pdgall-2026.0.sqlite
+          flutter test test/search test/data/review_index_live_test.dart
+
   test:
     runs-on: macos-latest
     # The PDG snapshot is not committed (CC BY data, 64 MB). Configure the

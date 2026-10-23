@@ -49,7 +49,7 @@ class ReviewSearchRepository {
   Future<List<ReviewPageRow>> _pageRows(String expression) async {
     final rows = await executor.select(
       '''
-      SELECT r.file, r.title, r.title_norm, r.full_title,
+      SELECT r.file, r.title, r.title_norm, r.full_title, r.sha256,
              p.page, p.heading, p.section_start_page, p.is_reference,
              p.caption,
              bm25(page_fts, 8.0, 1.0, 0.5, 4.0, 2.0) AS rank
@@ -74,6 +74,7 @@ class ReviewSearchRepository {
           isReference: (row['is_reference'] as num?)?.toInt() ?? 0,
           caption: (row['caption'] as String?) ?? '',
           rank: (row['rank'] as num).toDouble(),
+          sha256: row['sha256'] as String?,
         ),
     ];
   }
@@ -84,7 +85,7 @@ class ReviewSearchRepository {
   ) async {
     if (words.isEmpty) return const [];
     final rows = await executor.select(
-      'SELECT file, title, title_norm, full_title, pages FROM review',
+      'SELECT file, title, title_norm, full_title, pages, sha256 FROM review',
     );
     final hits = <ReviewRankedHit>[];
     for (final row in rows) {
@@ -102,6 +103,7 @@ class ReviewSearchRepository {
           matchCount: 0,
           score: allWords ? 20 : 10,
           matchField: 'title',
+          sha256: row['sha256'] as String?,
         ),
       );
     }

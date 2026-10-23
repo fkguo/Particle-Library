@@ -84,13 +84,19 @@ class AppStrings {
   String searchReviewPage(int page) => _t('PDF 第 $page 页', 'PDF page $page');
   String searchReviewMore(int count) =>
       _t('另有 $count 页匹配', '$count more matching pages');
-  String get searchReviewIndexUnavailable =>
-      _t('综述全文索引不可用，仅按标题搜索', 'Review text index unavailable; title search only');
+  String get searchReviewIndexUnavailable => _t(
+    '综述全文索引不可用，仅按标题搜索',
+    'Review text index unavailable; title search only',
+  );
   String get searchReviewDownloading => _t('正在下载综述…', 'Downloading review…');
   String get searchReviewDownloadFailed =>
       _t('综述下载失败。', 'Review download failed.');
   String get searchReviewOpenFailed =>
       _t('无法打开综述。', 'Could not open the review.');
+  String get searchReviewPdfMismatch => _t(
+    'PDF 与检索版本不同，已改为打开首页；命中页可能偏移。',
+    'This PDF differs from the indexed version; opening page 1 instead. The matching page may have moved.',
+  );
 
   String get bootLoading =>
       _t('正在打开离线 PDG 数据…', 'Opening the offline PDG data…');
@@ -1336,12 +1342,11 @@ class AppStrings {
     '按下新的组合键；需要至少一个修饰键。Esc 取消。',
     'Press a new key combination. At least one modifier is required; Esc cancels.',
   );
-  String get settingsShortcutNeedsModifier =>
-      _t(
-        '请使用 ⌘/Ctrl；Alt 或 Shift 只能配合方向键、功能键等不输入字符的按键。',
-        'Use ⌘/Ctrl. Alt or Shift only work with keys that type nothing, '
-            'such as arrows and function keys.',
-      );
+  String get settingsShortcutNeedsModifier => _t(
+    '请使用 ⌘/Ctrl；Alt 或 Shift 只能配合方向键、功能键等不输入字符的按键。',
+    'Use ⌘/Ctrl. Alt or Shift only work with keys that type nothing, '
+        'such as arrows and function keys.',
+  );
   String settingsShortcutConflict(String command) => _t(
     '该组合键已被“$command”使用。',
     'That combination is already used by “$command”.',

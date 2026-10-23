@@ -20,12 +20,7 @@ class ReviewQuery {
   static const String noticeQuote = 'unclosedQuote';
   static const String noticeTooLong = 'tooLong';
 
-  static const Set<String> _reserved = {
-    'or',
-    'and',
-    'not',
-    'near',
-  };
+  static const Set<String> _reserved = {'or', 'and', 'not', 'near'};
 
   static ReviewQuery parse(String raw) {
     final source = raw.trim();
@@ -94,7 +89,10 @@ class ReviewQuery {
       }
     }
 
-    if (prefix && lastPartIsToken && lastToken != null && lastToken.length >= 3) {
+    if (prefix &&
+        lastPartIsToken &&
+        lastToken != null &&
+        lastToken.length >= 3) {
       parts[parts.length - 1] = '$lastToken*';
     }
 

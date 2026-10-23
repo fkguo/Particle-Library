@@ -59,6 +59,7 @@ void main() {
     expect(hit.reviewPage, 1);
     expect(hit.reason, SearchReason.reviewTitle);
     expect(hit.snippet, isNotNull);
+    expect(hit.reviewSha256, isNotNull);
   });
 
   test('U2 keeps the figure-caption reason and page', () async {
@@ -79,10 +80,7 @@ void main() {
       database,
       reviewSearch: _ThrowingReviewSearch(),
     );
-    final result = await isolated.search(
-      'CG coefficients',
-      SearchScope.all,
-    );
+    final result = await isolated.search('CG coefficients', SearchScope.all);
     expect(result.notice, 'degraded');
   });
 

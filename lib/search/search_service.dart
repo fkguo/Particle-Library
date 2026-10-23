@@ -58,6 +58,7 @@ class SearchHit {
     this.reviewHeading,
     this.reviewCaption,
     this.reviewMatchCount = 0,
+    this.reviewSha256,
   });
 
   final SearchGroupKind kind;
@@ -79,6 +80,7 @@ class SearchHit {
   final String? reviewHeading;
   final String? reviewCaption;
   final int reviewMatchCount;
+  final String? reviewSha256;
 
   String get openPdgid => pdgid ?? entry?.pdgid ?? '';
 }
@@ -100,11 +102,7 @@ class SearchGroup {
 }
 
 class SearchResults {
-  const SearchResults({
-    required this.query,
-    required this.groups,
-    this.notice,
-  });
+  const SearchResults({required this.query, required this.groups, this.notice});
 
   final String query;
   final List<SearchGroup> groups;
@@ -392,7 +390,8 @@ class SearchService {
     final runReferences =
         scope == SearchScope.all || scope == SearchScope.references;
     final runNotes = scope == SearchScope.all || scope == SearchScope.notes;
-    final runReviews = includeReviews &&
+    final runReviews =
+        includeReviews &&
         (scope == SearchScope.all || scope == SearchScope.reviews);
     String? notice;
     // Loading the in-memory name index costs ~80 ms and is only needed for
@@ -503,13 +502,12 @@ class SearchService {
                     reviewHeading: hit.heading,
                     reviewCaption: hit.caption,
                     reviewMatchCount: hit.matchCount,
-                    snippet: _reviewSnippet(
-                      switch (hit.matchField) {
-                        'title' => hit.title,
-                        'heading' => hit.heading,
-                        _ => hit.caption,
-                      },
-                    ),
+                    reviewSha256: hit.sha256,
+                    snippet: _reviewSnippet(switch (hit.matchField) {
+                      'title' => hit.title,
+                      'heading' => hit.heading,
+                      _ => hit.caption,
+                    }),
                     reason: _reviewReason(hit.matchField),
                   ),
               ],

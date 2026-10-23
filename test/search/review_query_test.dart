@@ -5,10 +5,7 @@ import 'package:pdgapp/search/review_query.dart';
 void main() {
   test('CG coefficients expands the acronym but keeps the phrase', () {
     final query = ReviewQuery.parse('CG coefficients');
-    expect(
-      query.expression,
-      '("cg" OR "clebsch gordan") AND "coefficients"',
-    );
+    expect(query.expression, '("cg" OR "clebsch gordan") AND "coefficients"');
     expect(query.rankWords, containsAll(['clebsch', 'gordan', 'coefficients']));
   });
 
@@ -22,10 +19,7 @@ void main() {
 
   test('HVP stays a phrase, not four OR words', () {
     final query = ReviewQuery.parse('HVP');
-    expect(
-      query.expression,
-      '("hvp" OR "hadronic vacuum polarization")',
-    );
+    expect(query.expression, '("hvp" OR "hadronic vacuum polarization")');
   });
 
   test('g-2 is normalized before tokenization', () {

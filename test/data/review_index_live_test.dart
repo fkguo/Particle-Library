@@ -33,30 +33,22 @@ void main() {
   test('U1: CG coefficients -> Clebsch-Gordan p1', () async {
     final result = await repository.search('CG coefficients');
     expect(result.hits, isNotEmpty);
-    expect(
-      result.hits.first.file,
-      'rpp2026-rev-clebsch-gordan-coefs.pdf',
-    );
+    expect(result.hits.first.file, 'rpp2026-rev-clebsch-gordan-coefs.pdf');
     expect(result.hits.first.page, 1);
+    expect(result.hits.first.sha256, isNotNull);
   });
 
   test('U2: hadronic cross sections -> Plots p5', () async {
     final result = await repository.search('hadronic cross sections');
     expect(result.hits, isNotEmpty);
-    expect(
-      result.hits.first.file,
-      'rpp2026-rev-cross-section-plots.pdf',
-    );
+    expect(result.hits.first.file, 'rpp2026-rev-cross-section-plots.pdf');
     expect(result.hits.first.page, 5);
   });
 
   test('U3: average hadron multiplicities -> Plots p2, not p4', () async {
     final result = await repository.search('average hadron multiplicities');
     expect(result.hits, isNotEmpty);
-    expect(
-      result.hits.first.file,
-      'rpp2026-rev-cross-section-plots.pdf',
-    );
+    expect(result.hits.first.file, 'rpp2026-rev-cross-section-plots.pdf');
     expect(result.hits.first.page, 2);
   });
 

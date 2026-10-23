@@ -6,6 +6,8 @@ abstract final class ReviewIndexContract {
   static const String expectedEdition = '2026';
   static const String expectedSchemaVersion = '2';
   static const String expectedRulesVersion = '1';
+  static const String expectedRulesSha256 = 'c471f2e9bbcd41321b340aedd4fd8143940571145c95bb0d3e8356d1dc9ad72a';
+  static const String expectedManifestSha256 = '131c31084d80b06d6df8b5c6ea31dddd33f761d233335ffc25dcf1d04161ab86';
   static const int expectedReviewCount = 121;
   static const int expectedPageCount = 2163;
 }

@@ -24,10 +24,9 @@ class ReviewIndexStore {
     if (running != null) return running;
     final future = _open();
     _opening = future;
-    future.then<void>(
-      (executor) => _executor = executor,
-      onError: (Object _) {},
-    ).ignore();
+    future
+        .then<void>((executor) => _executor = executor, onError: (Object _) {})
+        .ignore();
     future.whenComplete(() {
       if (identical(_opening, future)) _opening = null;
     }).ignore();

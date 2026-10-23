@@ -58,10 +58,7 @@ void main() {
     expect(result.degraded, isTrue);
     expect(result.notice, 'unavailable');
     expect(result.hits, isNotEmpty);
-    expect(
-      result.hits.first.file,
-      'rpp2026-rev-clebsch-gordan-coefs.pdf',
-    );
+    expect(result.hits.first.file, 'rpp2026-rev-clebsch-gordan-coefs.pdf');
     await service.dispose();
   });
 
