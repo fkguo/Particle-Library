@@ -27,7 +27,7 @@ class ReviewQuery {
   static const Set<String> _reserved = {'or', 'and', 'not', 'near'};
 
   static ReviewQuery parse(String raw) {
-    final source = raw.trim();
+    final source = raw.trim().replaceAll('“', '"').replaceAll('”', '"');
     if (source.isEmpty) {
       return const ReviewQuery._(notice: noticeEmpty);
     }
@@ -72,7 +72,7 @@ class ReviewQuery {
 
     final parts = <String>[];
     final rankWords = <String>[];
-    final exactWords = <String>{};
+    final exactGroups = <List<String>>[];
 
     for (final phrase in phrases) {
       final words = ReviewNotation.tokens(phrase);
@@ -84,11 +84,11 @@ class ReviewQuery {
             .join(' ');
         parts.add('("$original" OR "$expanded")');
         rankWords.addAll(expanded.split(' '));
-        exactWords.addAll(expanded.split(' '));
+        exactGroups.add(expanded.split(' '));
       } else {
         parts.add('"${words.join(' ')}"');
         rankWords.addAll(words);
-        exactWords.addAll(words);
+        exactGroups.add(words);
       }
     }
 
@@ -107,12 +107,12 @@ class ReviewQuery {
         parts.add('($alternatives)');
         final expansion = alias.length > 1 ? alias.last : alias.first;
         rankWords.addAll(expansion.split(' '));
-        exactWords.addAll(expansion.split(' '));
+        exactGroups.add(expansion.split(' '));
         lastPartIsToken = false;
       } else {
         parts.add('"$token"');
         rankWords.add(token);
-        exactWords.add(token);
+        exactGroups.add([token]);
         lastPartIsToken = true;
         lastToken = token;
       }
@@ -121,17 +121,16 @@ class ReviewQuery {
     if (canPrefix && lastPartIsToken && lastToken == owner) {
       parts[parts.length - 1] = '$lastToken*';
       prefixApplied = true;
+    }
+    final exactWords = <String>{for (final group in exactGroups) ...group};
+    if (prefixApplied) {
       // The prefixed occurrence itself is not an exact-word requirement; only
-      // an earlier phrase or non-prefixed token occurrence of the same word is.
-      final phrasePrior = phrases
-          .expand(ReviewNotation.tokens)
-          .where((token) => token == lastToken)
-          .length;
-      final tokenPrior = tokens
-          .take(tokens.length - 1)
-          .where((token) => token == lastToken)
-          .length;
-      if (phrasePrior + tokenPrior == 0) exactWords.remove(lastToken);
+      // an earlier phrase/token (including an alias expansion) of the same word
+      // is.  This keeps `CG gordan*` exact without breaking bare `cleb*`.
+      final prior = <String>{
+        for (final group in exactGroups.take(exactGroups.length - 1)) ...group,
+      };
+      if (!prior.contains(lastToken)) exactWords.remove(lastToken);
     }
 
     if (parts.isEmpty) {

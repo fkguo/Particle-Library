@@ -94,8 +94,21 @@ void main() {
     final quoted = ReviewQuery.parse('"cleb" cleb*');
     expect(quoted.prefixWord, 'cleb');
     expect(quoted.exactWords, contains('cleb'));
-    for (final raw in ['cleb μ*', 'cleb 中文*', 'cleb "x"*', 'cleb "HVP"*']) {
+    for (final raw in [
+      'cleb μ*',
+      'cleb 中文*',
+      'cleb "x"*',
+      'cleb "HVP"*',
+      'cleb “x”*',
+    ]) {
       expect(ReviewQuery.parse(raw).prefixWord, isNull, reason: raw);
     }
+    final alias = ReviewQuery.parse('CG gordan*');
+    expect(alias.prefixWord, 'gordan');
+    expect(alias.exactWords, contains('gordan'));
+    expect(ReviewQuery.parse('HVP hadronic*').exactWords, contains('hadronic'));
+    final curly = ReviewQuery.parse('“hadronic cross sect”');
+    expect(curly.expression, '"hadronic cross sect"');
+    expect(ReviewQuery.parse('cleb “sect*').notice, ReviewQuery.noticeQuote);
   });
 }
