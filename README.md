@@ -245,7 +245,7 @@ Guo, Feng-Kun. Particle Library.
 Zenodo. https://doi.org/10.5281/zenodo.23460981
 ```
 
-GitHub also exposes this metadata through [`CITATION.cff`](CITATION.cff).
+GitHub also displays this metadata from [`CITATION.cff`](CITATION.cff).
 
 ## Documentation
 

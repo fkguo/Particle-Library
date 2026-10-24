@@ -197,7 +197,7 @@ Guo, Feng-Kun. Particle Library.
 Zenodo. https://doi.org/10.5281/zenodo.23460981
 ```
 
-GitHub 也会读取 [`CITATION.cff`](CITATION.cff)。
+GitHub 也会通过 [`CITATION.cff`](CITATION.cff) 展示这些引用元数据。
 
 ## 文档
 
