@@ -197,9 +197,7 @@ Guo, Feng-Kun. Particle Library.
 Zenodo. https://doi.org/10.5281/zenodo.23460981
 ```
 
-需要可复现引用时，请引用具体版本，例如 0.1.2 对应
-`10.5281/zenodo.23464237`。GitHub 也会读取
-[`CITATION.cff`](CITATION.cff)。
+GitHub 也会读取 [`CITATION.cff`](CITATION.cff)。
 
 ## 文档
 
