@@ -31,8 +31,9 @@ Android 7.0+ (API 24, preview APK; arm64 tested on a physical device). A shared 
 across desktop and mobile.
 
 **Public TestFlight beta (iPhone/iPad):**
-[Join the beta](https://testflight.apple.com/join/my27SMAt). TestFlight builds
-are pre-release software and may be newer than the latest stable release.
+[Join the beta](https://testflight.apple.com/join/my27SMAt). iOS is currently
+distributed through TestFlight only; builds are pre-release software and may
+change during testing.
 
 ## Screenshots
 
@@ -135,10 +136,10 @@ Open the **[latest release](https://github.com/fkguo/Particle-Library/releases/l
   2. Open the join link on the iPhone/iPad and tap **Accept**.
   3. Install **Particle Library** from TestFlight and open it.
 
-  Requires iOS/iPadOS 15+ and an Apple ID. Updates arrive through TestFlight;
-  builds expire after 90 days. This is a TestFlight pre-release beta; App Store
-  distribution is separate. This TestFlight link covers iPhone/iPad; macOS and
-  Android are distributed through GitHub Releases.
+  Requires iOS/iPadOS 15+ and an Apple ID. iOS is currently distributed through
+  TestFlight only; builds expire after 90 days. This is a pre-release beta. This
+  TestFlight link covers iPhone/iPad; macOS and Android are distributed through
+  GitHub Releases.
 - **Android 7.0+ (API 24)**: one signed APK for arm64 phones/tablets:
   `Particle-Library-*-Android-arm64-v8a.apk` (32-bit devices are no longer
   built). See [Android build notes](docs/development/ANDROID.md).
