@@ -25,7 +25,7 @@ Particle Library 是一个离线应用，用于 Particle Data Group 的 *Review 
 **支持平台：** macOS 12+（通用二进制）、iPhone/iPadOS 15+，以及 Android 7.0+（API 24，预览 APK；arm64 已在真机测试）。各平台共享 Flutter 响应式布局。
 
 **iPhone/iPad 公开 TestFlight beta：**
-[加入测试](https://testflight.apple.com/join/my27SMAt)。iOS 目前仅通过 TestFlight 分发；构建属于预发布版本，测试期间可能变化。
+[加入测试](https://testflight.apple.com/join/my27SMAt)。iOS 目前仅通过 TestFlight 分发。
 
 ## 截图
 
