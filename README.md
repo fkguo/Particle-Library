@@ -32,8 +32,7 @@ across desktop and mobile.
 
 **Public TestFlight beta (iPhone/iPad):**
 [Join the beta](https://testflight.apple.com/join/my27SMAt). iOS is currently
-distributed through TestFlight only; builds are pre-release software and may
-change during testing.
+distributed through TestFlight only.
 
 ## Screenshots
 
