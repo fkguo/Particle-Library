@@ -53,7 +53,7 @@ Particle Library 是一个离线应用，用于 Particle Data Group 的 *Review 
 - **笔记**：本机 Markdown 笔记，支持锚点、反向链接、Collection、标签、搜索、JSON/Markdown 导入/导出和冲突保护；所有“加入笔记”入口共用同一个选择器。
 - **标签**：跨笔记筛选、浏览、重命名和删除。
 - **完整备份**：一个 ZIP 包含设置、收藏、笔记、高亮 anchor 和已缓存综述 PDF；导入自动识别格式并安全合并；移动端导出会打开系统分享面板。
-- **文献**：本地文献信息、可选 Crossref 题名补全、INSPIRE 搜索、BibTeX/cite key 和 Zotero 本地桥接。
+- **文献**：本地文献信息、INSPIRE 搜索、BibTeX/cite key 和 Zotero 本地桥接。
 - **Zotero 索引（仅 macOS 桌面）**：手动构建/更新的本地 Zotero 条目缓存，避免 INSPIRE 结果逐条请求。
 - **PDG 综述**：按需缓存 PDF、选择性清理、PDF 文字高亮；高亮直接存为带 review anchor 的本地笔记，可搜索、打标签、导出，并显示在右侧批注栏。
 - **PDF 高亮即笔记**：每条高亮都是一个带综述锚点的普通本地笔记，搜索、标签、反向链接、导出和回收站直接复用，不需要第二套批注数据库。
