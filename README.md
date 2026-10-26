@@ -19,9 +19,13 @@
 **English** | [简体中文](README.zh-CN.md)
 
 Particle Library is an offline app for the Particle Data Group Review of
-Particle Physics, with notes, references, PDF reviews and annotations. The PDG
-snapshot stays read-only and local, while notes, collections, favorites and PDF
-annotations are stored separately from the data.
+Particle Physics, built for working with the data rather than just reading it.
+Every particle, property, measurement, decay and reference is interconnected:
+open a value to see all its measurements, its edition-by-edition history and
+trend. Review articles can be searched offline, downloaded as PDFs when needed,
+and highlighted and annotated. Notes anchor to the exact particle, measurement,
+reference or highlighted passage they came from, so values collected for your
+own analysis stay attached to the data. INSPIRE search is built in as well.
 
 The first version was built over a weekend using **DeepSeek Harness** and
 **DeepSeek-V4.1-Flash-1017**.
@@ -75,8 +79,8 @@ English UI, PDG 2026 snapshot, dark desktop theme and light iPhone theme.
 - **Full backup** — one ZIP with settings, favorites, notes, highlight anchors
   and cached review PDFs; import auto-detects the format and merges safely. On
   mobile, export opens the system share sheet.
-- **Literature** — local reference metadata plus optional Crossref title
-  lookup, INSPIRE search, BibTeX/cite-key lookup and a Zotero local bridge.
+- **Literature** — local reference metadata, INSPIRE search, BibTeX/cite-key
+  lookup and a Zotero local bridge.
 - **Zotero index (desktop only)** — an explicit, manually refreshed local cache of the Zotero
   library makes INSPIRE result matching fast and avoids one lookup per row.
 - **PDG reviews** — on-demand PDF cache, selective cache cleanup, PDF text
