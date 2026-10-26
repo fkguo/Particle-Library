@@ -19,7 +19,8 @@
 **English** | [简体中文](README.zh-CN.md)
 
 Particle Library is an offline app for the Particle Data Group Review of
-Particle Physics, built for working with the data rather than just reading it.
+Particle Physics (unofficial), built for working with the data rather than just
+reading it.
 Every particle, property, measurement, decay and reference is interconnected:
 open a value to see all its measurements, its edition-by-edition history and
 trend. Review articles can be searched offline, downloaded as PDFs when needed,

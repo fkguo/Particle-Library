@@ -18,7 +18,7 @@
 
 [English](README.md) | **简体中文**
 
-Particle Library 是一个离线应用，用于 Particle Data Group 的 *Review of Particle Physics*，支持笔记、文献、PDF 综述和批注。PDG 数据快照保持只读且保存在本机，笔记、Collection、收藏和 PDF 批注与数据分开存储。
+Particle Library 是一个离线应用，用于 Particle Data Group 的 *Review of Particle Physics*（非官方），为使用数据而不只是阅读而设计。每个粒子、属性、测量值、衰变和文献都互相链接：打开一个值，就能看到它的全部测量值、逐版历史与趋势。综述可离线检索、按需下载 PDF，并做高亮与批注。笔记锚定到它来自的粒子、测量值、文献或高亮段落，收集的数值因此始终与数据相连。应用还内置 INSPIRE 搜索。
 
 第一版是在周末使用 **DeepSeek Harness** 与 **DeepSeek-V4.1-Flash-1017** 构建的。
 
