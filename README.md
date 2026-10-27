@@ -32,7 +32,7 @@ The first version was built over a weekend using **DeepSeek Harness** and
 **DeepSeek-V4.1-Flash-1017**.
 
 **Supported platforms:** macOS 12+ (universal), iPhone/iPadOS 15+, and
-Android 7.0+ (API 24, preview APK; arm64 tested on a physical device). A shared responsive Flutter layout is used
+Android 7.0+. A shared responsive Flutter layout is used
 across desktop and mobile.
 
 **Public TestFlight beta (iPhone/iPad):**
