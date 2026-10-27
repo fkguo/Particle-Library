@@ -22,7 +22,7 @@ Particle Library 是一个离线应用，用于 Particle Data Group 的 *Review 
 
 第一版是在周末使用 **DeepSeek Harness** 与 **DeepSeek-V4.1-Flash-1017** 构建的。
 
-**支持平台：** macOS 12+（通用二进制）、iPhone/iPadOS 15+，以及 Android 7.0+（API 24，预览 APK；arm64 已在真机测试）。各平台共享 Flutter 响应式布局。
+**支持平台：** macOS 12+、iPhone/iPadOS 15+，以及 Android 7.0+。各平台共享 Flutter 响应式布局。
 
 **iPhone/iPad 公开 TestFlight beta：**
 [加入测试](https://testflight.apple.com/join/my27SMAt)。iOS 目前仅通过 TestFlight 分发。
