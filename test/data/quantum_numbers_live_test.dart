@@ -70,6 +70,38 @@ void main() {
     expect(quantum.plain, 'J^P = 3/2^+ · I = 3/2');
   });
 
+  test('Omega(2012) keeps P when J is unknown', () async {
+    // B179: J = `?`, P = -, I = 0. P must not be hidden behind the unknown J.
+    expect(await quantumFor('B179').then((q) => q.plain), 'P = - · I = 0');
+  });
+
+  test('f_J(2220) keeps its compound spin verbatim', () async {
+    // M082: J = `2++ or 4`; appending another P/C superscript would be wrong.
+    final quantum = await quantumFor('M082');
+    expect(quantum.plain, 'J = 2++ or 4 · P = + · I = 0 · G = + · C = +');
+  });
+
+  test('Xi(2030) keeps its lower-bound spin verbatim', () async {
+    final quantum = await quantumFor('B068');
+    expect(quantum.plain, 'J = >=5/2 · I = 1/2');
+  });
+
+  test(
+    'rho(770) uses the neutral self-conjugate state as representative',
+    () async {
+      final entry = await db.requireEntryByPdgid('M009');
+      final particles = await db.particlesForEntry(entry.id);
+      final chosen = representativeParticle(particles);
+      expect(chosen, isNotNull);
+      expect(chosen!.name, 'rho(770)0');
+      expect(chosen.ccType, 'S');
+      expect(
+        ParticleQuantumNumbers.fromParticle(chosen).plain,
+        'J^PC = 1^-- · I = 1 · G = +',
+      );
+    },
+  );
+
   test('batched particles match per-entry queries in source order', () async {
     final roots = (await db.catalogRoots())
         .where((root) => root.particleCount > 0)

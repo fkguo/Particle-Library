@@ -62,6 +62,35 @@ void main() {
     expect(quantum.plain, 'I = 1/2 · G = -');
   });
 
+  test('a known parity survives an unknown spin', () {
+    // Ω(2012), B179: J is `?` but P is known.
+    final quantum = ParticleQuantumNumbers.fromValues(i: '0', j: '?', p: '-');
+    expect(quantum.latex, r'$P = -$ · $I = 0$');
+    expect(quantum.plain, 'P = - · I = 0');
+  });
+
+  test('a compound spin is kept verbatim and does not absorb P or C', () {
+    // f_J(2220), M082: J = `2++ or 4`, P = +, C = +.
+    final quantum = ParticleQuantumNumbers.fromValues(
+      i: '0',
+      g: '+',
+      j: '2++ or 4',
+      p: '+',
+      c: '+',
+    );
+    expect(
+      quantum.latex,
+      r'$J = 2++ or 4$ · $P = +$ · $I = 0$ · $G = +$ · $C = +$',
+    );
+    expect(quantum.plain, 'J = 2++ or 4 · P = + · I = 0 · G = + · C = +');
+  });
+
+  test('a lower-bound spin is kept verbatim', () {
+    // Xi(2030), B068: J = `>=5/2`, P is unknown.
+    final quantum = ParticleQuantumNumbers.fromValues(j: '>=5/2', i: '1/2');
+    expect(quantum.plain, 'J = >=5/2 · I = 1/2');
+  });
+
   test('a comma-separated isospin is preserved', () {
     final quantum = ParticleQuantumNumbers.fromValues(
       i: '0,1',
@@ -130,5 +159,41 @@ void main() {
     final other = particle(id: 3, cc: 'A', j: '1/2');
     expect(representativeParticle([other])!.id, 3);
     expect(representativeParticle(const <Particle>[]), isNull);
+  });
+
+  test('representative prefers the neutral self-conjugate state', () {
+    // rho(770), M009: the charged P state and the neutral S state carry the
+    // same information; the neutral S state is the representative.
+    final charged = particle(
+      id: 1,
+      cc: 'P',
+      charge: 1,
+      i: '1',
+      g: '+',
+      j: '1',
+      p: '-',
+      c: '-',
+    );
+    final neutral = particle(
+      id: 2,
+      cc: 'S',
+      charge: 0,
+      i: '1',
+      g: '+',
+      j: '1',
+      p: '-',
+      c: '-',
+    );
+    final antiparticle = particle(
+      id: 3,
+      cc: 'A',
+      charge: -1,
+      i: '1',
+      g: '+',
+      j: '1',
+      p: '-',
+      c: '-',
+    );
+    expect(representativeParticle([charged, neutral, antiparticle])!.id, 2);
   });
 }

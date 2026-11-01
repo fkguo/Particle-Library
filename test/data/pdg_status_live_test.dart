@@ -100,6 +100,39 @@ void main() {
           )
           .first['n'];
       expect(badStars, 0);
+
+      // Every derived status row must be traceable to a scanned source row
+      // with exactly the same mark.
+      final orphaned = database
+          .select(
+            'SELECT COUNT(*) AS n FROM pdg_particle_status s '
+            'LEFT JOIN pdg_particle_status_scan c ON c.pdgid = s.pdgid '
+            'WHERE c.pdgid IS NULL '
+            'OR c.stars IS NOT s.stars '
+            'OR c.established IS NOT s.established',
+          )
+          .first['n'];
+      expect(orphaned, 0);
+
+      // A star-rated row must come from a baryon group page; a bullet-marked
+      // row must come from a meson group page.
+      final wrongSource = database
+          .select(
+            'SELECT COUNT(*) AS n FROM pdg_particle_status s '
+            'JOIN pdg_particle_status_scan c ON c.pdgid = s.pdgid '
+            "WHERE (s.stars IS NOT NULL AND c.group_node NOT LIKE 'BXXX%') "
+            "OR (s.established = 1 AND c.group_node NOT LIKE 'MXXX%')",
+          )
+          .first['n'];
+      expect(wrongSource, 0);
+
+      final sourceMismatch = database
+          .select(
+            'SELECT COUNT(*) AS n FROM pdg_particle_status_scan '
+            "WHERE source NOT LIKE '%node=' || group_node",
+          )
+          .first['n'];
+      expect(sourceMismatch, 0);
     } finally {
       database.dispose();
     }

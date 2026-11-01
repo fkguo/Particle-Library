@@ -683,8 +683,13 @@ List<PdgTextSegment> _segmentPdgTextUncached(String original) {
           RegExp(r'(\\(?:alpha|beta|gamma|mu|tau|Lambda))_([+-])$'),
           (match) => '${match.group(1)}_{${match.group(2)}}',
         );
-        body = body.replaceAll(RegExp(r'\^\{\s*\+\s*-\s*\}'), r'^{\pm}');
-        body = body.replaceAll(RegExp(r'\^\{\s*-\s*\+\s*\}'), r'^{\mp}');
+        // In a J^PC expression `+-` and `-+` are two parity signs, not the
+        // ±/∓ charge sign. The generated quantum-number line is such an
+        // expression; keep its signs literal.
+        if (!body.contains(r'J^{P')) {
+          body = body.replaceAll(RegExp(r'\^\{\s*\+\s*-\s*\}'), r'^{\pm}');
+          body = body.replaceAll(RegExp(r'\^\{\s*-\s*\+\s*\}'), r'^{\mp}');
+        }
         if (_looksLikeSafeLatex(body)) {
           segments.add(PdgTextSegment.math(body));
         } else {

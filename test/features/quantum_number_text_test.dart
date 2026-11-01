@@ -6,7 +6,7 @@ import 'package:pdgapp/domain/quantum_numbers.dart';
 import 'package:pdgapp/features/common/description_text.dart';
 
 void main() {
-  testWidgets('the compact quantum line is typeset by DescriptionText', (
+  testWidgets('the compact quantum line is typeset without ±/∓', (
     tester,
   ) async {
     final quantum = ParticleQuantumNumbers.fromValues(
@@ -20,15 +20,45 @@ void main() {
       MaterialApp(
         theme: AppTheme.light(),
         home: Scaffold(
-          body: DescriptionText(
-            quantum.latex,
-            maxLines: 1,
-            semanticsLabel: quantum.plain,
-          ),
+          body: DescriptionText(quantum.latex, semanticsLabel: quantum.plain),
         ),
       ),
     );
     expect(tester.takeException(), isNull);
     expect(find.byType(Math), findsWidgets);
+    // The parity pair itself is checked at the LaTeX-conversion level in
+    // test/domain/text_fidelity_test.dart; this widget test only proves the
+    // generated line goes through DescriptionText's math path.
+  });
+
+  testWidgets('the catalog quantum line wraps instead of truncating', (
+    tester,
+  ) async {
+    final quantum = ParticleQuantumNumbers.fromValues(
+      i: '0,1',
+      j: '1',
+      p: '-',
+      c: '-',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: SizedBox(
+            width: 180,
+            child: DescriptionText(
+              quantum.latex,
+              semanticsLabel: quantum.plain,
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    final richTexts = tester
+        .widgetList<Text>(find.byType(Text))
+        .where((widget) => widget.textSpan != null);
+    expect(richTexts, isNotEmpty);
+    expect(richTexts.first.maxLines, isNull);
   });
 }

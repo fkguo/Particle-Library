@@ -327,7 +327,6 @@ class _CatalogRootTileState extends State<_CatalogRootTile> {
                             message: quantum.plain,
                             child: DescriptionText(
                               quantum.latex,
-                              maxLines: 1,
                               semanticsLabel: quantum.plain,
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(color: palette.textSecondary),
@@ -380,14 +379,14 @@ class _CatalogRootTileState extends State<_CatalogRootTile> {
                           ? strings.commonShowLess
                           : strings.commonShowMore,
                       icon: Icon(
-                        _expanded ? Icons.expand_less : Icons.expand_more,
+                        _expanded ? Icons.expand_more : Icons.chevron_right,
                       ),
                       onPressed: _toggle,
                     )
                   else
                     const Padding(
                       padding: EdgeInsets.only(right: 8),
-                      child: Icon(Icons.expand_more, size: 18),
+                      child: Icon(Icons.chevron_right, size: 18),
                     ),
                 ],
               ),

@@ -45,6 +45,12 @@ void main() {
     test('a charge written +- on a particle is still plus-minus', () {
       expect(render('W+-'), r'<M:W^{\pm}>');
     });
+
+    test('a generated J^PC line keeps both parity signs', () {
+      expect(render(r'$J^{PC} = 0^{-+}$'), r'<M:J^{PC} = 0^{-+}>');
+      expect(render(r'$J^{PC} = 1^{+-}$'), r'<M:J^{PC} = 1^{+-}>');
+      expect(render(r'$J^{P} = 1^{-+}$'), r'<M:J^{P} = 1^{-+}>');
+    });
   });
 
   group('primes and separators never lose characters', () {

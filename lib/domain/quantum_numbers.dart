@@ -48,16 +48,21 @@ class ParticleQuantumNumbers {
     return text;
   }
 
-  /// Typeset tokens, one per known quantity. The C parity is folded into the
-  /// `J^PC` token when it is known there, so it is not repeated.
+  /// Typeset tokens, one per known quantity. C is folded into `J^PC` when the
+  /// spin is a single value and both parities are known; otherwise P and C are
+  /// kept as separate tokens so a compound or unknown J never swallows them.
   List<QuantumNumberToken> get tokens {
     final result = <QuantumNumberToken>[];
+    var jIncludesP = false;
     var jIncludesC = false;
     final spin = j;
     if (spin != null) {
       final parity = p;
       final chargeParity = c;
-      if (parity != null && chargeParity != null) {
+      if (_simpleSpin.hasMatch(spin) &&
+          parity != null &&
+          chargeParity != null) {
+        jIncludesP = true;
         jIncludesC = true;
         result.add(
           QuantumNumberToken(
@@ -65,14 +70,20 @@ class ParticleQuantumNumbers {
             'J^PC = $spin^$parity$chargeParity',
           ),
         );
-      } else if (parity != null) {
+      } else if (_simpleSpin.hasMatch(spin) && parity != null) {
+        jIncludesP = true;
         result.add(
           QuantumNumberToken('J^{P} = $spin^{$parity}', 'J^P = $spin^$parity'),
         );
       } else {
-        // C alone is not a standard J^C notation; keep J and C separate.
+        // A value such as `2++ or 4` or `>=5/2` is already a complete source
+        // expression; appending a parity superscript would change its meaning.
         result.add(QuantumNumberToken('J = $spin', 'J = $spin'));
       }
+    }
+    final parity = p;
+    if (parity != null && !jIncludesP) {
+      result.add(QuantumNumberToken('P = $parity', 'P = $parity'));
     }
     final isospin = i;
     if (isospin != null) {
@@ -88,6 +99,8 @@ class ParticleQuantumNumbers {
     }
     return List.unmodifiable(result);
   }
+
+  static final RegExp _simpleSpin = RegExp(r'^[0-9]+(?:/[0-9]+)?$');
 
   bool get isEmpty => tokens.isEmpty;
 
@@ -124,23 +137,17 @@ class QuantumNumberToken {
 /// The particle whose quantum numbers represent a listing in a compact row.
 ///
 /// A listing usually carries the particle and its antiparticle, whose P parity
-/// (and sometimes C) differ. The particle state is the PDG convention; among
-/// several charge states the neutral one is preferred because it can carry C.
-/// Ties keep the source order stable by id.
+/// (and sometimes C) differ. Antiparticles are excluded when a particle or
+/// self-conjugate state exists; among the remaining charge states the neutral
+/// one is preferred because it can carry C. Information completeness wins over
+/// the charge preference, and ties keep the source order stable by id.
 Particle? representativeParticle(Iterable<Particle> particles) {
   final all = particles.toList(growable: false);
   if (all.isEmpty) return null;
-  final particleStates = all
-      .where((particle) => particle.ccType == 'P')
+  final notAntiparticles = all
+      .where((particle) => particle.ccType != 'A')
       .toList(growable: false);
-  final selfConjugate = all
-      .where((particle) => particle.ccType == 'S')
-      .toList(growable: false);
-  final pool = particleStates.isNotEmpty
-      ? particleStates
-      : selfConjugate.isNotEmpty
-      ? selfConjugate
-      : all;
+  final pool = notAntiparticles.isNotEmpty ? notAntiparticles : all;
   final ranked = [...pool]
     ..sort((a, b) {
       final byInformation = _informationScore(b)
@@ -148,6 +155,13 @@ Particle? representativeParticle(Iterable<Particle> particles) {
       if (byInformation != 0) return byInformation;
       final byCharge = (a.charge ?? 1).abs().compareTo((b.charge ?? 1).abs());
       if (byCharge != 0) return byCharge;
+      // Prefer the particle state over the self-conjugate row only after the
+      // neutral and information checks, so rho(770)0 is not displaced by a
+      // charged rho(770)+.
+      final byType = (a.ccType == 'P' ? 0 : 1).compareTo(
+        b.ccType == 'P' ? 0 : 1,
+      );
+      if (byType != 0) return byType;
       return a.id.compareTo(b.id);
     });
   return ranked.first;
