@@ -387,7 +387,7 @@ class _CatalogRootTileState extends State<_CatalogRootTile> {
                   else
                     const Padding(
                       padding: EdgeInsets.only(right: 8),
-                      child: Icon(Icons.chevron_right, size: 18),
+                      child: Icon(Icons.expand_more, size: 18),
                     ),
                 ],
               ),
