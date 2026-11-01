@@ -1,45 +1,44 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdgapp/app/app_theme.dart';
 import 'package:pdgapp/features/catalog/catalog_expand_button.dart';
 
 void main() {
-  testWidgets('expand button has a 48dp target and exposes its state', (
-    tester,
-  ) async {
-    var taps = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: Scaffold(
-          body: CatalogExpandButton(
-            expanded: false,
-            tooltip: 'Show more',
-            onPressed: () => taps++,
+  testWidgets(
+    'expand button has a 48dp target and an actionable expanded node',
+    (tester) async {
+      var taps = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: CatalogExpandButton(
+              expanded: false,
+              tooltip: 'Show more',
+              onPressed: () => taps++,
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    final semantics = tester.widget<Semantics>(
-      find.descendant(
-        of: find.byType(CatalogExpandButton),
-        matching: find.byWidgetPredicate(
-          (widget) => widget is Semantics && widget.properties.expanded != null,
-        ),
-      ),
-    );
-    expect(semantics.properties.expanded, isFalse);
-    expect(tester.getSize(find.byType(IconButton)).height, 48);
+      final data = tester
+          .getSemantics(find.byType(CatalogExpandButton))
+          .getSemanticsData();
+      expect(data.label, 'Show more');
+      expect(data.flagsCollection.isButton, isTrue);
+      expect(data.flagsCollection.isExpanded.name, 'isFalse');
+      expect(data.hasAction(SemanticsAction.tap), isTrue);
+      expect(tester.getSize(find.byType(IconButton)).height, 48);
 
-    await tester.tap(find.byType(IconButton));
-    await tester.pump();
-    expect(taps, 1);
-  });
+      await tester.tap(find.byType(IconButton));
+      await tester.pump();
+      expect(taps, 1);
+    },
+  );
 
-  testWidgets('expanded state is visible to accessibility services', (
-    tester,
-  ) async {
+  testWidgets('the actionable node reports the expanded state', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
@@ -52,14 +51,10 @@ void main() {
         ),
       ),
     );
-    final semantics = tester.widget<Semantics>(
-      find.descendant(
-        of: find.byType(CatalogExpandButton),
-        matching: find.byWidgetPredicate(
-          (widget) => widget is Semantics && widget.properties.expanded != null,
-        ),
-      ),
-    );
-    expect(semantics.properties.expanded, isTrue);
+    final data = tester
+        .getSemantics(find.byType(CatalogExpandButton))
+        .getSemanticsData();
+    expect(data.label, 'Show less');
+    expect(data.flagsCollection.isExpanded.name, 'isTrue');
   });
 }

@@ -68,4 +68,41 @@ void main() {
     expect(richTexts.first.maxLines, isNull);
     expect(find.byType(Math), findsNWidgets(quantum.tokens.length));
   });
+
+  testWidgets('math-bearing rows survive a long scrollable list', (
+    tester,
+  ) async {
+    final quantum = ParticleQuantumNumbers.fromValues(
+      i: '1',
+      g: '-',
+      j: '0',
+      p: '-',
+      c: '+',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: ListView.builder(
+            itemCount: 60,
+            itemBuilder: (context, index) => Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Row $index'),
+                  DescriptionText(quantum.latex, semanticsLabel: quantum.plain),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    await tester.drag(find.byType(ListView), const Offset(0, -4000));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(DescriptionText), findsWidgets);
+  });
 }
