@@ -4,6 +4,17 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import '../../app/app_theme.dart';
 import '../../domain/latex.dart';
 
+/// Final normalization before a math span reaches `Math.tex`.
+///
+/// `+-`/`-+` are converted to ±/∓ for charge notation, but a J^PC expression
+/// contains two parity signs and must keep them literal.
+String normalizeDescriptionMath(String latex) {
+  if (latex.contains(r'J^{P')) return latex;
+  return latex
+      .replaceAll(RegExp(r'\^\{\s*\+\s*-\s*\}'), r'^{\pm}')
+      .replaceAll(RegExp(r'\^\{\s*-\s*\+\s*\}'), r'^{\mp}');
+}
+
 /// Renders a mixed source string with inline typeset mathematics.
 ///
 /// It understands three forms that occur in PDG data:
@@ -124,9 +135,7 @@ class DescriptionText extends StatelessWidget {
   }
 
   static InlineSpan _mathSpan(String latex, String fallback, TextStyle style) {
-    final normalized = latex
-        .replaceAll(RegExp(r'\^\{\s*\+\s*-\s*\}'), r'^{\pm}')
-        .replaceAll(RegExp(r'\^\{\s*-\s*\+\s*\}'), r'^{\mp}');
+    final normalized = normalizeDescriptionMath(latex);
     return WidgetSpan(
       alignment: PlaceholderAlignment.baseline,
       baseline: TextBaseline.alphabetic,

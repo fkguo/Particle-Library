@@ -173,6 +173,45 @@ def prepare(store: sqlite3.Connection) -> None:
     )
 
 
+def validate_group_page(html: str) -> None:
+    """Reject an error page served with HTTP 200 before it can erase a group."""
+    soup = BeautifulSoup(html, "lxml")
+    text = " ".join(soup.get_text(" ", strip=True).split())
+    if "does not exist" in text or "404 -" in text:
+        raise ValueError("pdgLive returned a 404 page")
+    if (
+        soup.find("div", class_="list-group-item1") is None
+        and "pdgLive Home >" not in text
+    ):
+        raise ValueError("unrecognized pdgLive group page")
+
+
+def scan_conflicts(
+    store: sqlite3.Connection, pdgids: list[str], group: str
+) -> list[tuple[str, str]]:
+    """Rows already attributed to a different group page."""
+    if not pdgids:
+        return []
+    placeholders = ",".join("?" for _ in pdgids)
+    return store.execute(
+        f"SELECT pdgid, group_node FROM pdg_particle_status_scan "
+        f"WHERE pdgid IN ({placeholders}) AND group_node != ?",
+        [*pdgids, group],
+    ).fetchall()
+
+
+def rebuild_status(store: sqlite3.Connection) -> None:
+    """Recompute the derived status table from the auditable scan table."""
+    store.execute("DELETE FROM pdg_particle_status")
+    store.execute(
+        "INSERT INTO pdg_particle_status(pdgid, stars, established) "
+        "SELECT pdgid, MAX(stars), MAX(established) "
+        "FROM pdg_particle_status_scan "
+        "WHERE stars IS NOT NULL OR established = 1 "
+        "GROUP BY pdgid"
+    )
+
+
 def _has_scan_table(store: sqlite3.Connection) -> bool:
     return (
         store.execute(
@@ -189,6 +228,15 @@ def _scanned_ids(store: sqlite3.Connection) -> set[str]:
     return {
         row[0] for row in store.execute("SELECT pdgid FROM pdg_particle_status_scan")
     }
+
+
+def group_scan_count(store: sqlite3.Connection, group: str) -> int:
+    if not _has_scan_table(store):
+        return 0
+    return store.execute(
+        "SELECT COUNT(*) FROM pdg_particle_status_scan WHERE group_node = ?",
+        (group,),
+    ).fetchone()[0]
 
 
 def main() -> int:
@@ -246,11 +294,23 @@ def main() -> int:
 
         for index, group in enumerate(nodes, 1):
             try:
-                rows = parse_group(fetch(GROUP + group))
+                html = fetch(GROUP + group)
+                validate_group_page(html)
+                rows = parse_group(html)
             except Exception as error:  # noqa: BLE001
                 # Leave this group's previous scan rows (if any) untouched.
                 failed += 1
                 print(f"[{index}/{len(nodes)}] {group}: FAILED {error}", file=sys.stderr)
+                continue
+
+            previous = group_scan_count(store, group)
+            if not rows and previous > 0:
+                failed += 1
+                print(
+                    f"[{index}/{len(nodes)}] {group}: parsed no rows but "
+                    f"{previous} existing rows; refusing to replace them",
+                    file=sys.stderr,
+                )
                 continue
 
             fetched += 1
@@ -306,10 +366,24 @@ def main() -> int:
                     )
                 )
 
+            conflicts = scan_conflicts(
+                store, [str(row[0]) for row in to_insert], group
+            )
+            if conflicts:
+                failed += 1
+                print(
+                    f"[{index}/{len(nodes)}] {group}: COLLISION "
+                    f"{conflicts}; group not replaced",
+                    file=sys.stderr,
+                )
+                continue
+
             try:
                 # Replace only this successfully fetched group. A later
                 # network failure cannot delete another group's rows, and a
                 # forced single-group refresh keeps the rest of the patch.
+                # Rebuild the derived table in the same transaction so an
+                # interruption cannot leave scan and status out of sync.
                 with store:
                     if args.force:
                         store.execute(
@@ -323,6 +397,7 @@ def main() -> int:
                         "VALUES (?, ?, ?, ?, ?, ?, ?)",
                         to_insert,
                     )
+                    rebuild_status(store)
             except sqlite3.Error as error:
                 failed += 1
                 print(
@@ -344,18 +419,6 @@ def main() -> int:
                 time.sleep(max(0.0, args.delay))
 
         if not args.dry_run:
-            # pdg_particle_status is derived from the auditable scan table.
-            # Rebuilding it after every group means a failed group keeps its
-            # previous rows, while a successful group replaces only its scope.
-            with store:
-                store.execute("DELETE FROM pdg_particle_status")
-                store.execute(
-                    "INSERT INTO pdg_particle_status(pdgid, stars, established) "
-                    "SELECT pdgid, MAX(stars), MAX(established) "
-                    "FROM pdg_particle_status_scan "
-                    "WHERE stars IS NOT NULL OR established = 1 "
-                    "GROUP BY pdgid"
-                )
             info = {
                 "edition": "2026",
                 "source": "https://pdglive.lbl.gov/ParticleGroup.action",

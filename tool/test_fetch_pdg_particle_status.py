@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import sqlite3
 import unittest
 
 MODULE_PATH = pathlib.Path(__file__).with_name("fetch_pdg_particle_status.py")
@@ -80,6 +81,57 @@ class ParseGroupTest(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertIsNone(rows[0]["stars"])
         self.assertFalse(rows[0]["established"])
+
+
+class StoreTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.store = sqlite3.connect(":memory:")
+        STATUS.prepare(self.store)
+
+    def tearDown(self) -> None:
+        self.store.close()
+
+    def test_validate_group_page_rejects_an_error_page(self) -> None:
+        with self.assertRaises(ValueError):
+            STATUS.validate_group_page(
+                "<div>404 - We're sorry, the page you are looking for "
+                "does not exist.</div>"
+            )
+        # An empty but real group page (CDXX/CNXX) is accepted.
+        STATUS.validate_group_page("<div>pdgLive Home > BARYONS</div>")
+
+    def test_scan_conflicts_detects_a_different_group(self) -> None:
+        self.store.execute(
+            "INSERT INTO pdg_particle_status_scan"
+            "(pdgid, group_node, name, jp, stars, established, source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("B018", "BXXX005", "N(1700)", "3/2-", 3, 0, "source"),
+        )
+        self.assertEqual(STATUS.scan_conflicts(self.store, ["B018"], "BXXX005"), [])
+        self.assertEqual(
+            STATUS.scan_conflicts(self.store, ["B018"], "BXXX010"),
+            [("B018", "BXXX005")],
+        )
+
+    def test_rebuild_status_uses_only_marked_scan_rows(self) -> None:
+        self.store.executemany(
+            "INSERT INTO pdg_particle_status_scan"
+            "(pdgid, group_node, name, jp, stars, established, source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("B018", "BXXX005", "N(1700)", "3/2-", 3, 0, "source"),
+                ("S008", "MXXX005", "pi+", "1-(0-)", None, 1, "source"),
+                ("B128", "BXXX005", "N(~3000)", "", None, 0, "source"),
+            ],
+        )
+        STATUS.rebuild_status(self.store)
+        rows = {
+            row[0]: (row[1], row[2])
+            for row in self.store.execute(
+                "SELECT pdgid, stars, established FROM pdg_particle_status"
+            )
+        }
+        self.assertEqual(rows, {"B018": (3, 0), "S008": (None, 1)})
 
 
 if __name__ == "__main__":

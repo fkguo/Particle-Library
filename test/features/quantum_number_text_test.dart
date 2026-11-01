@@ -6,6 +6,12 @@ import 'package:pdgapp/domain/quantum_numbers.dart';
 import 'package:pdgapp/features/common/description_text.dart';
 
 void main() {
+  test('description math keeps parity pairs but converts charge signs', () {
+    expect(normalizeDescriptionMath(r'J^{PC} = 0^{-+}'), r'J^{PC} = 0^{-+}');
+    expect(normalizeDescriptionMath(r'J^{PC} = 1^{+-}'), r'J^{PC} = 1^{+-}');
+    expect(normalizeDescriptionMath(r'W^{+-}'), r'W^{\pm}');
+  });
+
   testWidgets('the compact quantum line is typeset without ±/∓', (
     tester,
   ) async {
@@ -60,5 +66,6 @@ void main() {
         .where((widget) => widget.textSpan != null);
     expect(richTexts, isNotEmpty);
     expect(richTexts.first.maxLines, isNull);
+    expect(find.byType(Math), findsNWidgets(quantum.tokens.length));
   });
 }
