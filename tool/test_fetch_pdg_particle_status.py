@@ -95,10 +95,32 @@ class StoreTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             STATUS.validate_group_page(
                 "<div>404 - We're sorry, the page you are looking for "
-                "does not exist.</div>"
+                "does not exist.</div>",
+                "BXXX005",
             )
+        # A breadcrumb alone is not enough: the page must identify the group.
+        with self.assertRaises(ValueError):
+            STATUS.validate_group_page("<div>pdgLive Home > BARYONS</div>", "BXXX005")
         # An empty but real group page (CDXX/CNXX) is accepted.
-        STATUS.validate_group_page("<div>pdgLive Home > BARYONS</div>")
+        STATUS.validate_group_page(
+            '<a href="./ParticleGroup.action?init=0&node=CDXX">'
+            "pdgLive Home > BARYONS</a>",
+            "CDXX",
+        )
+
+    def test_filter_eligible_drops_ids_absent_from_the_snapshot(self) -> None:
+        rows = [{"pdgid": "B018"}, {"pdgid": "BAD"}]
+        self.assertEqual(
+            STATUS.filter_eligible(rows, {"B018": "N(1700)"}),
+            [{"pdgid": "B018"}],
+        )
+
+    def test_replacement_allowed_needs_force_with_allow_empty(self) -> None:
+        self.assertTrue(STATUS.replacement_allowed(0, [], False, False))
+        self.assertFalse(STATUS.replacement_allowed(2, [], False, True))
+        self.assertFalse(STATUS.replacement_allowed(2, [], True, False))
+        self.assertTrue(STATUS.replacement_allowed(2, [], True, True))
+        self.assertTrue(STATUS.replacement_allowed(2, [{"pdgid": "B018"}], False, False))
 
     def test_scan_conflicts_detects_a_different_group(self) -> None:
         self.store.execute(
@@ -111,6 +133,21 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(
             STATUS.scan_conflicts(self.store, ["B018"], "BXXX010"),
             [("B018", "BXXX005")],
+        )
+
+    def test_move_conflicts_removes_the_old_group_row(self) -> None:
+        self.store.execute(
+            "INSERT INTO pdg_particle_status_scan"
+            "(pdgid, group_node, name, jp, stars, established, source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("B018", "BXXX005", "N(1700)", "3/2-", 3, 0, "source"),
+        )
+        STATUS.move_conflicts(self.store, [("B018", "BXXX005")])
+        self.assertEqual(
+            self.store.execute(
+                "SELECT COUNT(*) FROM pdg_particle_status_scan"
+            ).fetchone()[0],
+            0,
         )
 
     def test_rebuild_status_uses_only_marked_scan_rows(self) -> None:

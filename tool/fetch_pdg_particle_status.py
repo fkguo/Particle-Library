@@ -173,17 +173,48 @@ def prepare(store: sqlite3.Connection) -> None:
     )
 
 
-def validate_group_page(html: str) -> None:
+def validate_group_page(html: str, group: str) -> None:
     """Reject an error page served with HTTP 200 before it can erase a group."""
     soup = BeautifulSoup(html, "lxml")
     text = " ".join(soup.get_text(" ", strip=True).split())
     if "does not exist" in text or "404 -" in text:
         raise ValueError("pdgLive returned a 404 page")
+    if f"home={group}" not in html and f"node={group}" not in html:
+        raise ValueError(f"page does not identify group {group}")
     if (
         soup.find("div", class_="list-group-item1") is None
         and "pdgLive Home >" not in text
     ):
         raise ValueError("unrecognized pdgLive group page")
+
+
+def filter_eligible(
+    rows: list[dict[str, object]], roots: dict[str, str]
+) -> list[dict[str, object]]:
+    """Keep only rows whose pdgid is a root identifier in the snapshot."""
+    return [row for row in rows if str(row["pdgid"]) in roots]
+
+
+def replacement_allowed(
+    previous: int,
+    eligible: list[dict[str, object]],
+    allow_empty: bool,
+    force: bool,
+) -> bool:
+    """A previously populated group may only become empty with an override."""
+    return previous == 0 or bool(eligible) or (allow_empty and force)
+
+
+def move_conflicts(
+    store: sqlite3.Connection, conflicts: list[tuple[str, str]]
+) -> None:
+    """Remove a conflicting row from its old group before reassigning it."""
+    for pdgid, old_group in conflicts:
+        store.execute(
+            "DELETE FROM pdg_particle_status_scan "
+            "WHERE pdgid = ? AND group_node = ?",
+            (pdgid, old_group),
+        )
 
 
 def scan_conflicts(
@@ -256,6 +287,22 @@ def main() -> int:
         action="store_true",
         help="Parse and report without writing the sidecar",
     )
+    parser.add_argument(
+        "--allow-empty",
+        action="store_true",
+        help=(
+            "With --force, allow a previously populated group to become empty "
+            "after you have verified that the removals are legitimate"
+        ),
+    )
+    parser.add_argument(
+        "--allow-move",
+        action="store_true",
+        help=(
+            "With --force, move a pdgid that now appears in this group from its "
+            "previous group instead of refusing the collision"
+        ),
+    )
     args = parser.parse_args()
 
     if not Path(args.snapshot).is_file():
@@ -295,7 +342,7 @@ def main() -> int:
         for index, group in enumerate(nodes, 1):
             try:
                 html = fetch(GROUP + group)
-                validate_group_page(html)
+                validate_group_page(html, group)
                 rows = parse_group(html)
             except Exception as error:  # noqa: BLE001
                 # Leave this group's previous scan rows (if any) untouched.
@@ -303,55 +350,62 @@ def main() -> int:
                 print(f"[{index}/{len(nodes)}] {group}: FAILED {error}", file=sys.stderr)
                 continue
 
+            eligible = filter_eligible(rows, roots)
             previous = group_scan_count(store, group)
-            if not rows and previous > 0:
+            if not replacement_allowed(
+                previous, eligible, args.allow_empty, args.force
+            ):
                 failed += 1
                 print(
-                    f"[{index}/{len(nodes)}] {group}: parsed no rows but "
-                    f"{previous} existing rows; refusing to replace them",
+                    f"[{index}/{len(nodes)}] {group}: parsed no eligible rows "
+                    f"but {previous} existing rows; use --force --allow-empty "
+                    "after verifying the removals",
+                    file=sys.stderr,
+                )
+                continue
+
+            conflicts = scan_conflicts(
+                store, [str(row["pdgid"]) for row in eligible], group
+            )
+            if conflicts and not (args.allow_move and args.force):
+                failed += 1
+                print(
+                    f"[{index}/{len(nodes)}] {group}: COLLISION {conflicts}; "
+                    "use --force --allow-move after checking the reassignment",
                     file=sys.stderr,
                 )
                 continue
 
             fetched += 1
-            group_stars = sum(1 for row in rows if row["stars"] is not None)
-            group_dots = sum(1 for row in rows if row["established"])
+            group_stars = sum(
+                1 for row in eligible if row["stars"] is not None
+            )
+            group_dots = sum(1 for row in eligible if row["established"])
 
             if args.dry_run:
                 group_seen = 0
-                for row in rows:
-                    pdgid = str(row["pdgid"])
-                    if pdgid not in roots:
-                        print(
-                            f"[{index}/{len(nodes)}] {group}: {pdgid} is not a root "
-                            "identifier in the snapshot; skipped",
-                            file=sys.stderr,
-                        )
-                        continue
+                for row in eligible:
                     group_seen += 1
                     if row["stars"] is not None:
                         star_rows += 1
                     if row["established"]:
                         dot_rows += 1
                 seen += group_seen
+                suffix = (
+                    f", {len(conflicts)} movable" if conflicts else ""
+                )
                 print(
                     f"[{index}/{len(nodes)}] {group}: {len(rows)} rows, "
-                    f"{group_seen} valid, {group_stars} stars, {group_dots} dots"
+                    f"{group_seen} eligible, {group_stars} stars, "
+                    f"{group_dots} dots{suffix}"
                 )
                 if index < len(nodes):
                     time.sleep(max(0.0, args.delay))
                 continue
 
             to_insert: list[tuple[object, ...]] = []
-            for row in rows:
+            for row in eligible:
                 pdgid = str(row["pdgid"])
-                if pdgid not in roots:
-                    print(
-                        f"[{index}/{len(nodes)}] {group}: {pdgid} is not a root "
-                        "identifier in the snapshot; skipped",
-                        file=sys.stderr,
-                    )
-                    continue
                 if not args.force and pdgid in done:
                     continue
                 to_insert.append(
@@ -366,18 +420,6 @@ def main() -> int:
                     )
                 )
 
-            conflicts = scan_conflicts(
-                store, [str(row[0]) for row in to_insert], group
-            )
-            if conflicts:
-                failed += 1
-                print(
-                    f"[{index}/{len(nodes)}] {group}: COLLISION "
-                    f"{conflicts}; group not replaced",
-                    file=sys.stderr,
-                )
-                continue
-
             try:
                 # Replace only this successfully fetched group. A later
                 # network failure cannot delete another group's rows, and a
@@ -391,6 +433,8 @@ def main() -> int:
                             "WHERE group_node = ?",
                             (group,),
                         )
+                    if conflicts:
+                        move_conflicts(store, conflicts)
                     store.executemany(
                         "INSERT OR REPLACE INTO pdg_particle_status_scan"
                         "(pdgid, group_node, name, jp, stars, established, source) "
