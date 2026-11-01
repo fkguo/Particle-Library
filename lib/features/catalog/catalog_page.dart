@@ -15,6 +15,7 @@ import '../common/page.dart';
 import '../common/particle_status_chip.dart';
 import '../common/ui.dart';
 import '../reviews/reviews_page.dart';
+import 'catalog_expand_button.dart';
 import 'catalog_groups.dart';
 
 typedef _CatalogLoad = ({
@@ -89,7 +90,9 @@ class _CatalogPageState extends State<CatalogPage> {
           final groupCounts = <CatalogGroupKind, int>{};
           for (final root in categoryRoots) {
             final kind = catalogGroupForRoot(root)?.kind;
-            if (kind != null) groupCounts[kind] = (groupCounts[kind] ?? 0) + 1;
+            if (kind != null) {
+              groupCounts[kind] = (groupCounts[kind] ?? 0) + 1;
+            }
           }
           final filtered = categoryRoots
               .where((root) {
@@ -367,26 +370,20 @@ class _CatalogRootTileState extends State<_CatalogRootTile> {
                             if (widget.root.childCount > 0)
                               MetaChip(
                                 strings.entryCount(widget.root.childCount),
-                                icon: _expanded
-                                    ? Icons.expand_less
-                                    : Icons.expand_more,
-                                tone: _expanded
-                                    ? BadgeTone.info
-                                    : BadgeTone.neutral,
-                                tooltip: _expanded
-                                    ? strings.commonShowLess
-                                    : strings.commonShowMore,
-                                onTap: _toggle,
                               ),
                           ],
                         ),
                       ],
                     ),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.only(right: 8),
-                    child: Icon(Icons.chevron_right, size: 18),
-                  ),
+                  if (widget.root.childCount > 0)
+                    CatalogExpandButton(
+                      expanded: _expanded,
+                      tooltip: _expanded
+                          ? strings.commonShowLess
+                          : strings.commonShowMore,
+                      onPressed: _toggle,
+                    ),
                 ],
               ),
             ),

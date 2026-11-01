@@ -137,22 +137,27 @@ class DescriptionText extends StatelessWidget {
   static InlineSpan _mathSpan(String latex, String fallback, TextStyle style) {
     final normalized = normalizeDescriptionMath(latex);
     return WidgetSpan(
-      alignment: PlaceholderAlignment.baseline,
-      baseline: TextBaseline.alphabetic,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 0.5),
-        child: Math.tex(
-          normalized,
-          mathStyle: MathStyle.text,
-          // Do not inherit a heading's synthetic bold weight: many math fonts
-          // have no bold Greek glyphs, so f_0/a_0 would become bold while
-          // phi(1020) stayed regular. Keep all math spans on one weight; the
-          // surrounding prose keeps its own weight.
-          textStyle: style.copyWith(
-            fontWeight: FontWeight.normal,
-            fontStyle: FontStyle.normal,
+      // flutter_math_fork's RenderLine does not implement
+      // computeDryBaseline. Baseline alignment asks for exactly that and then
+      // trips a layout cascade in long lists; middle alignment keeps the math
+      // inline without that unsupported call.
+      alignment: PlaceholderAlignment.middle,
+      child: SelectionContainer.disabled(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 0.5),
+          child: Math.tex(
+            normalized,
+            mathStyle: MathStyle.text,
+            // Do not inherit a heading's synthetic bold weight: many math fonts
+            // have no bold Greek glyphs, so f_0/a_0 would become bold while
+            // phi(1020) stayed regular. Keep all math spans on one weight; the
+            // surrounding prose keeps its own weight.
+            textStyle: style.copyWith(
+              fontWeight: FontWeight.normal,
+              fontStyle: FontStyle.normal,
+            ),
+            onErrorFallback: (_) => Text(fallback, style: style),
           ),
-          onErrorFallback: (_) => Text(fallback, style: style),
         ),
       ),
     );
