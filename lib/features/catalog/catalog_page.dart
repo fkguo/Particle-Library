@@ -367,27 +367,26 @@ class _CatalogRootTileState extends State<_CatalogRootTile> {
                             if (widget.root.childCount > 0)
                               MetaChip(
                                 strings.entryCount(widget.root.childCount),
+                                icon: _expanded
+                                    ? Icons.expand_less
+                                    : Icons.expand_more,
+                                tone: _expanded
+                                    ? BadgeTone.info
+                                    : BadgeTone.neutral,
+                                tooltip: _expanded
+                                    ? strings.commonShowLess
+                                    : strings.commonShowMore,
+                                onTap: _toggle,
                               ),
                           ],
                         ),
                       ],
                     ),
                   ),
-                  if (widget.root.childCount > 0)
-                    IconButton(
-                      tooltip: _expanded
-                          ? strings.commonShowLess
-                          : strings.commonShowMore,
-                      icon: Icon(
-                        _expanded ? Icons.expand_more : Icons.chevron_right,
-                      ),
-                      onPressed: _toggle,
-                    )
-                  else
-                    const Padding(
-                      padding: EdgeInsets.only(right: 8),
-                      child: Icon(Icons.chevron_right, size: 18),
-                    ),
+                  const Padding(
+                    padding: EdgeInsets.only(right: 8),
+                    child: Icon(Icons.chevron_right, size: 18),
+                  ),
                 ],
               ),
             ),
