@@ -29,6 +29,8 @@ import '../common/page_outline.dart';
 import '../common/raw_fields.dart';
 import '../common/ui.dart';
 import '../catalog/catalog_groups.dart';
+import '../reviews/review_index.dart';
+import '../reviews/review_link.dart';
 import '../reviews/reviews_page.dart';
 import '../decay/decay_catalog.dart';
 import '../notes/notes_anchor.dart';
@@ -127,6 +129,8 @@ class _ParticleBodyState extends State<_ParticleBody> {
   int _tab = 0;
   PdgNote? _pdgNote;
   Map<String, PdgCitation> _citations = const <String, PdgCitation>{};
+  List<String> _reviewFiles = const <String>[];
+  List<PdgSeeAlso> _seeAlso = const <PdgSeeAlso>[];
   final GlobalKey _overviewKey = GlobalKey();
   final GlobalKey _tabsKey = GlobalKey();
   final GlobalKey _identityKey = GlobalKey();
@@ -143,10 +147,18 @@ class _ParticleBodyState extends State<_ParticleBody> {
   }
 
   Future<void> _loadPdgNote() async {
-    final note = await PdgNotes.forPdgid(widget.view.entry.pdgid);
-    if (!mounted || note == null || note.isEmpty) return;
+    final pdgid = widget.view.entry.pdgid;
+    final note = await PdgNotes.forPdgid(pdgid);
+    final reviewFiles = await PdgNotes.reviewFilesFor(pdgid);
+    final seeAlso = await PdgNotes.seeAlsoFor(pdgid);
+    if (!mounted) return;
+    if ((note == null || note.isEmpty) &&
+        reviewFiles.isEmpty &&
+        seeAlso.isEmpty) {
+      return;
+    }
     var localIds = const <String, int>{};
-    if (note.citations.isNotEmpty) {
+    if (note != null && note.citations.isNotEmpty) {
       try {
         localIds = await AppScope.of(context).database
             .referenceIdsForCitationKeys(note.citations.keys.toSet());
@@ -155,7 +167,7 @@ class _ParticleBodyState extends State<_ParticleBody> {
       }
     }
     final patchReferences = <String, PdgNoteReference>{};
-    for (final label in note.citations.keys) {
+    for (final label in note?.citations.keys ?? const <String>[]) {
       if (localIds[label] != null) continue;
       final reference = await PdgNotes.referenceFor(label);
       if (reference != null) patchReferences[label] = reference;
@@ -163,8 +175,11 @@ class _ParticleBodyState extends State<_ParticleBody> {
     if (!mounted) return;
     setState(() {
       _pdgNote = note;
+      _reviewFiles = List.unmodifiable(reviewFiles);
+      _seeAlso = List.unmodifiable(seeAlso);
       _citations = {
-        for (final entry in note.citations.entries)
+        for (final entry
+            in note?.citations.entries ?? const <MapEntry<String, int>>[])
           entry.key: PdgCitation(
             localId: localIds[entry.key],
             inspireRecid: entry.value,
@@ -186,7 +201,24 @@ class _ParticleBodyState extends State<_ParticleBody> {
               ? const <String>{}
               : categoryReviewFiles[category.category]?.toSet() ??
                     const <String>{});
+    if (files.length == 1 && reviewEntryForFile(files.first) != null) {
+      await openReviewLink(context, 'review:$reviewEdition/${files.first}');
+      return;
+    }
     await AppNav.push<void>(context, ReviewsPage(initialFiles: files));
+  }
+
+  void _openReviewFile(String file) {
+    unawaited(openReviewLink(context, 'review:$reviewEdition/$file'));
+  }
+
+  Map<String, VoidCallback> _reviewLinks() {
+    final links = <String, VoidCallback>{};
+    for (final file in _reviewFiles) {
+      final title = reviewEntryForFile(file)?.title;
+      if (title != null) links[title] = () => _openReviewFile(file);
+    }
+    return links;
   }
 
   void _selectTab(int tab) {
@@ -370,7 +402,44 @@ class _ParticleBodyState extends State<_ParticleBody> {
                 child: PdgLiveText(
                   summary,
                   citations: _citations,
+                  links: _reviewLinks(),
                   style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            if (_reviewFiles.isNotEmpty || _seeAlso.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.l,
+                  Insets.s,
+                  Insets.l,
+                  0,
+                ),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    for (final file in _reviewFiles)
+                      ActionChip(
+                        avatar: const Icon(Icons.menu_book_outlined, size: 16),
+                        label: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 320),
+                          child: Text(
+                            reviewEntryForFile(file)?.title ?? file,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        tooltip: strings.relatedReview,
+                        onPressed: () => _openReviewFile(file),
+                      ),
+                    for (final item in _seeAlso)
+                      _SeeAlsoChip(
+                        item: item,
+                        onTap: () =>
+                            AppNav.openPdgid(context, item.targetPdgid),
+                      ),
+                  ],
                 ),
               ),
             if (!view.hasIdentity)
@@ -1228,6 +1297,50 @@ class _EntryTexts extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// A compact link for a particle named in the pdgLive "See also" prose.
+class _SeeAlsoChip extends StatelessWidget {
+  const _SeeAlsoChip({required this.item, required this.onTap});
+
+  final PdgSeeAlso item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppScope.of(context).strings;
+    final palette = context.palette;
+    final style = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: palette.primary);
+    return Material(
+      color: palette.primary.withValues(alpha: 0.09),
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.arrow_forward, size: 13, color: palette.primary),
+              const SizedBox(width: 4),
+              Text('${strings.seeAlso} ', style: style),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 220),
+                child: DescriptionText(
+                  item.label,
+                  maxLines: 1,
+                  style: style,
+                  semanticsLabel: item.label,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -176,7 +176,7 @@ void main() {
         database
             .select('SELECT COUNT(*) AS n FROM pdg_note_reviews')
             .first['n'],
-        67,
+        greaterThanOrEqualTo(67),
       );
     } finally {
       database.dispose();

@@ -168,9 +168,9 @@ read-only derived assets:
 
 - `pdg_notes_2026.sqlite` — additional pdgLive enrichment: entry summaries and
   old-name notes, the 209 pdgLive-related references with INSPIRE record IDs
-  and cite keys, citation links, entry-to-review links, and particle-status
-  marks (1–4 stars from the baryon group pages, established `•` bullets from
-  the meson group pages);
+  and cite keys, citation links, entry-to-review links, summary “See also”
+  particle links, and particle-status marks (1–4 stars from the baryon group
+  pages, established `•` bullets from the meson group pages);
 - `review_index_2026.sqlite` — a page-level full-text index built from the 121
   PDG Review PDFs.
 

@@ -123,8 +123,9 @@ macOS 版已内置 PDG 快照，发布包对普通用户是自包含的。源码
 [`assets/README.md`](assets/README.md)。应用另外内置两个独立的只读派生资产：
 
 - `pdg_notes_2026.sqlite`：pdgLive 额外补充内容——条目说明与旧名注释、
-  209 条 pdgLive 相关文献及其 INSPIRE 记录号/cite key、引用关系、条目→综述链接，
-  以及粒子状态标记（重子组页面的 1–4 星与介子组页面的已确立 `•` 圆点）；
+  209 条 pdgLive 相关文献及其 INSPIRE 记录号/cite key、引用关系、条目→综述链接、
+  摘要中的“参见”粒子链接，以及粒子状态标记（重子组页面的 1–4 星与介子组页面的
+  已确立 `•` 圆点）；
 - `review_index_2026.sqlite`：由 121 篇 PDG 综述 PDF 构建的页面级全文索引。
 
 这 209 条是 pdgLive 注释实际引用的文献；官方库的其他文献由应用按需向 INSPIRE

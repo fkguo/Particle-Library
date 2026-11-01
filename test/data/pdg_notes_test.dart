@@ -46,6 +46,17 @@ void main() {
     expect(files, contains('rpp2026-rev-dalitz-params-k3pi-decays.pdf'));
   });
 
+  test('a review named in the summary becomes a related review', () async {
+    final files = await PdgNotes.reviewFilesFor('M111');
+    expect(files, contains('rpp2026-rev-light-mesons-spectroscopy.pdf'));
+  });
+
+  test('a see-also particle in the summary becomes a link target', () async {
+    expect(await PdgNotes.seeAlsoFor('M111'), const [
+      PdgSeeAlso(targetPdgid: 'M164', label: 'pi_1(1600)'),
+    ]);
+  });
+
   test('identifiers without notes return null', () async {
     expect(await PdgNotes.forPdgid('NOT-A-PDGID'), isNull);
   });

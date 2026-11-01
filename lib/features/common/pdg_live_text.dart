@@ -48,12 +48,16 @@ class PdgLiveText extends StatelessWidget {
     super.key,
     this.style,
     this.citations = const <String, PdgCitation>{},
+    this.links = const <String, VoidCallback>{},
     this.selectable = true,
   });
 
   final String text;
   final TextStyle? style;
   final Map<String, PdgCitation> citations;
+
+  /// Plain-text phrases that should open a page, keyed by the exact phrase.
+  final Map<String, VoidCallback> links;
   final bool selectable;
 
   @override
@@ -81,8 +85,10 @@ class PdgLiveText extends StatelessWidget {
       final body = text.substring(start + 1, end);
       spans.add(
         WidgetSpan(
-          alignment: PlaceholderAlignment.baseline,
-          baseline: TextBaseline.alphabetic,
+          // Same flutter_math_fork RenderLine limitation as DescriptionText:
+          // baseline alignment asks for computeDryBaseline, which RenderLine
+          // does not implement. Keep inline math on middle alignment.
+          alignment: PlaceholderAlignment.middle,
           child: Math.tex(
             normalizePdgLiveMath(body),
             mathStyle: MathStyle.text,
@@ -110,8 +116,10 @@ class PdgLiveText extends StatelessWidget {
   ) {
     if (chunk.isEmpty) return const <InlineSpan>[];
     final palette = context.palette;
-    final labels = citations.keys.where((label) => label.isNotEmpty).toList()
-      ..sort((a, b) => b.length.compareTo(a.length));
+    final labels = <String>{
+      ...links.keys.where((label) => label.isNotEmpty),
+      ...citations.keys.where((label) => label.isNotEmpty),
+    }.toList()..sort((a, b) => b.length.compareTo(a.length));
     final spans = <InlineSpan>[];
     var index = 0;
     while (index < chunk.length) {
@@ -123,19 +131,34 @@ class PdgLiveText extends StatelessWidget {
         }
       }
       if (hit != null) {
-        final citation = citations[hit]!;
-        spans.add(
-          TextSpan(
-            text: hit,
-            style: base.copyWith(
-              color: palette.accent,
-              decoration: TextDecoration.underline,
-              decorationColor: palette.accent,
+        final link = links[hit];
+        if (link != null) {
+          spans.add(
+            TextSpan(
+              text: hit,
+              style: base.copyWith(
+                color: palette.primary,
+                decoration: TextDecoration.underline,
+                decorationColor: palette.primary.withValues(alpha: 0.4),
+              ),
+              recognizer: TapGestureRecognizer()..onTap = link,
             ),
-            recognizer: TapGestureRecognizer()
-              ..onTap = () => _openCitation(context, citation),
-          ),
-        );
+          );
+        } else {
+          final citation = citations[hit]!;
+          spans.add(
+            TextSpan(
+              text: hit,
+              style: base.copyWith(
+                color: palette.accent,
+                decoration: TextDecoration.underline,
+                decorationColor: palette.accent,
+              ),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () => _openCitation(context, citation),
+            ),
+          );
+        }
         index += hit.length;
         continue;
       }
