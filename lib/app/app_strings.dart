@@ -303,6 +303,20 @@ class AppStrings {
   String get particleAntiparticle => _t('反粒子', 'Antiparticle');
   String get particleSelfConjugate => _t('自共轭', 'Self-conjugate');
   String get particleQuantumNumbers => _t('量子数（原始字段）', 'Quantum numbers (raw)');
+  String get particleQuantumSummary => _t('量子数', 'Quantum numbers');
+  String particleStatusStars(int stars) {
+    final value = '*' * stars;
+    return stars >= 3
+        ? _t('PDG 状态：$value（已确立）', 'PDG status: $value (well established)')
+        : _t('PDG 状态：$value', 'PDG status: $value');
+  }
+
+  String get particleStatusSource => _t(
+    '星号来自 PDG Live 组页面；介子组页面只标“已确立”，不给出 1–4 星。',
+    'Stars come from the PDG Live group pages; meson group pages mark only “established” and publish no 1–4 star count.',
+  );
+  String get particleStatusEstablished =>
+      _t('PDG 状态：•（已确立）', 'PDG status: • (established)');
   String get particleProperties => _t('性质', 'Properties');
   String get particleSummarySection => _t('摘要', 'Summary');
   String get particleDecays => _t('衰变', 'Decays');

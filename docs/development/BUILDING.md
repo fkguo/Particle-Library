@@ -33,8 +33,8 @@ Android, Windows or Linux build.
 
 The build also includes two committed, derived read-only assets:
 `pdg_notes_2026.sqlite` (pdgLive summaries and old names, 209 references with
-INSPIRE cite keys, citations and entry-to-review links) and
-`review_index_2026.sqlite` (page-level review FTS). See
+INSPIRE cite keys, citations, entry-to-review links, and particle-status marks)
+and `review_index_2026.sqlite` (page-level review FTS). See
 [assets/README.md](../../assets/README.md) for their contents and generators.
 
 `flutter test`, `flutter run` and every platform build require the snapshot to

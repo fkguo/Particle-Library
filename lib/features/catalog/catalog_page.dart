@@ -4,14 +4,23 @@ import '../../app/app_scope.dart';
 import '../../app/app_theme.dart';
 import '../../app/navigation.dart';
 import '../../data/pdg_database.dart';
+import '../../data/pdg_notes.dart';
+import '../../data/pdg_repository.dart';
 import '../../domain/labels.dart';
 import '../../domain/models.dart';
+import '../../domain/quantum_numbers.dart';
 import '../common/async_view.dart';
 import '../common/description_text.dart';
 import '../common/page.dart';
+import '../common/particle_status_chip.dart';
 import '../common/ui.dart';
 import '../reviews/reviews_page.dart';
 import 'catalog_groups.dart';
+
+typedef _CatalogLoad = ({
+  CatalogData catalog,
+  Map<String, PdgParticleStatus> statuses,
+});
 
 class CatalogPage extends StatefulWidget {
   const CatalogPage({super.key});
@@ -21,7 +30,7 @@ class CatalogPage extends StatefulWidget {
 }
 
 class _CatalogPageState extends State<CatalogPage> {
-  late Future<List<CatalogRoot>> _future;
+  late Future<_CatalogLoad> _future;
   ParticleCategory? _category;
   CatalogGroupKind? _subcategory;
   final TextEditingController _filter = TextEditingController();
@@ -33,7 +42,13 @@ class _CatalogPageState extends State<CatalogPage> {
     super.didChangeDependencies();
     if (_initialized) return;
     _initialized = true;
-    _future = AppScope.of(context).repository.catalog();
+    _future = _load();
+  }
+
+  Future<_CatalogLoad> _load() async {
+    final catalogFuture = AppScope.of(context).repository.catalog();
+    final statusesFuture = PdgNotes.statuses();
+    return (catalog: await catalogFuture, statuses: await statusesFuture);
   }
 
   @override
@@ -49,12 +64,13 @@ class _CatalogPageState extends State<CatalogPage> {
     return PageScaffold(
       title: Text(strings.catalogTitle),
       subtitle: strings.catalogSubtitle,
-      body: AsyncView<List<CatalogRoot>>(
+      body: AsyncView<_CatalogLoad>(
         future: _future,
         onRetry: () => setState(() {
-          _future = AppScope.of(context).repository.catalog();
+          _future = _load();
         }),
-        builder: (context, roots) {
+        builder: (context, data) {
+          final roots = data.catalog.roots;
           final query = _filter.text.trim().toLowerCase();
           // PDG keeps a few section rows with nothing under them; a tile for
           // those opens an empty page, so they are not listed.
@@ -224,7 +240,11 @@ class _CatalogPageState extends State<CatalogPage> {
                       Insets.l,
                       Insets.s,
                     ),
-                    child: _CatalogRootTile(root: root),
+                    child: _CatalogRootTile(
+                      root: root,
+                      particles: data.catalog.particlesFor(root),
+                      status: data.statuses[root.entry.pdgid],
+                    ),
                   ),
             ],
           );
@@ -235,9 +255,15 @@ class _CatalogPageState extends State<CatalogPage> {
 }
 
 class _CatalogRootTile extends StatefulWidget {
-  const _CatalogRootTile({required this.root});
+  const _CatalogRootTile({
+    required this.root,
+    required this.particles,
+    this.status,
+  });
 
   final CatalogRoot root;
+  final List<Particle> particles;
+  final PdgParticleStatus? status;
 
   @override
   State<_CatalogRootTile> createState() => _CatalogRootTileState();
@@ -259,6 +285,10 @@ class _CatalogRootTileState extends State<_CatalogRootTile> {
         ? null
         : categoryFromFlags(entry.flags);
     final type = dataTypeInfo(entry.dataType);
+    final representative = representativeParticle(widget.particles);
+    final quantum = representative == null
+        ? ParticleQuantumNumbers.none
+        : ParticleQuantumNumbers.fromParticle(representative);
     return Container(
       decoration: BoxDecoration(
         color: palette.surface,
@@ -291,11 +321,27 @@ class _CatalogRootTileState extends State<_CatalogRootTile> {
                           style: Theme.of(context).textTheme.bodyLarge
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
+                        if (quantum.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Tooltip(
+                            message: quantum.plain,
+                            child: DescriptionText(
+                              quantum.latex,
+                              maxLines: 1,
+                              semanticsLabel: quantum.plain,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: palette.textSecondary),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 3),
                         Wrap(
                           spacing: 5,
                           runSpacing: 3,
                           children: [
+                            if (widget.status != null &&
+                                widget.status!.isNotEmpty)
+                              ParticleStatusChip(widget.status),
                             MetaChip(
                               type.label(strings.lang),
                               tone: type.group == PropertyGroup.search

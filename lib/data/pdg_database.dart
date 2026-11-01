@@ -295,6 +295,30 @@ class PdgDatabase {
     return [for (final row in rows) Particle(row)];
   }
 
+  /// Particles for several entries in one query per parameter chunk.
+  ///
+  /// Used by the catalog so a compact quantum-number line does not cost one
+  /// SQL query per tile.
+  Future<Map<int, List<Particle>>> particlesForEntries(
+    List<int> entryIds,
+  ) async {
+    if (entryIds.isEmpty) return const <int, List<Particle>>{};
+    final result = <int, List<Particle>>{};
+    final ids = entryIds.toSet().toList(growable: false);
+    for (final chunk in _chunk(ids, 400)) {
+      final rows = await executor.select(
+        'SELECT * FROM pdgparticle WHERE pdgid_id IN (${_placeholders(chunk.length)}) '
+        'ORDER BY pdgid_id, id',
+        chunk,
+      );
+      for (final row in rows) {
+        final entryId = asInt(row['pdgid_id'])!;
+        (result[entryId] ??= <Particle>[]).add(Particle(row));
+      }
+    }
+    return result;
+  }
+
   Future<List<Particle>> particlesForItem(int itemId) async {
     final rows = await executor.select(
       'SELECT * FROM pdgparticle WHERE pdgitem_id = ? ORDER BY id',

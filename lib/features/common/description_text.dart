@@ -23,6 +23,7 @@ class DescriptionText extends StatelessWidget {
     this.selectable = false,
     this.citationIds = const <String, int>{},
     this.onCitationTap,
+    this.semanticsLabel,
   });
 
   final String text;
@@ -32,6 +33,9 @@ class DescriptionText extends StatelessWidget {
   final bool selectable;
   final Map<String, int> citationIds;
   final ValueChanged<int>? onCitationTap;
+
+  /// Spoken form when [text] contains TeX. Defaults to the source text.
+  final String? semanticsLabel;
 
   static final RegExp _citationPattern = RegExp(
     r"\b[A-Z][A-Za-z0-9&.'’\-]*(?:\s+(?:AND|&|ET\s+AL\.?|[A-Z][A-Za-z0-9&.'’\-]*))*\s+(?:19|20)\d{2}[A-Z]?\b",
@@ -67,7 +71,7 @@ class DescriptionText extends StatelessWidget {
         ? SelectableText.rich(TextSpan(children: spans), style: base)
         : SelectionArea(child: body);
     return Semantics(
-      label: text,
+      label: semanticsLabel ?? text,
       child: ExcludeSemantics(child: rich),
     );
   }

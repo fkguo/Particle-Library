@@ -11,6 +11,7 @@ import '../../data/pdg_notes.dart';
 import '../../domain/aliases.dart';
 import '../../domain/display.dart';
 import '../../domain/labels.dart';
+import '../../domain/quantum_numbers.dart';
 import '../../domain/reference_title.dart';
 import '../../domain/models.dart';
 import '../../domain/views.dart';
@@ -22,6 +23,7 @@ import '../common/pdg_live_text.dart';
 import '../common/display_value.dart';
 import '../common/favorite_button.dart';
 import '../common/math_text.dart';
+import '../common/particle_status_chip.dart';
 import '../common/page.dart';
 import '../common/page_outline.dart';
 import '../common/raw_fields.dart';
@@ -31,6 +33,8 @@ import '../reviews/reviews_page.dart';
 import '../decay/decay_catalog.dart';
 import '../notes/notes_anchor.dart';
 import '../notes/notes_entity.dart';
+
+typedef _ParticleLoad = ({ParticleView view, PdgParticleStatus? status});
 
 class ParticlePage extends StatefulWidget {
   const ParticlePage({super.key, required this.entry});
@@ -42,7 +46,7 @@ class ParticlePage extends StatefulWidget {
 }
 
 class _ParticlePageState extends State<ParticlePage> {
-  late Future<ParticleView> _future;
+  late Future<_ParticleLoad> _future;
 
   bool _initialized = false;
 
@@ -51,12 +55,19 @@ class _ParticlePageState extends State<ParticlePage> {
     super.didChangeDependencies();
     if (_initialized) return;
     _initialized = true;
-    _future = AppScope.of(context).repository.loadParticle(widget.entry);
+    _future = _load();
+  }
+
+  Future<_ParticleLoad> _load() async {
+    final viewFuture = AppScope.of(context).repository
+        .loadParticle(widget.entry);
+    final statusFuture = PdgNotes.statusFor(widget.entry.pdgid);
+    return (view: await viewFuture, status: await statusFuture);
   }
 
   void _retry() {
     setState(() {
-      _future = AppScope.of(context).repository.loadParticle(widget.entry);
+      _future = _load();
     });
   }
 
@@ -92,19 +103,21 @@ class _ParticlePageState extends State<ParticlePage> {
           compact: true,
         ),
       ],
-      body: AsyncView<ParticleView>(
+      body: AsyncView<_ParticleLoad>(
         future: _future,
         onRetry: _retry,
-        builder: (context, view) => _ParticleBody(view: view),
+        builder: (context, data) =>
+            _ParticleBody(view: data.view, status: data.status),
       ),
     );
   }
 }
 
 class _ParticleBody extends StatefulWidget {
-  const _ParticleBody({required this.view});
+  const _ParticleBody({required this.view, this.status});
 
   final ParticleView view;
+  final PdgParticleStatus? status;
 
   @override
   State<_ParticleBody> createState() => _ParticleBodyState();
@@ -287,6 +300,8 @@ class _ParticleBodyState extends State<_ParticleBody> {
                 ].join(' · '),
               ),
               meta: [
+                if (widget.status != null && widget.status!.isNotEmpty)
+                  ParticleStatusChip(widget.status),
                 if (category != null)
                   MetaChip(category.label(strings.lang), tone: BadgeTone.info),
                 for (final alias in aliases)
@@ -390,7 +405,7 @@ class _ParticleBodyState extends State<_ParticleBody> {
                   horizontal: Insets.l,
                   vertical: Insets.s,
                 ),
-                child: _IdentityList(view: view),
+                child: _IdentityList(view: view, status: widget.status),
               ),
               if (view.particles.length > 1)
                 Padding(
@@ -519,18 +534,25 @@ class _ParticleBodyState extends State<_ParticleBody> {
 
   String _copyParticle(BuildContext context, ParticleView view) {
     final strings = AppScope.of(context).strings;
+    String particleLine(Particle particle) {
+      final quantum = ParticleQuantumNumbers.fromParticle(particle);
+      return [
+        particle.name,
+        'charge ${chargeWithUnit(particle.charge)}',
+        ccTypeLabel(particle.ccType, strings.lang),
+        if (particle.mcid != null) 'MC ${particle.mcid}',
+        if (quantum.isNotEmpty) quantum.plain,
+      ].join(' · ');
+    }
+
     final lines = <String>[
       view.entry.description,
       for (final alias in aliasesForPdgid(view.entry.pdgid))
         '${strings.particleAlsoKnownAs(alias)} (${strings.particleAliasSource})',
       'PDG ${view.entry.pdgid} · PDG ${view.currentEdition}',
-      for (final particle in view.particles)
-        [
-          particle.name,
-          'charge ${chargeWithUnit(particle.charge)}',
-          ccTypeLabel(particle.ccType, strings.lang),
-          if (particle.mcid != null) 'MC ${particle.mcid}',
-        ].join(' · '),
+      if (widget.status != null && widget.status!.isNotEmpty)
+        'PDG status: ${widget.status!.marker}',
+      for (final particle in view.particles) particleLine(particle),
       for (final property in view.properties)
         if (view.summaryFor(property.id).preferred != null)
           '${property.description}: ${DisplayQuantity.fromSummary(view.summaryFor(property.id).preferred!).text}',
@@ -540,70 +562,63 @@ class _ParticleBodyState extends State<_ParticleBody> {
 }
 
 class _IdentityList extends StatelessWidget {
-  const _IdentityList({required this.view});
+  const _IdentityList({required this.view, this.status});
 
   final ParticleView view;
+  final PdgParticleStatus? status;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppScope.of(context).strings;
     final palette = context.palette;
+    Widget card(Particle particle) {
+      final quantum = ParticleQuantumNumbers.fromParticle(particle);
+      return Container(
+        padding: const EdgeInsets.all(Insets.m),
+        decoration: BoxDecoration(
+          color: palette.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: palette.divider),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ParticleSymbol(particle.name, fontSize: 21),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 5,
+              runSpacing: 3,
+              children: [
+                if (status != null && status!.isNotEmpty)
+                  ParticleStatusChip(status),
+                MetaChip(
+                  '${strings.particleCharge} ${chargeWithUnit(particle.charge)}',
+                  tone: BadgeTone.info,
+                ),
+                MetaChip(ccTypeLabel(particle.ccType, strings.lang)),
+                if (particle.mcid != null) MetaChip('MC ${particle.mcid}'),
+              ],
+            ),
+            if (quantum.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              DescriptionText(
+                quantum.latex,
+                maxLines: 2,
+                semanticsLabel: quantum.plain,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: palette.textSecondary),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
     return Wrap(
       spacing: Insets.s,
       runSpacing: Insets.s,
-      children: [
-        for (final particle in view.particles)
-          Container(
-            padding: const EdgeInsets.all(Insets.m),
-            decoration: BoxDecoration(
-              color: palette.surface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: palette.divider),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ParticleSymbol(particle.name, fontSize: 21),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 5,
-                  runSpacing: 3,
-                  children: [
-                    MetaChip(
-                      '${strings.particleCharge} ${chargeWithUnit(particle.charge)}',
-                      tone: BadgeTone.info,
-                    ),
-                    MetaChip(ccTypeLabel(particle.ccType, strings.lang)),
-                    if (particle.mcid != null) MetaChip('MC ${particle.mcid}'),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 5,
-                  runSpacing: 3,
-                  children: [
-                    if (particle.quantumJ != null &&
-                        particle.quantumJ!.isNotEmpty)
-                      MetaChip('J = ${particle.quantumJ}'),
-                    if (particle.quantumP != null &&
-                        particle.quantumP!.isNotEmpty)
-                      MetaChip('P = ${particle.quantumP}'),
-                    if (particle.quantumC != null &&
-                        particle.quantumC!.isNotEmpty)
-                      MetaChip('C = ${particle.quantumC}'),
-                    if (particle.quantumI != null &&
-                        particle.quantumI!.isNotEmpty)
-                      MetaChip('I = ${particle.quantumI}'),
-                    if (particle.quantumG != null &&
-                        particle.quantumG!.isNotEmpty)
-                      MetaChip('G = ${particle.quantumG}'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-      ],
+      children: [for (final particle in view.particles) card(particle)],
     );
   }
 }

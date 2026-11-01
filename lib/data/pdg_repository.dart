@@ -242,5 +242,22 @@ class PdgRepository {
     int limit = 50,
   }) => db.measurementsForReferenceSeries(referenceId, entryId, limit: limit);
 
-  Future<List<CatalogRoot>> catalog() => db.catalogRoots();
+  Future<CatalogData> catalog() async {
+    final roots = await db.catalogRoots();
+    final particles = await db.particlesForEntries([
+      for (final root in roots) root.entry.id,
+    ]);
+    return CatalogData(roots: roots, particlesByEntry: particles);
+  }
+}
+
+/// Catalog roots plus the particle identities needed by their compact rows.
+class CatalogData {
+  const CatalogData({required this.roots, required this.particlesByEntry});
+
+  final List<CatalogRoot> roots;
+  final Map<int, List<Particle>> particlesByEntry;
+
+  List<Particle> particlesFor(CatalogRoot root) =>
+      particlesByEntry[root.entry.id] ?? const <Particle>[];
 }
