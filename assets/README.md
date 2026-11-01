@@ -37,10 +37,11 @@ databases:
   - 299 entry summaries, 39 of them with old-name (`was`) notes;
   - 209 pdgLive-cited references, all with INSPIRE record IDs and cite keys
     (266 citation links; 202 of the references also carry a DOI);
-  - 99 entry-to-review links for 79 entries: 67 from the pdgLive review tables
-    plus 32 review titles named explicitly in a summary;
-  - 17 summary “See also” particle links in `pdg_note_see_also` (for example
-    M111 → M164, `pi_1(1600)`);
+  - 130 entry-to-review links for 106 entries: 67 from the pdgLive review
+    tables plus 63 review titles or shorthands named in a summary;
+  - 19 summary “See also” particle links in `pdg_note_see_also`, with the raw
+    LaTeX fragment for inline linking (for example M111 → M164,
+    `pi_1(1600)`);
   - 341 particle-status marks: 189 1–4 star ratings from the pdgLive baryon
     group pages and 152 established bullets (`•`) from the meson group pages.
     The meson pages do not publish a star count, so their bullet is stored as

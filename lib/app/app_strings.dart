@@ -317,8 +317,6 @@ class AppStrings {
   );
   String get particleStatusEstablished =>
       _t('PDG 状态：•（已确立）', 'PDG status: • (established)');
-  String get seeAlso => _t('参见', 'See also');
-  String get relatedReview => _t('相关综述', 'Related review');
   String get particleProperties => _t('性质', 'Properties');
   String get particleSummarySection => _t('摘要', 'Summary');
   String get particleDecays => _t('衰变', 'Decays');

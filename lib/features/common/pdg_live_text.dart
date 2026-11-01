@@ -40,15 +40,46 @@ class PdgCitation {
   final PdgNoteReference? reference;
 }
 
-/// Renders a pdgLive note: `$...$` LaTeX becomes typeset math, and citation
-/// labels become links (local PDG reference first, INSPIRE otherwise).
+/// A link attached to a plain phrase or a typeset math segment in a note.
+@immutable
+class PdgLink {
+  const PdgLink({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+}
+
+/// A link attached to one occurrence of a math body in a note.
+///
+/// The same formula can occur earlier in the prose (for example the particle
+/// name is mentioned once in the explanation and again in "See also"). Linking
+/// every occurrence would create duplicate links; the default links the last
+/// occurrence, which is the reference clause.
+@immutable
+class PdgMathLink {
+  const PdgMathLink({
+    required this.label,
+    required this.onTap,
+    this.occurrence = -1,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+
+  /// Zero-based occurrence to link; -1 links the last occurrence.
+  final int occurrence;
+}
+
+/// Renders a pdgLive note: `$...$` LaTeX becomes typeset math, citation
+/// labels become links, and explicit review/particle phrases can be linked.
 class PdgLiveText extends StatelessWidget {
   const PdgLiveText(
     this.text, {
     super.key,
     this.style,
     this.citations = const <String, PdgCitation>{},
-    this.links = const <String, VoidCallback>{},
+    this.links = const <String, PdgLink>{},
+    this.mathLinks = const <String, PdgMathLink>{},
     this.selectable = true,
   });
 
@@ -56,8 +87,11 @@ class PdgLiveText extends StatelessWidget {
   final TextStyle? style;
   final Map<String, PdgCitation> citations;
 
-  /// Plain-text phrases that should open a page, keyed by the exact phrase.
-  final Map<String, VoidCallback> links;
+  /// Plain-text phrase -> link.
+  final Map<String, PdgLink> links;
+
+  /// Raw LaTeX body (without the surrounding dollars) -> link.
+  final Map<String, PdgMathLink> mathLinks;
   final bool selectable;
 
   @override
@@ -66,6 +100,11 @@ class PdgLiveText extends StatelessWidget {
     final base =
         (style ?? Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
             .copyWith(color: style?.color ?? palette.textPrimary);
+    final mathCounts = <String, int>{
+      for (final body in mathLinks.keys)
+        body: text.split('\$$body\$').length - 1,
+    };
+    final mathSeen = <String, int>{};
     final spans = <InlineSpan>[];
     var index = 0;
     while (index < text.length) {
@@ -83,22 +122,65 @@ class PdgLiveText extends StatelessWidget {
         break;
       }
       final body = text.substring(start + 1, end);
+      final seen = mathSeen[body] ?? 0;
+      mathSeen[body] = seen + 1;
+      final total = mathCounts[body] ?? 0;
+      final mathLink = mathLinks[body];
+      final active =
+          mathLink != null &&
+          (mathLink.occurrence < 0
+              ? seen == total - 1
+              : seen == mathLink.occurrence);
+      Widget math = Math.tex(
+        normalizePdgLiveMath(body),
+        mathStyle: MathStyle.text,
+        textStyle: active ? base.copyWith(color: palette.primary) : base,
+        onErrorFallback: (_) => Text(
+          body,
+          style: base,
+          // Fall back to the source when flutter_math cannot parse it.
+        ),
+      );
+      if (active) {
+        math = Semantics(
+          button: true,
+          label: mathLink.label,
+          child: Tooltip(
+            message: mathLink.label,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: mathLink.onTap,
+                child: SelectionContainer.disabled(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: palette.primary.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 1),
+                      child: math,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      } else {
+        math = SelectionContainer.disabled(child: math);
+      }
       spans.add(
         WidgetSpan(
           // Same flutter_math_fork RenderLine limitation as DescriptionText:
           // baseline alignment asks for computeDryBaseline, which RenderLine
           // does not implement. Keep inline math on middle alignment.
           alignment: PlaceholderAlignment.middle,
-          child: Math.tex(
-            normalizePdgLiveMath(body),
-            mathStyle: MathStyle.text,
-            textStyle: base,
-            onErrorFallback: (_) => Text(
-              body,
-              style: base,
-              // Fall back to the source when flutter_math cannot parse it.
-            ),
-          ),
+          child: math,
         ),
       );
       index = end + 1;
@@ -131,8 +213,8 @@ class PdgLiveText extends StatelessWidget {
         }
       }
       if (hit != null) {
-        final link = links[hit];
-        if (link != null) {
+        final pageLink = links[hit];
+        if (pageLink != null) {
           spans.add(
             TextSpan(
               text: hit,
@@ -141,7 +223,7 @@ class PdgLiveText extends StatelessWidget {
                 decoration: TextDecoration.underline,
                 decorationColor: palette.primary.withValues(alpha: 0.4),
               ),
-              recognizer: TapGestureRecognizer()..onTap = link,
+              recognizer: TapGestureRecognizer()..onTap = pageLink.onTap,
             ),
           );
         } else {

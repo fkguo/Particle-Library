@@ -45,7 +45,7 @@ void main() {
         home: Scaffold(
           body: PdgLiveText(
             'See the review on "$title".',
-            links: {title: () => tapped = true},
+            links: {title: PdgLink(label: title, onTap: () => tapped = true)},
           ),
         ),
       ),
@@ -62,6 +62,34 @@ void main() {
     });
     expect(recognizer, isNotNull);
     recognizer!.onTap!();
+    expect(tapped, isTrue);
+  });
+
+  testWidgets('a See also math fragment becomes a tappable link', (
+    tester,
+  ) async {
+    const body = r'{{\mathit \pi}_{{{1}}}{(1600)}}';
+    var tapped = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: PdgLiveText(
+            'The state is \$$body\$. See also \$$body\$.',
+            mathLinks: {
+              body: PdgMathLink(
+                label: 'pi_1(1600)',
+                onTap: () => tapped = true,
+              ),
+            },
+          ),
+        ),
+      ),
+    );
+    expect(find.byType(Math), findsNWidgets(2));
+    await tester.tap(find.byType(Math).first);
+    expect(tapped, isFalse);
+    await tester.tap(find.byType(Math).last);
     expect(tapped, isTrue);
   });
 

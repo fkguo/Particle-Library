@@ -53,6 +53,26 @@ class SummaryTest(unittest.TestCase):
             [r"${{\mathit \pi}_{{{1}}}{(1600)}}$"],
         )
 
+    def test_review_shorthand_alias_matches(self) -> None:
+        links = LINKS.review_links(
+            "See the review on non-q qbar states.", []
+        )
+        self.assertEqual(
+            links, [("rpp2026-rev-non-qqbar-mesons.pdf", "nonqqbarstates")]
+        )
+
+    def test_historical_particle_name_maps_to_current_root(self) -> None:
+        math = r"{{\mathit P}_{{{c}}}{(4450)}^{+}}"
+        links = LINKS.see_also_links(
+            "B171",
+            f"See also the ${math}$.",
+            {},
+            {"B171": "P_c_cbar(4380)+", "B172": "P_c_cbar(4457)+"},
+        )
+        self.assertEqual(
+            links, [("B172", "P_c_cbar(4457)+", math)]
+        )
+
 
 class ReviewTitleTest(unittest.TestCase):
     def test_short_section_headings_are_not_article_titles(self) -> None:
@@ -76,7 +96,10 @@ class ReviewTitleTest(unittest.TestCase):
             titles = LINKS.review_titles(path)
         finally:
             pathlib.Path(path).unlink()
-        self.assertEqual(titles, [("Spectroscopy of Light Meson Resonances", "c.pdf")])
+        self.assertEqual(
+            [(title, file) for _, file, title in titles],
+            [("Spectroscopy of Light Meson Resonances", "c.pdf")],
+        )
 
 
 if __name__ == "__main__":
