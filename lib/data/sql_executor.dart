@@ -48,7 +48,7 @@ class DirectSqlExecutor implements SqlExecutor {
 
   @override
   Future<void> dispose() async {
-    _db.dispose();
+    _db.close();
   }
 }
 
@@ -198,7 +198,7 @@ void _sqlWorkerMain(List<Object?> args) {
   } catch (error) {
     readyPort.send({'ok': false, 'error': '$error'});
     requests.close();
-    db?.dispose();
+    db?.close();
     return;
   }
 
@@ -208,7 +208,7 @@ void _sqlWorkerMain(List<Object?> args) {
     final id = map['id'];
     if (map['close'] == true) {
       requests.close();
-      db?.dispose();
+      db?.close();
       Isolate.exit();
     }
     if (id is! int) return;
@@ -224,6 +224,6 @@ void _sqlWorkerMain(List<Object?> args) {
       readyPort.send({'id': id, 'ok': false, 'error': '$error'});
     }
   }, onDone: () {
-    db?.dispose();
+    db?.close();
   });
 }

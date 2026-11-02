@@ -364,7 +364,7 @@ class PdgNotes {
           seeAlso: seeAlso,
         );
       } finally {
-        database.dispose();
+        database.close();
       }
     } catch (error) {
       // The notes are an enhancement: a missing asset must not break a page.

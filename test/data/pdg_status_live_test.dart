@@ -134,7 +134,7 @@ void main() {
           .first['n'];
       expect(sourceMismatch, 0);
     } finally {
-      database.dispose();
+      database.close();
     }
   });
 
@@ -179,7 +179,7 @@ void main() {
         greaterThanOrEqualTo(67),
       );
     } finally {
-      database.dispose();
+      database.close();
     }
   });
 }

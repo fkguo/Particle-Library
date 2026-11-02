@@ -34,7 +34,7 @@ PDG's terms. The app stores cached copies locally for reading only.
 ## Third-party packages
 
 - Flutter/Dart SDK: BSD-3-Clause
-- `sqlite3`, `sqlite3_flutter_libs`, `pdfrx`, `pdfrx_engine`, `pdfium_flutter`: MIT
+- `sqlite3`, `pdfrx`, `pdfrx_engine`, `pdfium_flutter`: MIT
 - `flutter_math_fork`: Apache-2.0; bundled KaTeX fonts: MIT
 - `flutter_svg`: MIT
 - `path_provider`, `url_launcher`, `file_selector`, `crypto`: BSD-3-Clause

@@ -159,7 +159,7 @@ class NotesStore {
       return store;
     } catch (_) {
       try {
-        db.dispose();
+        db.close();
       } catch (_) {}
       rethrow;
     }
@@ -1525,7 +1525,7 @@ class NotesStore {
       _db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
     } catch (_) {}
     try {
-      _db.dispose();
+      _db.close();
     } catch (_) {}
   }
 
@@ -1876,7 +1876,7 @@ CREATE INDEX idx_note_collections_collection
       throw _mapSqlite(error, '校验备份文件', fallback: NotesErrorCode.backupFailed);
     } finally {
       try {
-        backup?.dispose();
+        backup?.close();
       } catch (_) {}
     }
   }

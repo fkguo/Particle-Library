@@ -18,7 +18,7 @@ smoke test on that platform.
 ## Shared code that is already portable
 
 - Flutter/Dart UI, search, notes and PDF logic;
-- `sqlite3_flutter_libs`, `pdfrx`, `file_selector`, `url_launcher`,
+- `sqlite3` (native assets/build hooks), `pdfrx`, `file_selector`, `url_launcher`,
   `path_provider` and `flutter_svg` all publish multiple platform
   implementations;
 - keyboard shortcuts use both Command and Control;
