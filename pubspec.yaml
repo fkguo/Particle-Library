@@ -17,7 +17,7 @@ dependencies:
   sqlite3: ^2.9.4
   sqlite3_flutter_libs: ^0.5.42
   url_launcher: ^6.3.1
-  pdfrx: ^2.6.5
+  pdfrx: ^2.11.0
   file_selector: ^1.1.0
   flutter_svg: ^2.3.0
   archive: ^4.5.2
