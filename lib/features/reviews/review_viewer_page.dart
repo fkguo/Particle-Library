@@ -2513,6 +2513,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
                 controller: _searchController,
                 focusNode: _searchFocus,
                 style: Theme.of(context).textTheme.bodySmall,
+                textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: strings.reviewSearchHint,
@@ -2525,6 +2526,14 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
                   } else {
                     searcher.startTextSearch(value, searchImmediately: true);
                   }
+                },
+                // A custom onEditingComplete replaces TextField's default
+                // submit path, so advance here and keep focus for the next
+                // Enter instead of relying on onSubmitted.
+                onEditingComplete: () {
+                  if (_searchController.text.trim().isEmpty) return;
+                  unawaited(searcher.goToNextMatch());
+                  _searchFocus.requestFocus();
                 },
               ),
             ),
