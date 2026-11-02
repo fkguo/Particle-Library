@@ -30,6 +30,7 @@ import '../common/snack_bars.dart';
 import '../notes/note_editor.dart';
 import '../notes/note_tag_field.dart';
 import '../notes/notes_format.dart';
+import 'page_number_dialog.dart';
 import 'reading_history.dart';
 import 'region_export.dart';
 import 'review_index.dart';
@@ -2571,34 +2572,15 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
   Future<void> _openPageDialog() async {
     if (!_controller.isReady) return;
     final strings = AppScope.of(context).strings;
-    final controller = TextEditingController(
-      text: '${_currentPage ?? _controller.pageNumber ?? 1}',
-    );
     final page = await showDialog<int>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(strings.reviewPageNumber),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          onSubmitted: (value) =>
-              Navigator.of(dialogContext).pop(int.tryParse(value)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(strings.commonCancel),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(int.tryParse(controller.text)),
-            child: Text(strings.commonGo),
-          ),
-        ],
+      builder: (dialogContext) => PageNumberDialog(
+        initialPage: _currentPage ?? _controller.pageNumber ?? 1,
+        title: strings.reviewPageNumber,
+        cancelLabel: strings.commonCancel,
+        goLabel: strings.commonGo,
       ),
     );
-    controller.dispose();
     if (page == null || !mounted) return;
     if (page < 1 || page > _controller.pageCount) return;
     _rememberForBack();
