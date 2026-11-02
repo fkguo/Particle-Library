@@ -1,5 +1,5 @@
 {
-  "version": "0.2.1",
-  "url": "https://github.com/fkguo/Particle-Library/releases/tag/v0.2.1",
-  "notes": "Particle Library 0.2.1 — offline full-text search across all 121 PDG Review PDFs, a persistent review download progress dialog, and a single-source app version."
+  "version": "0.2.2",
+  "url": "https://github.com/fkguo/Particle-Library/releases/tag/v0.2.2",
+  "notes": "Particle Library 0.2.2 — inline PDG Live review and See also links, a single catalog expand arrow, and a fix for the blank catalog while scrolling."
 }
