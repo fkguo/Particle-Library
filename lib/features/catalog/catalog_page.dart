@@ -376,6 +376,11 @@ class _CatalogRootTileState extends State<_CatalogRootTile> {
                       ],
                     ),
                   ),
+                  // One trailing affordance per row: expandable rows use the
+                  // expand/collapse button; leaf rows show a passive chevron
+                  // that matches other "tap for details" rows. The whole card
+                  // stays the only tap target, so the chevron carries no
+                  // separate semantics or action.
                   if (widget.root.childCount > 0)
                     CatalogExpandButton(
                       expanded: _expanded,
@@ -383,6 +388,13 @@ class _CatalogRootTileState extends State<_CatalogRootTile> {
                           ? strings.commonShowLess
                           : strings.commonShowMore,
                       onPressed: _toggle,
+                    )
+                  else
+                    const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: ExcludeSemantics(
+                        child: Icon(Icons.chevron_right, size: 18),
+                      ),
                     ),
                 ],
               ),
