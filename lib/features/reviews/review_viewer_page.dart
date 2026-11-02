@@ -31,6 +31,7 @@ import '../notes/note_editor.dart';
 import '../notes/note_tag_field.dart';
 import '../notes/notes_format.dart';
 import 'page_number_dialog.dart';
+import 'review_search_shortcuts.dart';
 import 'reading_history.dart';
 import 'region_export.dart';
 import 'review_index.dart';
@@ -108,6 +109,8 @@ class ReviewViewerPage extends StatefulWidget
 
 class _ReviewViewerPageState extends State<ReviewViewerPage>
     with WidgetsBindingObserver {
+  static const MethodChannel _reviewMenuChannel = MethodChannel('pdg.review');
+
   static const bool _traceEnabled =
       kDebugMode || bool.fromEnvironment('PDG_REVIEW_TRACE');
 
@@ -205,6 +208,19 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _controller.addListener(_onViewerChanged);
+    _reviewMenuChannel.setMethodCallHandler(_handleReviewMenuCall);
+  }
+
+  Future<void> _handleReviewMenuCall(MethodCall call) async {
+    if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
+    switch (call.method) {
+      case 'find':
+        _focusSearchShortcut();
+      case 'findNext':
+        _nextSearchShortcut();
+      case 'findPrevious':
+        _previousSearchShortcut();
+    }
   }
 
   @override
@@ -250,6 +266,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
 
   @override
   void dispose() {
+    _reviewMenuChannel.setMethodCallHandler(null);
     WidgetsBinding.instance.removeObserver(this);
     _notesChanges?.removeListener(_onNotesChanged);
     _controller.removeListener(_onViewerChanged);
@@ -2495,6 +2512,46 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
     setState(() => _searchOpen = false);
   }
 
+  void _focusSearchShortcut() {
+    if (!_searchOpen) {
+      _toggleSearch();
+      return;
+    }
+    _searchFocus.requestFocus();
+    final text = _searchController.text;
+    _searchController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: text.length,
+    );
+  }
+
+  void _nextSearchShortcut() {
+    if (!_searchOpen) {
+      _focusSearchShortcut();
+      return;
+    }
+    final searcher = _searcher;
+    if (searcher == null) return;
+    unawaited(searcher.goToNextMatch());
+  }
+
+  void _previousSearchShortcut() {
+    if (!_searchOpen) {
+      _focusSearchShortcut();
+      return;
+    }
+    final searcher = _searcher;
+    if (searcher == null) return;
+    unawaited(searcher.goToPrevMatch());
+  }
+
+  String _searchShortcutLabel(String key, {bool shift = false}) {
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      return '${shift ? '⇧' : ''}⌘$key';
+    }
+    return '${shift ? 'Shift+' : ''}Ctrl+$key';
+  }
+
   Widget _searchBar(BuildContext context) {
     final strings = AppScope.of(context).strings;
     final searcher = _searcher;
@@ -2509,32 +2566,38 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
         child: Row(
           children: [
             Expanded(
-              child: TextField(
-                controller: _searchController,
-                focusNode: _searchFocus,
-                style: Theme.of(context).textTheme.bodySmall,
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: strings.reviewSearchHint,
-                  prefixIcon: const Icon(Icons.search, size: 17),
-                  border: InputBorder.none,
+              child: CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+                      _previousSearchShortcut,
+                },
+                child: TextField(
+                  controller: _searchController,
+                  focusNode: _searchFocus,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: strings.reviewSearchHint,
+                    prefixIcon: const Icon(Icons.search, size: 17),
+                    border: InputBorder.none,
+                  ),
+                  onChanged: (value) {
+                    if (value.trim().isEmpty) {
+                      searcher.resetTextSearch();
+                    } else {
+                      searcher.startTextSearch(value, searchImmediately: true);
+                    }
+                  },
+                  // A custom onEditingComplete replaces TextField's default
+                  // submit path, so advance here and keep focus for the next
+                  // Enter instead of relying on onSubmitted.
+                  onEditingComplete: () {
+                    if (_searchController.text.trim().isEmpty) return;
+                    unawaited(searcher.goToNextMatch());
+                    _searchFocus.requestFocus();
+                  },
                 ),
-                onChanged: (value) {
-                  if (value.trim().isEmpty) {
-                    searcher.resetTextSearch();
-                  } else {
-                    searcher.startTextSearch(value, searchImmediately: true);
-                  }
-                },
-                // A custom onEditingComplete replaces TextField's default
-                // submit path, so advance here and keep focus for the next
-                // Enter instead of relying on onSubmitted.
-                onEditingComplete: () {
-                  if (_searchController.text.trim().isEmpty) return;
-                  unawaited(searcher.goToNextMatch());
-                  _searchFocus.requestFocus();
-                },
               ),
             ),
             AnimatedBuilder(
@@ -2558,12 +2621,14 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
               },
             ),
             IconButton(
-              tooltip: strings.reviewPreviousMatch,
+              tooltip:
+                  '${strings.reviewPreviousMatch} (${_searchShortcutLabel('G', shift: true)})',
               onPressed: () => unawaited(searcher.goToPrevMatch()),
               icon: const Icon(Icons.keyboard_arrow_up, size: 18),
             ),
             IconButton(
-              tooltip: strings.reviewNextMatch,
+              tooltip:
+                  '${strings.reviewNextMatch} (${_searchShortcutLabel('G')})',
               onPressed: () => unawaited(searcher.goToNextMatch()),
               icon: const Icon(Icons.keyboard_arrow_down, size: 18),
             ),
@@ -3162,7 +3227,7 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
     final strings = AppScope.of(context).strings;
     final layout = context.layoutClass;
     final expandedLayout = layout == LayoutClass.expanded;
-    return Theme(
+    final page = Theme(
       data: _pdfDarkMode ? AppTheme.dark() : Theme.of(context),
       child: Scaffold(
         key: _scaffoldKey,
@@ -3207,7 +3272,8 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
                     selectedIcon: const Icon(Icons.vertical_split, size: 20),
                   ),
                   IconButton(
-                    tooltip: strings.reviewSearch,
+                    tooltip:
+                        '${strings.reviewSearch} (${_searchShortcutLabel('F')})',
                     onPressed: _toggleSearch,
                     icon: const Icon(Icons.search, size: 20),
                   ),
@@ -3453,6 +3519,15 @@ class _ReviewViewerPageState extends State<ReviewViewerPage>
           ],
         ),
       ),
+    );
+    return ReviewSearchShortcuts(
+      isMac: defaultTargetPlatform == TargetPlatform.macOS,
+      searchOpen: _searchOpen,
+      onFind: _focusSearchShortcut,
+      onNext: _nextSearchShortcut,
+      onPrevious: _previousSearchShortcut,
+      onClose: _closeSearch,
+      child: page,
     );
   }
 

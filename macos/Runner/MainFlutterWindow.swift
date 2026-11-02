@@ -3,6 +3,7 @@ import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
   private var menuChannel: FlutterMethodChannel?
+  private var reviewChannel: FlutterMethodChannel?
   private var zoteroChannel: FlutterMethodChannel?
 
   override func awakeFromNib() {
@@ -16,6 +17,12 @@ class MainFlutterWindow: NSWindow {
       binaryMessenger: flutterViewController.engine.binaryMessenger
     )
     self.menuChannel = menuChannel
+
+    let reviewChannel = FlutterMethodChannel(
+      name: "pdg.review",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    self.reviewChannel = reviewChannel
 
     super.awakeFromNib()
 
@@ -126,5 +133,20 @@ class MainFlutterWindow: NSWindow {
 
   @IBAction func showSettings(_ sender: Any?) {
     menuChannel?.invokeMethod("showSettings", arguments: nil)
+  }
+
+  // The standard Edit > Find menu items are handled by AppKit before Flutter
+  // sees their key equivalents. Forward them to the active PDF reader instead
+  // of letting performFindPanelAction: fall through to a no-op.
+  @IBAction func findInReader(_ sender: Any?) {
+    reviewChannel?.invokeMethod("find", arguments: nil)
+  }
+
+  @IBAction func findNextInReader(_ sender: Any?) {
+    reviewChannel?.invokeMethod("findNext", arguments: nil)
+  }
+
+  @IBAction func findPreviousInReader(_ sender: Any?) {
+    reviewChannel?.invokeMethod("findPrevious", arguments: nil)
   }
 }
