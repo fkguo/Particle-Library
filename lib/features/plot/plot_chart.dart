@@ -279,6 +279,20 @@ class _PlotChartState extends State<PlotChart> {
   int? _hovered;
 
   @override
+  void didUpdateWidget(covariant PlotChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldSeries = oldWidget.data.series.isEmpty
+        ? null
+        : oldWidget.data.series.first;
+    final newSeries = widget.data.series.isEmpty
+        ? null
+        : widget.data.series.first;
+    // Switching PDG Average/Fit changes the number of points and the years;
+    // a selected index from the previous series must not leak into this one.
+    if (!identical(oldSeries, newSeries)) _hovered = null;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final palette = context.palette;
     final strings = AppScope.of(context).strings;
@@ -321,33 +335,44 @@ class _PlotChartState extends State<PlotChart> {
                       setState(() => _hovered = null);
                     }
                   },
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: _PlotPainter(
-                            data: widget.data,
-                            line: palette.primary,
-                            current: palette.accent,
-                            grid: palette.divider,
-                            text: palette.textSecondary,
-                            strong: palette.textPrimary,
-                            unit: '',
-                            textScaler: MediaQuery.textScalerOf(context),
-                            xLabel: strings.seriesTrendXAxis,
-                            hoveredIndex: _hovered,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapUp: (details) {
+                      final next = frame.nearestX(
+                        widget.data.points,
+                        details.localPosition.dx,
+                      );
+                      if (!mounted) return;
+                      setState(() => _hovered = next == _hovered ? null : next);
+                    },
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _PlotPainter(
+                              data: widget.data,
+                              line: palette.primary,
+                              current: palette.accent,
+                              grid: palette.divider,
+                              text: palette.textSecondary,
+                              strong: palette.textPrimary,
+                              unit: '',
+                              textScaler: MediaQuery.textScalerOf(context),
+                              xLabel: strings.seriesTrendXAxis,
+                              hoveredIndex: _hovered,
+                            ),
                           ),
                         ),
-                      ),
-                      if (_hovered != null)
-                        _HoverCard(
-                          data: widget.data,
-                          index: _hovered!,
-                          frame: frame,
-                          size: size,
-                        ),
-                    ],
+                        if (_hovered != null)
+                          _HoverCard(
+                            data: widget.data,
+                            index: _hovered!,
+                            frame: frame,
+                            size: size,
+                          ),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -477,6 +502,22 @@ class _PlotFrame {
       }
     }
     return best < 0 ? null : best;
+  }
+
+  /// Touch target for a trend chart: a tap anywhere in the plot selects the
+  /// nearest year, without requiring a pixel-perfect hit on the marker.
+  int? nearestX(List<PlotPoint> points, double localX) {
+    if (points.isEmpty) return null;
+    var best = 0;
+    var bestDistance = (point(points.first).dx - localX).abs();
+    for (var i = 1; i < points.length; i++) {
+      final distance = (point(points[i]).dx - localX).abs();
+      if (distance < bestDistance) {
+        best = i;
+        bestDistance = distance;
+      }
+    }
+    return best;
   }
 }
 
