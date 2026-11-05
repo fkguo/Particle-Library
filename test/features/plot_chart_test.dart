@@ -140,6 +140,28 @@ void main() {
       findsOneWidget,
     );
 
+    // Tapping outside the chart clears the selected edition.
+    final chartBottom = tester.getBottomLeft(find.byType(PlotChart)).dy;
+    await tester.tapAt(Offset(400, chartBottom + 40));
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byType(PlotChart),
+        matching: find.text('PDG 2024'),
+      ),
+      findsNothing,
+    );
+
+    await tester.tap(find.byType(PlotChart));
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byType(PlotChart),
+        matching: find.text('PDG 2024'),
+      ),
+      findsOneWidget,
+    );
+
     await tester.tap(find.byType(PlotChart));
     await tester.pump();
     expect(

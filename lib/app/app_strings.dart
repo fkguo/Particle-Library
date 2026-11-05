@@ -424,7 +424,7 @@ class AppStrings {
   String get seriesTrendAllValues => _t('全部取值', 'All values');
   String get seriesTrendXAxis => _t('PDG 版本', 'PDG edition');
   String get seriesTrendYAxis => _t('数值', 'Value');
-  String get seriesTrendCurrent => _t('当前版本', 'Current edition');
+  String get seriesTrendCurrent => _t('当前', 'Current');
   String get seriesTrendClose => _t('关闭', 'Close');
   String get seriesSectionText =>
       _t('章节说明与物理约定', 'Section text and conventions');

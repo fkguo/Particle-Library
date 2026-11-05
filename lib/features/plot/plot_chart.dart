@@ -337,43 +337,52 @@ class _PlotChartState extends State<PlotChart> {
                       setState(() => _hovered = null);
                     }
                   },
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTapUp: (details) {
-                      final next = frame.nearestX(
-                        widget.data.points,
-                        details.localPosition.dx,
-                      );
-                      if (!mounted) return;
-                      setState(() => _hovered = next == _hovered ? null : next);
+                  child: TapRegion(
+                    onTapOutside: (_) {
+                      if (_hovered != null && mounted) {
+                        setState(() => _hovered = null);
+                      }
                     },
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Positioned.fill(
-                          child: CustomPaint(
-                            painter: _PlotPainter(
-                              data: widget.data,
-                              line: palette.primary,
-                              current: palette.accent,
-                              grid: palette.divider,
-                              text: palette.textSecondary,
-                              strong: palette.textPrimary,
-                              unit: '',
-                              textScaler: MediaQuery.textScalerOf(context),
-                              xLabel: strings.seriesTrendXAxis,
-                              hoveredIndex: _hovered,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapUp: (details) {
+                        final next = frame.nearestX(
+                          widget.data.points,
+                          details.localPosition.dx,
+                        );
+                        if (!mounted) return;
+                        setState(
+                          () => _hovered = next == _hovered ? null : next,
+                        );
+                      },
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _PlotPainter(
+                                data: widget.data,
+                                line: palette.primary,
+                                current: palette.accent,
+                                grid: palette.divider,
+                                text: palette.textSecondary,
+                                strong: palette.textPrimary,
+                                unit: '',
+                                textScaler: MediaQuery.textScalerOf(context),
+                                xLabel: strings.seriesTrendXAxis,
+                                hoveredIndex: _hovered,
+                              ),
                             ),
                           ),
-                        ),
-                        if (_hovered != null)
-                          _HoverCard(
-                            data: widget.data,
-                            index: _hovered!,
-                            frame: frame,
-                            size: size,
-                          ),
-                      ],
+                          if (_hovered != null)
+                            _HoverCard(
+                              data: widget.data,
+                              index: _hovered!,
+                              frame: frame,
+                              size: size,
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 );
