@@ -406,8 +406,8 @@ class AppStrings {
   String get seriesTrendChart => _t('趋势图', 'Trend chart');
   String get seriesTrendTitle => _t('跨版趋势', 'Across PDG editions');
   String get seriesTrendSubtitle => _t(
-    '同一量的 PDG 汇总随版本变化；误差条为原始正、负误差。',
-    'The PDG summary of one quantity across editions; error bars are the raw positive and negative errors.',
+    '同一量的 PDG 汇总随版本变化；有 PDG Average/Fit 时可分别查看。误差条为原始正、负误差。',
+    'The PDG summary of one quantity across editions; PDG Average and Fit can be viewed separately. Error bars are the raw positive and negative errors.',
   );
   String get seriesTrendNoData => _t(
     '至少需要两个版本的数值才能绘制趋势。',
@@ -421,6 +421,7 @@ class AppStrings {
       _t('个版本有并列汇总', 'editions with tied summaries');
   String get seriesTrendLimits => _t('个版本只有限值', 'editions with limits only');
   String get seriesTrendPoints => _t('个版本', 'editions');
+  String get seriesTrendAllValues => _t('全部取值', 'All values');
   String get seriesTrendXAxis => _t('PDG 版本', 'PDG edition');
   String get seriesTrendYAxis => _t('数值', 'Value');
   String get seriesTrendCurrent => _t('当前版本', 'Current edition');

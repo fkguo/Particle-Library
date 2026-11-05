@@ -3,8 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
+import '../../app/app_strings.dart';
 import '../../app/app_theme.dart';
 import '../../domain/display.dart';
+import '../../domain/labels.dart';
 import '../common/description_text.dart';
 import '../common/display_value.dart';
 import 'plot_data.dart';
@@ -47,11 +49,36 @@ Future<void> showTrendDialog(
   );
 }
 
-class TrendDialog extends StatelessWidget {
+class TrendDialog extends StatefulWidget {
   const TrendDialog({super.key, required this.data, required this.title});
 
   final PlotData data;
   final String title;
+
+  @override
+  State<TrendDialog> createState() => _TrendDialogState();
+}
+
+class _TrendDialogState extends State<TrendDialog> {
+  int _selected = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    for (var i = 0; i < widget.data.series.length; i++) {
+      if (widget.data.series[i].points.length >= 2) {
+        _selected = i;
+        break;
+      }
+    }
+  }
+
+  String _seriesLabel(PlotSeries series, AppStrings strings) {
+    final type = series.valueType.isEmpty
+        ? strings.seriesTrendAllValues
+        : valueTypeShortLabel(series.valueType, strings.lang);
+    return '$type · ${series.points.length}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +87,9 @@ class TrendDialog extends StatelessWidget {
     final screen = MediaQuery.sizeOf(context);
     final width = math.min(820.0, math.max(360.0, screen.width - 64));
     final chartHeight = math.min(320.0, math.max(220.0, screen.height * 0.38));
+    final data = widget.data.series.isEmpty
+        ? widget.data
+        : widget.data.selectSeries(_selected);
     return Dialog(
       insetPadding: const EdgeInsets.all(24),
       child: ConstrainedBox(
@@ -80,7 +110,7 @@ class TrendDialog extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: DescriptionText(
-                        title,
+                        widget.title,
                         maxLines: 2,
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w600),
@@ -95,6 +125,25 @@ class TrendDialog extends StatelessWidget {
                       ?.copyWith(color: palette.textSecondary),
                 ),
                 const SizedBox(height: 10),
+                if (widget.data.series.length > 1) ...[
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      for (var i = 0; i < widget.data.series.length; i++)
+                        ChoiceChip(
+                          label: Text(
+                            _seriesLabel(widget.data.series[i], strings),
+                          ),
+                          selected: i == _selected,
+                          showCheckmark: false,
+                          visualDensity: VisualDensity.compact,
+                          onSelected: (_) => setState(() => _selected = i),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 if (!data.hasTrend)
                   _NoTrend(data: data)
                 else ...[

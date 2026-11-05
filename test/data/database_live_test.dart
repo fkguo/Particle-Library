@@ -7,6 +7,7 @@ import 'package:pdgapp/data/pdg_database.dart';
 import 'package:pdgapp/data/pdg_repository.dart';
 import 'package:pdgapp/data/sql_executor.dart';
 import 'package:pdgapp/features/notes/note_evidence_resolver.dart';
+import 'package:pdgapp/features/plot/plot_data.dart';
 import 'package:pdgapp/domain/display.dart';
 import 'package:pdgapp/domain/filters.dart';
 import 'package:pdgapp/domain/labels.dart';
@@ -48,6 +49,29 @@ void main() {
     final editions = await db.loadEditions();
     expect(editions.first, '2026');
     expect(editions.length, 54);
+  });
+
+  test('S033R1 history exposes separate PDG Average and Fit trends', () async {
+    final entry = await db.requireEntryByPdgid('S033R1');
+    final summaries = await db.summariesForEntry(entry.id);
+    final data = buildEditionTrend(
+      summaries,
+      label: entry.description,
+      currentEdition: '2026',
+    );
+    expect(data.hasTrend, isTrue);
+    expect(
+      data.series.map((series) => series.valueType),
+      containsAll(['AC', 'FC']),
+    );
+    final average = data.series.firstWhere(
+      (series) => series.valueType == 'AC',
+    );
+    final fit = data.series.firstWhere((series) => series.valueType == 'FC');
+    expect(average.points.length, greaterThan(10));
+    expect(fit.points.length, greaterThan(10));
+    expect(average.points.map((point) => point.x), contains(2022));
+    expect(fit.points.map((point) => point.x), contains(2024));
   });
 
   test('D0 listing has two identities and the expected decay tree', () async {
