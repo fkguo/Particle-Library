@@ -67,6 +67,37 @@ void main() {
     await tempDir.delete(recursive: true);
   });
 
+  testWidgets('trend value list is newest first', (tester) async {
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final data = buildEditionTrend([
+      _row('2022', 1),
+      _row('2024', 2),
+      _row('2026', 3),
+    ], label: 'X');
+    await tester.pumpWidget(
+      AppScope(
+        services: services,
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: TrendDialog(data: data, title: 'X'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final newest = tester.getTopLeft(find.text('PDG 2026')).dy;
+    final middle = tester.getTopLeft(find.text('PDG 2024')).dy;
+    final oldest = tester.getTopLeft(find.text('PDG 2022')).dy;
+    expect(newest, lessThan(middle));
+    expect(middle, lessThan(oldest));
+  });
+
   testWidgets('tapping the chart selects a year and tapping again clears it', (
     tester,
   ) async {

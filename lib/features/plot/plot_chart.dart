@@ -164,7 +164,9 @@ class _TrendDialogState extends State<TrendDialog> {
                     child: SingleChildScrollView(
                       child: Column(
                         children: [
-                          for (final point in data.points)
+                          // The chart runs oldest-to-newest, but the value
+                          // list is easier to scan newest-first.
+                          for (final point in data.points.reversed)
                             _PointRow(point: point),
                         ],
                       ),
