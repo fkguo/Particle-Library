@@ -1,5 +1,5 @@
 {
-  "version": "0.2.2",
-  "url": "https://github.com/fkguo/Particle-Library/releases/tag/v0.2.2",
-  "notes": "Particle Library 0.2.2 — catalog quantum numbers and PDG status marks, inline pdgLive review and See also links, a single expand arrow on catalog rows, PDF search keyboard shortcuts, and updated PDF/SQLite engines."
+  "version": "0.2.3",
+  "url": "https://github.com/fkguo/Particle-Library/releases/tag/v0.2.3",
+  "notes": "Particle Library 0.2.3 — trend charts split PDG Average and PDG Fit into selectable series; tap or click a point to inspect that edition, and the newest edition is listed first."
 }
