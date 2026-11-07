@@ -1,5 +1,9 @@
 {
   "version": "0.2.3",
   "url": "https://github.com/fkguo/Particle-Library/releases/tag/v0.2.3",
-  "notes": "Particle Library 0.2.3 — trend charts split PDG Average and PDG Fit into selectable series; tap or click a point to inspect that edition, and the newest edition is listed first."
+  "notes": "Particle Library 0.2.3 — trend charts split PDG Average and PDG Fit into selectable series; tap or click a point to inspect that edition, and the newest edition is listed first.",
+  "downloads": {
+    "android": "https://github.com/fkguo/Particle-Library/releases/download/v0.2.3/Particle-Library-0.2.3-Android-arm64-v8a.apk",
+    "macos": "https://github.com/fkguo/Particle-Library/releases/download/v0.2.3/Particle-Library-0.2.3-macOS-universal.zip"
+  }
 }

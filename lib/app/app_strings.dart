@@ -1511,6 +1511,14 @@ class AppStrings {
   );
   String get updateLater => _t('稍后', 'Later');
   String get updateOpen => _t('打开下载页面', 'Open download page');
+  String get updateNow => _t('立即更新', 'Update now');
+  String get updateInstall => _t('下载并安装', 'Download and install');
+  String get updateDownloading => _t('正在下载更新…', 'Downloading update…');
+  String get updateDownloadFailed => _t('更新下载失败', 'Update download failed');
+  String get updateInstallPermission => _t(
+    '需要允许安装未知应用。系统设置已打开，授权后请再次点击更新。',
+    'Allow installation from this source in Settings, then choose Update again.',
+  );
   String get updateAvailableMessage => _t(
     '有新版本可用。建议下载并安装最新版本。',
     'A newer version is available. Download and install the latest release.',

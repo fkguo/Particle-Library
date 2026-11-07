@@ -74,6 +74,35 @@ then the GitHub Releases API; a tag alone is not enough because the static
 manifest is checked first. Validate the manual check on a release build before
 announcing.
 
+### In-app updates
+
+- **macOS** uses the vendored Sparkle framework. `SUFeedURL` points at
+  `appcast.xml`; `SUPublicEDKey` is in `macos/Runner/Info.plist`. The Ed25519
+  private key is deliberately not in the repository: keep it at
+  `~/.config/particle-library/sparkle_ed25519.key` (or set `SPARKLE_ED_KEY`)
+  and back it up; losing it means existing installations cannot verify future
+  updates. After building the ZIP, regenerate the signed appcast and commit it:
+
+  ```text
+  tool/sparkle_appcast.py dist/release/Particle-Library-X.Y.Z-macOS-universal.zip \
+    --version X.Y.Z --build N \
+    --url https://github.com/fkguo/Particle-Library/releases/download/vX.Y.Z/Particle-Library-X.Y.Z-macOS-universal.zip \
+    --output appcast.xml
+  ```
+
+  The appcast must be published before the release announcement. The native
+  menu item `Particle Library → Check for Updates…` and the in-app update
+  dialog both invoke Sparkle.
+
+- **Android** downloads the APK named by `update.json`'s
+  `downloads.android` (or the `assets` array of a GitHub API response), then
+  opens the system package installer. The user must allow installs from this
+  source once; Android never permits a silent install. Keep the APK URL on
+  HTTPS and signed with the existing release key.
+
+- **iOS** updates are delivered by the App Store/TestFlight; there is no
+  self-update path.
+
 ## iOS / TestFlight
 
 1. Bump the build number (`version: 0.2.0+16`); every TestFlight upload needs a
@@ -100,4 +129,6 @@ announcing.
 - [ ] iOS physical install and trust checked; TestFlight only with a paid team
 - [ ] README/requirements and update channel consistent
 - [ ] Android signer digest equals the one recorded in ANDROID.md; the key folder is backed up
+- [ ] `appcast.xml` regenerated and signed for the macOS ZIP
+- [ ] `update.json` contains the current macOS/Android download URLs
 - [ ] release notes and three-entry checksums attached

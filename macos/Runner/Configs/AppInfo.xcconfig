@@ -13,3 +13,6 @@ PRODUCT_BUNDLE_IDENTIFIER = io.github.fkguo.particlelibrary
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 Particle Library contributors. Licensed under MPL-2.0.
+
+// Vendored Sparkle.framework (auto-update) lives outside the Runner group.
+FRAMEWORK_SEARCH_PATHS = $(inherited) "$(PROJECT_DIR)/Frameworks"

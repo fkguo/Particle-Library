@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'app_strings.dart';
+import 'app_updater.dart';
+import 'update_download.dart';
 import 'app_version.g.dart';
 
 /// Current application version. Generated from `pubspec.yaml` by
@@ -32,11 +34,20 @@ const String updateManifestUrl = String.fromEnvironment(
 );
 
 class UpdateInfo {
-  const UpdateInfo({required this.version, required this.url, this.notes = ''});
+  const UpdateInfo({
+    required this.version,
+    required this.url,
+    this.notes = '',
+    this.androidDownloadUrl,
+  });
 
   final String version;
   final String url;
   final String notes;
+
+  /// Direct APK asset, when the release manifest (or GitHub API response)
+  /// provides one. iOS never uses it and macOS updates through Sparkle.
+  final String? androidDownloadUrl;
 }
 
 class UpdateCheckException implements Exception {
@@ -149,11 +160,13 @@ class UpdateChecker {
       if (version.isEmpty || url.isEmpty) {
         throw const UpdateCheckException('Update response lacks version/url.');
       }
+      final androidDownloadUrl = _androidDownloadUrl(data);
       return compareVersions(version, appVersion) > 0
           ? UpdateInfo(
               version: version.replaceFirst(RegExp(r'^[vV]'), ''),
               url: url,
               notes: notes,
+              androidDownloadUrl: androidDownloadUrl,
             )
           : null;
     } on UpdateCheckException {
@@ -186,6 +199,32 @@ class UpdateChecker {
       bytes.add(chunk);
     }
     return utf8.decode(bytes.takeBytes(), allowMalformed: false);
+  }
+
+  /// Accepts either a small manifest's `downloads.android` or the GitHub API's
+  /// `assets` array. Asset names are stable across releases.
+  static String? _androidDownloadUrl(Map<String, Object?> data) {
+    final downloads = data['downloads'];
+    if (downloads is Map) {
+      final raw = (downloads['android'] ?? downloads['apk'])?.toString() ?? '';
+      if (isSafeUpdateUrl(raw) && raw.toLowerCase().endsWith('.apk')) {
+        return raw;
+      }
+    }
+    final assets = data['assets'];
+    if (assets is List) {
+      for (final item in assets) {
+        if (item is! Map) continue;
+        final name = item['name']?.toString().toLowerCase() ?? '';
+        final raw = item['browser_download_url']?.toString() ?? '';
+        if (name.endsWith('.apk') &&
+            name.contains('arm64') &&
+            isSafeUpdateUrl(raw)) {
+          return raw;
+        }
+      }
+    }
+    return null;
   }
 
   static int compareVersions(String a, String b) {
@@ -291,14 +330,117 @@ Future<void> showUpdateAvailableDialog(
         ),
         FilledButton(
           onPressed: safeUrl ? () => Navigator.of(context).pop(true) : null,
-          child: Text(strings.updateOpen),
+          child: Text(_updateActionLabel(strings, info)),
         ),
       ],
     ),
   );
   if (open != true) return;
+  if (await AppUpdater.checkForMacOSUpdates()) return;
+  if (!context.mounted) return;
+  final androidUrl = info.androidDownloadUrl;
+  if (AppUpdater.isAndroid &&
+      androidUrl != null &&
+      isSafeUpdateUrl(androidUrl)) {
+    await _downloadAndInstallAndroid(context, strings, info, androidUrl);
+    return;
+  }
   final uri = Uri.tryParse(info.url);
   if (uri != null && isSafeUpdateUrl(info.url)) {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+}
+
+String _updateActionLabel(AppStrings strings, UpdateInfo info) {
+  if (AppUpdater.isMacOS) return strings.updateNow;
+  if (AppUpdater.isAndroid &&
+      info.androidDownloadUrl != null &&
+      isSafeUpdateUrl(info.androidDownloadUrl!)) {
+    return strings.updateInstall;
+  }
+  return strings.updateOpen;
+}
+
+Future<void> _downloadAndInstallAndroid(
+  BuildContext context,
+  AppStrings strings,
+  UpdateInfo info,
+  String url,
+) async {
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final progress = ValueNotifier<UpdateDownloadProgress>(
+    const UpdateDownloadProgress(0, -1),
+  );
+  unawaited(
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: Text(strings.updateDownloading),
+        content: ValueListenableBuilder<UpdateDownloadProgress>(
+          valueListenable: progress,
+          builder: (context, value, _) {
+            final total = value.total > 0
+                ? '${(value.total / 1048576).toStringAsFixed(1)} MB'
+                : '?';
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LinearProgressIndicator(value: value.fraction),
+                const SizedBox(height: 10),
+                Text(
+                  '${(value.received / 1048576).toStringAsFixed(1)} / $total',
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    ),
+  );
+  try {
+    final file = await downloadUpdateAsset(
+      Uri.parse(url),
+      fileName:
+          'Particle-Library-${info.version.replaceAll(RegExp(r'[^0-9A-Za-z._-]'), '_')}-Android-arm64-v8a.apk',
+      onProgress: (value) => progress.value = value,
+    );
+    if (navigator.canPop()) navigator.pop();
+    final installed = await AppUpdater.installAndroidApk(file.path);
+    if (!installed && context.mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(strings.updateDownloadFailed),
+          content: Text(strings.updateInstallPermission),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(strings.commonClose),
+            ),
+          ],
+        ),
+      );
+    }
+  } catch (error) {
+    if (navigator.canPop()) navigator.pop();
+    if (context.mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(strings.updateDownloadFailed),
+          content: Text('$error'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(strings.commonClose),
+            ),
+          ],
+        ),
+      );
+    }
+  } finally {
+    progress.dispose();
   }
 }

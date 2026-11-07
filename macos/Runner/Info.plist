@@ -30,5 +30,11 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUFeedURL</key>
+	<string>https://cdn.jsdelivr.net/gh/fkguo/Particle-Library@main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>X2i8qIL3O3uVPUCtkNccsOdAtq496wSoQkyui+F9GM8=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
 </dict>
 </plist>

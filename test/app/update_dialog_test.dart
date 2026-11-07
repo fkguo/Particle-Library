@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdgapp/app/app_strings.dart';
 import 'package:pdgapp/app/update_checker.dart';
@@ -56,5 +59,32 @@ void main() {
       final button = tester.widget<FilledButton>(find.byType(FilledButton));
       expect(button.onPressed, isNull);
     });
+
+    testWidgets(
+      'the macOS update button asks Sparkle instead of opening GitHub',
+      (tester) async {
+        final calls = <String>[];
+        const channel = MethodChannel('pdg.update');
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          (call) async {
+            calls.add(call.method);
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            channel,
+            null,
+          ),
+        );
+        await openDialog(tester, 'https://example.org/releases/9.9.9');
+        expect(find.text('Update now'), findsOneWidget);
+        await tester.tap(find.byType(FilledButton));
+        await tester.pumpAndSettle();
+        expect(calls, ['checkForUpdates']);
+      },
+      skip: !Platform.isMacOS,
+    );
   });
 }

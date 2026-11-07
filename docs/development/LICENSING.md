@@ -39,6 +39,8 @@ PDG's terms. The app stores cached copies locally for reading only.
 - `flutter_svg`: MIT
 - `path_provider`, `url_launcher`, `file_selector`, `crypto`: BSD-3-Clause
 - `archive`, `html`: MIT
+- Sparkle (macOS updater, vendored at `macos/Frameworks/Sparkle.framework`): MIT;
+text in `macos/Frameworks/SPARKLE-LICENSE.txt`
 - PDFium: BSD-3-Clause; SQLite: public domain
 
 These are permissive licenses compatible with MPL-2.0. The complete texts are

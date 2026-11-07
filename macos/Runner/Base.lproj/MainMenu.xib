@@ -38,6 +38,12 @@
                                     <action selector="showSettings:" target="QvC-M9-y7g" id="set-1a-b2"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Check for Updates…" id="upd-01-001">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="checkForUpdates:" target="QvC-M9-y7g" id="upd-01-002"/>
+                                </connections>
+                            </menuItem>
                             <menuItem isSeparatorItem="YES" id="wFC-TO-SCJ"/>
                             <menuItem title="Services" id="NMo-om-nkz">
                                 <modifierMask key="keyEquivalentModifierMask"/>
