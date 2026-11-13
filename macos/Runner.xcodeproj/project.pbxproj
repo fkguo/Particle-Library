@@ -29,7 +29,7 @@
 		33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11122044BFA00003C045 /* MainFlutterWindow.swift */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
 		AA2000000000000000000002 /* Sparkle.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA2000000000000000000001 /* Sparkle.framework */; };
-		AA2000000000000000000003 /* Sparkle.framework in Bundle Framework */ = {isa = PBXBuildFile; fileRef = AA2000000000000000000001 /* Sparkle.framework */; };
+		AA2000000000000000000003 /* Sparkle.framework in Bundle Framework */ = {isa = PBXBuildFile; fileRef = AA2000000000000000000001 /* Sparkle.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, );}; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */

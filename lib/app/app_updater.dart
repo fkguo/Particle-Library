@@ -7,6 +7,20 @@ import 'package:flutter/services.dart';
 /// macOS delegates the download, signature check and replacement of the app
 /// bundle to Sparkle. Android exposes an APK installer prompt; the operating
 /// system still asks the user to confirm the installation.
+class AndroidInstallResult {
+  const AndroidInstallResult({required this.success, this.code, this.message});
+
+  final bool success;
+  final String? code;
+  final String? message;
+
+  static const unsupported = AndroidInstallResult(
+    success: false,
+    code: 'unsupported',
+    message: 'In-app installation is only available on Android.',
+  );
+}
+
 class AppUpdater {
   AppUpdater._();
 
@@ -29,15 +43,23 @@ class AppUpdater {
 
   /// Launches the Android package installer. The user still has to confirm the
   /// installation in the system dialog.
-  static Future<bool> installAndroidApk(String path) async {
-    if (!isAndroid) return false;
+  static Future<AndroidInstallResult> installAndroidApk(String path) async {
+    if (!isAndroid) return AndroidInstallResult.unsupported;
     try {
-      return await _channel.invokeMethod<bool>('installApk', {'path': path}) ??
+      final success =
+          await _channel.invokeMethod<bool>('installApk', {'path': path}) ??
           false;
-    } on PlatformException {
-      return false;
+      return success
+          ? const AndroidInstallResult(success: true)
+          : const AndroidInstallResult(success: false, code: 'install_failed');
+    } on PlatformException catch (error) {
+      return AndroidInstallResult(
+        success: false,
+        code: error.code,
+        message: error.message,
+      );
     } on MissingPluginException {
-      return false;
+      return const AndroidInstallResult(success: false, code: 'unavailable');
     }
   }
 

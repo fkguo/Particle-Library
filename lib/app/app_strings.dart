@@ -1515,6 +1515,11 @@ class AppStrings {
   String get updateInstall => _t('下载并安装', 'Download and install');
   String get updateDownloading => _t('正在下载更新…', 'Downloading update…');
   String get updateDownloadFailed => _t('更新下载失败', 'Update download failed');
+  String get updateInstallFailedTitle => _t('更新安装失败', 'Update install failed');
+  String get updateInstallFailed => _t(
+    '安装器没有打开。请确认 APK 完整，或从发布页面手动下载。',
+    'The installer did not open. Check the downloaded APK or use the release page.',
+  );
   String get updateInstallPermission => _t(
     '需要允许安装未知应用。系统设置已打开，授权后请再次点击更新。',
     'Allow installation from this source in Settings, then choose Update again.',

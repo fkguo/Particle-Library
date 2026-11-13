@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -361,21 +362,66 @@ String _updateActionLabel(AppStrings strings, UpdateInfo info) {
   return strings.updateOpen;
 }
 
+bool _androidUpdateInProgress = false;
+
 Future<void> _downloadAndInstallAndroid(
   BuildContext context,
   AppStrings strings,
   UpdateInfo info,
   String url,
 ) async {
+  if (_androidUpdateInProgress) return;
+  _androidUpdateInProgress = true;
   final navigator = Navigator.of(context, rootNavigator: true);
   final progress = ValueNotifier<UpdateDownloadProgress>(
     const UpdateDownloadProgress(0, -1),
   );
-  unawaited(
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
+  final route = DialogRoute<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) =>
+        _AndroidUpdateProgressDialog(strings: strings, progress: progress),
+  );
+  final routeClosed = navigator.push(route);
+  try {
+    final file = await downloadUpdateAsset(
+      Uri.parse(url),
+      fileName:
+          'Particle-Library-${info.version.replaceAll(RegExp(r'[^0-9A-Za-z._-]'), '_')}-Android-arm64-v8a.apk',
+      onProgress: (value) => progress.value = value,
+    );
+    // Remove only this route. If the navigator went away while downloading,
+    // never pop whatever happens to be on top.
+    if (route.isActive) navigator.removeRoute(route);
+    await routeClosed;
+    if (!context.mounted) return;
+    await _installDownloadedAndroidApk(context, strings, info, file);
+  } catch (error) {
+    if (route.isActive) navigator.removeRoute(route);
+    await routeClosed;
+    if (context.mounted) {
+      await _showAndroidUpdateError(context, strings, info, '$error');
+    }
+  } finally {
+    _androidUpdateInProgress = false;
+    progress.dispose();
+  }
+}
+
+class _AndroidUpdateProgressDialog extends StatelessWidget {
+  const _AndroidUpdateProgressDialog({
+    required this.strings,
+    required this.progress,
+  });
+
+  final AppStrings strings;
+  final ValueListenable<UpdateDownloadProgress> progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
         title: Text(strings.updateDownloading),
         content: ValueListenableBuilder<UpdateDownloadProgress>(
           valueListenable: progress,
@@ -397,50 +443,90 @@ Future<void> _downloadAndInstallAndroid(
           },
         ),
       ),
+    );
+  }
+}
+
+Future<void> _installDownloadedAndroidApk(
+  BuildContext context,
+  AppStrings strings,
+  UpdateInfo info,
+  File file,
+) async {
+  final result = await AppUpdater.installAndroidApk(file.path);
+  if (result.success || !context.mounted) return;
+  final permissionMissing =
+      result.code == 'install_permission' ||
+      !(await AppUpdater.canInstallAndroidPackages());
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(strings.updateInstallFailedTitle),
+      content: Text(
+        permissionMissing
+            ? strings.updateInstallPermission
+            : (result.message?.trim().isNotEmpty == true
+                  ? result.message!
+                  : strings.updateInstallFailed),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text(strings.commonClose),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(dialogContext).pop();
+            unawaited(
+              _installDownloadedAndroidApk(context, strings, info, file),
+            );
+          },
+          child: Text(strings.commonRetry),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(dialogContext).pop();
+            unawaited(_openUpdatePage(info));
+          },
+          child: Text(strings.updateOpen),
+        ),
+      ],
     ),
   );
-  try {
-    final file = await downloadUpdateAsset(
-      Uri.parse(url),
-      fileName:
-          'Particle-Library-${info.version.replaceAll(RegExp(r'[^0-9A-Za-z._-]'), '_')}-Android-arm64-v8a.apk',
-      onProgress: (value) => progress.value = value,
-    );
-    if (navigator.canPop()) navigator.pop();
-    final installed = await AppUpdater.installAndroidApk(file.path);
-    if (!installed && context.mounted) {
-      await showDialog<void>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: Text(strings.updateDownloadFailed),
-          content: Text(strings.updateInstallPermission),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(strings.commonClose),
-            ),
-          ],
+}
+
+Future<void> _showAndroidUpdateError(
+  BuildContext context,
+  AppStrings strings,
+  UpdateInfo info,
+  String message,
+) async {
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(strings.updateDownloadFailed),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text(strings.commonClose),
         ),
-      );
-    }
-  } catch (error) {
-    if (navigator.canPop()) navigator.pop();
-    if (context.mounted) {
-      await showDialog<void>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: Text(strings.updateDownloadFailed),
-          content: Text('$error'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(strings.commonClose),
-            ),
-          ],
+        TextButton(
+          onPressed: () {
+            Navigator.of(dialogContext).pop();
+            unawaited(_openUpdatePage(info));
+          },
+          child: Text(strings.updateOpen),
         ),
-      );
-    }
-  } finally {
-    progress.dispose();
+      ],
+    ),
+  );
+}
+
+Future<void> _openUpdatePage(UpdateInfo info) async {
+  final uri = Uri.tryParse(info.url);
+  if (uri != null && isSafeUpdateUrl(info.url)) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
