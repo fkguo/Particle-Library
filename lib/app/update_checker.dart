@@ -457,7 +457,8 @@ Future<void> _installDownloadedAndroidApk(
   if (result.success || !context.mounted) return;
   final permissionMissing =
       result.code == 'install_permission' ||
-      !(await AppUpdater.canInstallAndroidPackages());
+      (result.code == 'install_failed' &&
+          !(await AppUpdater.canInstallAndroidPackages()));
   if (!context.mounted) return;
   await showDialog<void>(
     context: context,

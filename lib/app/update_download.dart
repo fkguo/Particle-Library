@@ -30,6 +30,7 @@ Future<File> downloadUpdateAsset(
   required String fileName,
   required void Function(UpdateDownloadProgress) onProgress,
   Duration timeout = const Duration(seconds: 20),
+  Duration totalTimeout = const Duration(minutes: 15),
 }) async {
   if (url.scheme != 'https' || url.host.isEmpty) {
     throw const UpdateDownloadException('Refusing a non-HTTPS download.');
@@ -39,6 +40,7 @@ Future<File> downloadUpdateAsset(
   final target = File('${dir.path}/$fileName');
   final partial = File('${target.path}.part');
   final client = HttpClient()..connectionTimeout = timeout;
+  final deadline = DateTime.now().add(totalTimeout);
   try {
     final request = await client.getUrl(url);
     request.headers.set(HttpHeaders.userAgentHeader, 'ParticleLibrary');
@@ -53,6 +55,11 @@ Future<File> downloadUpdateAsset(
     final sink = partial.openWrite();
     try {
       await for (final chunk in response.timeout(timeout)) {
+        if (DateTime.now().isAfter(deadline)) {
+          throw const UpdateDownloadException(
+            'The download exceeded the overall time limit.',
+          );
+        }
         received += chunk.length;
         if (received > 300 * 1024 * 1024) {
           throw const UpdateDownloadException('Update file is too large.');
