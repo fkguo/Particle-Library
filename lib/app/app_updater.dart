@@ -29,6 +29,23 @@ class AppUpdater {
   static bool get isMacOS => Platform.isMacOS;
   static bool get isAndroid => Platform.isAndroid;
 
+  /// Invoked when Sparkle reports a failed update cycle. The update dialog
+  /// registers this to show a Dart fallback with the release-page button.
+  static void Function(String message)? onMacOSUpdateFailed;
+  static bool _failureHandlerInstalled = false;
+
+  static void _installFailureHandler() {
+    if (_failureHandlerInstalled) return;
+    _failureHandlerInstalled = true;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method != 'updateFailed') return;
+      final args = call.arguments;
+      final message = args is Map ? args['message']?.toString() : null;
+      final text = (message ?? '').trim();
+      onMacOSUpdateFailed?.call(text);
+    });
+  }
+
   /// Whether the system currently permits this app to launch an APK installer.
   static Future<bool> canInstallAndroidPackages() async {
     if (!isAndroid) return false;
@@ -67,6 +84,7 @@ class AppUpdater {
   /// is unavailable, so the caller can fall back to the release page.
   static Future<bool> checkForMacOSUpdates() async {
     if (!isMacOS) return false;
+    _installFailureHandler();
     try {
       await _channel.invokeMethod<void>('checkForUpdates');
       return true;

@@ -8,6 +8,7 @@ class MainFlutterWindow: NSWindow {
   private var zoteroChannel: FlutterMethodChannel?
   private var updateChannel: FlutterMethodChannel?
   private var updaterController: SPUStandardUpdaterController?
+  private var sparkleDelegate: SparkleUpdateDelegate?
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -31,9 +32,12 @@ class MainFlutterWindow: NSWindow {
 
     // Sparkle owns the download, signature check and in-place replacement of
     // the app bundle. The Flutter update dialog only asks it to check.
+    let sparkleDelegate = SparkleUpdateDelegate()
+    sparkleDelegate.window = self
+    self.sparkleDelegate = sparkleDelegate
     let updaterController = SPUStandardUpdaterController(
       startingUpdater: true,
-      updaterDelegate: nil,
+      updaterDelegate: sparkleDelegate,
       userDriverDelegate: nil
     )
     self.updaterController = updaterController
@@ -169,6 +173,13 @@ class MainFlutterWindow: NSWindow {
     updaterController?.checkForUpdates(sender)
   }
 
+  func reportUpdateFailure(_ error: Error) {
+    updateChannel?.invokeMethod(
+      "updateFailed",
+      arguments: ["message": error.localizedDescription]
+    )
+  }
+
   // The standard Edit > Find menu items are handled by AppKit before Flutter
   // sees their key equivalents. Forward them to the active PDF reader instead
   // of letting performFindPanelAction: fall through to a no-op.
@@ -182,5 +193,32 @@ class MainFlutterWindow: NSWindow {
 
   @IBAction func findPreviousInReader(_ sender: Any?) {
     reviewChannel?.invokeMethod("findPrevious", arguments: nil)
+  }
+}
+
+
+/// Forwards Sparkle's failed update cycles to Flutter. Normal "no update"
+/// results and explicit user cancellation are not failures.
+final class SparkleUpdateDelegate: NSObject, SPUUpdaterDelegate {
+  weak var window: MainFlutterWindow?
+
+  func updater(
+    _ updater: SPUUpdater,
+    didFinishUpdateCycleFor updateCheck: SPUUpdateCheck,
+    error: Error?
+  ) {
+    guard updateCheck == .updates, let error = error else { return }
+    let nsError = error as NSError
+    let normalCodes: Set<Int> = [
+      1001, // SUNoUpdateError
+      4007, // SUInstallationCanceledError
+      4008, // SUInstallationAuthorizeLaterError
+    ]
+    if nsError.domain == SUSparkleErrorDomain && normalCodes.contains(nsError.code) {
+      return
+    }
+    DispatchQueue.main.async { [weak self] in
+      self?.window?.reportUpdateFailure(error)
+    }
   }
 }

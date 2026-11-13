@@ -1515,6 +1515,11 @@ class AppStrings {
   String get updateInstall => _t('下载并安装', 'Download and install');
   String get updateDownloading => _t('正在下载更新…', 'Downloading update…');
   String get updateDownloadFailed => _t('更新下载失败', 'Update download failed');
+  String get updateCheckFailed => _t('更新检查失败', 'Update check failed');
+  String get updateCheckFailedMessage => _t(
+    'Sparkle 无法获取更新信息。可以打开下载页面手动更新。',
+    'Sparkle could not fetch update information. Open the download page to update manually.',
+  );
   String get updateInstallFailedTitle => _t('更新安装失败', 'Update install failed');
   String get updateInstallFailed => _t(
     '安装器没有打开。请确认 APK 完整，或从发布页面手动下载。',

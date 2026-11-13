@@ -337,7 +337,14 @@ Future<void> showUpdateAvailableDialog(
     ),
   );
   if (open != true) return;
+  if (AppUpdater.isMacOS) {
+    AppUpdater.onMacOSUpdateFailed = (message) {
+      if (!context.mounted) return;
+      unawaited(_showMacOSUpdateFailure(context, strings, info, message));
+    };
+  }
   if (await AppUpdater.checkForMacOSUpdates()) return;
+  AppUpdater.onMacOSUpdateFailed = null;
   if (!context.mounted) return;
   final androidUrl = info.androidDownloadUrl;
   if (AppUpdater.isAndroid &&
@@ -508,6 +515,36 @@ Future<void> _showAndroidUpdateError(
     builder: (dialogContext) => AlertDialog(
       title: Text(strings.updateDownloadFailed),
       content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text(strings.commonClose),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(dialogContext).pop();
+            unawaited(_openUpdatePage(info));
+          },
+          child: Text(strings.updateOpen),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _showMacOSUpdateFailure(
+  BuildContext context,
+  AppStrings strings,
+  UpdateInfo info,
+  String message,
+) async {
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(strings.updateCheckFailed),
+      content: Text(
+        message.isEmpty ? strings.updateCheckFailedMessage : message,
+      ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(),
