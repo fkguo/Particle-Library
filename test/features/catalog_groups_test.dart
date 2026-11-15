@@ -82,6 +82,28 @@ void main() {
     );
   });
 
+  test('every hadron category maps to its PDG Live group node', () {
+    expect(catalogGroupNode(CatalogGroupKind.baryonDelta), 'BXXX010');
+    expect(catalogGroupNode(CatalogGroupKind.baryonN), 'BXXX005');
+    expect(catalogGroupNode(CatalogGroupKind.baryonExotic), 'BXXX012');
+    expect(catalogGroupNode(CatalogGroupKind.mesonLight), 'MXXX005');
+    expect(catalogGroupNode(CatalogGroupKind.mesonOther), 'MXXX050');
+    expect(
+      [
+        for (final group in [
+          ...catalogGroups(ParticleCategory.meson),
+          ...catalogGroups(ParticleCategory.baryon),
+        ])
+          catalogGroupNode(group.kind),
+      ],
+      everyElement(isNotNull),
+      reason: 'all 20 PDG Live hadron groups must have a node',
+    );
+    expect(kind('p', 'B'), CatalogGroupKind.baryonN);
+    expect(kind('n', 'B'), CatalogGroupKind.baryonN);
+    expect(kind('P_c_cbar(4312)+', 'B'), CatalogGroupKind.baryonExotic);
+  });
+
   test('charmonium and bottomonium labels carry explicit math', () {
     final mesons = catalogGroups(ParticleCategory.meson);
     final cc = mesons.firstWhere(
@@ -122,7 +144,9 @@ void main() {
   test('sections without particle identities still follow their flags', () {
     // These roots have no particle rows; their flags still name the category.
     expect(
-      catalogCategoryForRoot(CatalogRoot(entry('Neutrino Properties', 'L'), 12, 0)),
+      catalogCategoryForRoot(
+        CatalogRoot(entry('Neutrino Properties', 'L'), 12, 0),
+      ),
       ParticleCategory.lepton,
     );
     expect(

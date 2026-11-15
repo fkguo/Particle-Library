@@ -76,6 +76,11 @@ announcing.
 
 ### In-app updates
 
+- **Hadron group headers** come from PDG Live and are stored in the notes
+  sidecar by `tool/fetch_pdg_group_headers.py` (20 groups: ten meson, ten
+  baryon). Re-run it when the PDG Live group headers change, then re-run
+  `tool/fetch_pdg_notes.py` only for the per-particle notes it owns.
+
 - **macOS** uses the vendored Sparkle framework. `SUFeedURL` points at
   `appcast.xml`; `SUPublicEDKey` is in `macos/Runner/Info.plist`. The Ed25519
   private key is deliberately not in the repository: keep it at

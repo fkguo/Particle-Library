@@ -23,7 +23,7 @@ enum CatalogGroupKind {
   baryonCharmed,
   baryonDoublyCharmed,
   baryonBottom,
-  baryonOther,
+  baryonExotic,
 }
 
 class CatalogGroup {
@@ -35,6 +35,33 @@ class CatalogGroup {
 
   String label(TextLang lang) => pick(lang, zh, en);
 }
+
+/// PDG Live hadron-group node for each catalog group. The node is also the
+/// key used by `pdg_group_headers` in the generated notes sidecar.
+const _groupNodes = <CatalogGroupKind, String>{
+  CatalogGroupKind.mesonLight: 'MXXX005',
+  CatalogGroupKind.mesonStrange: 'MXXX020',
+  CatalogGroupKind.mesonCharmed: 'MXXX035',
+  CatalogGroupKind.mesonCharmedStrange: 'MXXX040',
+  CatalogGroupKind.mesonBottom: 'MXXX045',
+  CatalogGroupKind.mesonBottomStrange: 'MXXX046',
+  CatalogGroupKind.mesonBottomCharmed: 'MXXX049',
+  CatalogGroupKind.mesonCCbar: 'MXXX025',
+  CatalogGroupKind.mesonBBbar: 'MXXX030',
+  CatalogGroupKind.mesonOther: 'MXXX050',
+  CatalogGroupKind.baryonN: 'BXXX005',
+  CatalogGroupKind.baryonDelta: 'BXXX010',
+  CatalogGroupKind.baryonLambda: 'BXXX020',
+  CatalogGroupKind.baryonSigma: 'BXXX025',
+  CatalogGroupKind.baryonXi: 'BXXX030',
+  CatalogGroupKind.baryonOmega: 'BXXX035',
+  CatalogGroupKind.baryonCharmed: 'BXXX040',
+  CatalogGroupKind.baryonDoublyCharmed: 'BXXX043',
+  CatalogGroupKind.baryonBottom: 'BXXX045',
+  CatalogGroupKind.baryonExotic: 'BXXX012',
+};
+
+String? catalogGroupNode(CatalogGroupKind kind) => _groupNodes[kind];
 
 const _mesonGroups = <CatalogGroup>[
   CatalogGroup(CatalogGroupKind.mesonLight, '轻无味介子', 'Light unflavored'),
@@ -71,7 +98,7 @@ const _baryonGroups = <CatalogGroup>[
   CatalogGroup(CatalogGroupKind.baryonCharmed, '粲重子', 'Charmed'),
   CatalogGroup(CatalogGroupKind.baryonDoublyCharmed, '双粲重子', 'Doubly charmed'),
   CatalogGroup(CatalogGroupKind.baryonBottom, '底重子', 'Bottom'),
-  CatalogGroup(CatalogGroupKind.baryonOther, '其他重子', 'Other baryons'),
+  CatalogGroup(CatalogGroupKind.baryonExotic, '奇特重子', 'Exotic baryons'),
 ];
 
 List<CatalogGroup> catalogGroups(ParticleCategory category) =>
@@ -180,13 +207,18 @@ CatalogGroup? _baryonGroup(String desc) {
       desc.startsWith('Omega_b')) {
     return _group(CatalogGroupKind.baryonBottom);
   }
-  if (desc.startsWith('N')) return _group(CatalogGroupKind.baryonN);
+  if (desc == 'p' || desc == 'n' || desc.startsWith('N')) {
+    return _group(CatalogGroupKind.baryonN);
+  }
   if (desc.startsWith('Delta')) return _group(CatalogGroupKind.baryonDelta);
   if (desc.startsWith('Lambda')) return _group(CatalogGroupKind.baryonLambda);
   if (desc.startsWith('Sigma')) return _group(CatalogGroupKind.baryonSigma);
   if (desc.startsWith('Xi')) return _group(CatalogGroupKind.baryonXi);
   if (desc.startsWith('Omega')) return _group(CatalogGroupKind.baryonOmega);
-  return _group(CatalogGroupKind.baryonOther);
+  if (desc.startsWith('P_c') || desc.startsWith('P_{c')) {
+    return _group(CatalogGroupKind.baryonExotic);
+  }
+  return _group(CatalogGroupKind.baryonExotic);
 }
 
 CatalogGroup _group(CatalogGroupKind kind) {

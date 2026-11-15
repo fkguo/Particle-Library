@@ -21,6 +21,7 @@ import 'catalog_groups.dart';
 typedef _CatalogLoad = ({
   CatalogData catalog,
   Map<String, PdgParticleStatus> statuses,
+  Map<String, PdgGroupHeader> groupHeaders,
 });
 
 class CatalogPage extends StatefulWidget {
@@ -49,7 +50,12 @@ class _CatalogPageState extends State<CatalogPage> {
   Future<_CatalogLoad> _load() async {
     final catalogFuture = AppScope.of(context).repository.catalog();
     final statusesFuture = PdgNotes.statuses();
-    return (catalog: await catalogFuture, statuses: await statusesFuture);
+    final headersFuture = PdgNotes.groupHeaders();
+    return (
+      catalog: await catalogFuture,
+      statuses: await statusesFuture,
+      groupHeaders: await headersFuture,
+    );
   }
 
   @override
@@ -215,6 +221,18 @@ class _CatalogPageState extends State<CatalogPage> {
                   ),
                 ),
               ],
+              if (_subcategory != null)
+                if (data.groupHeaders[catalogGroupNode(_subcategory!)]
+                    case final header?)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      Insets.l,
+                      Insets.s,
+                      Insets.l,
+                      0,
+                    ),
+                    child: _CatalogGroupHeaderCard(header: header),
+                  ),
               const SizedBox(height: Insets.s),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -252,6 +270,44 @@ class _CatalogPageState extends State<CatalogPage> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _CatalogGroupHeaderCard extends StatelessWidget {
+  const _CatalogGroupHeaderCard({required this.header});
+
+  final PdgGroupHeader header;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(Insets.m, 12, Insets.m, 12),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: palette.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DescriptionText(
+            header.title,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          if (header.content.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            DescriptionText(
+              header.content,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: palette.textSecondary),
+            ),
+          ],
+        ],
       ),
     );
   }

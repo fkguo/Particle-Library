@@ -21,6 +21,7 @@ Yearly procedure (after the PDG edition update, June/July):
     python3 tool/fetch_pdg_notes.py \
         --snapshot assets/pdgall-2027.0.sqlite \
         --out assets/pdg_notes_2027.sqlite --edition 2027
+    python3 tool/fetch_pdg_group_headers.py --notes assets/pdg_notes_2027.sqlite
     # update lib/data/pdg_notes.dart to point at the new asset, rebuild
 
 The script is resumable (rows already in --out are kept unless --force) and

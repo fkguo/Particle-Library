@@ -100,6 +100,18 @@ void main() {
     },
   );
 
+  test('shipped notes database carries all PDG Live hadron headers', () async {
+    final headers = await PdgNotes.groupHeaders();
+    expect(headers, hasLength(20));
+    final delta = headers['BXXX010'];
+    expect(delta, isNotNull);
+    expect(delta!.title, contains('BARYONS'));
+    expect(delta.content, contains(r'\Delta'));
+    expect(delta.content, isNotEmpty);
+    expect(headers['MXXX005']?.content, contains('For'));
+    expect(headers['BXXX012']?.title, 'EXOTIC BARYONS');
+  });
+
   test('identifiers without notes return null', () async {
     expect(await PdgNotes.forPdgid('NOT-A-PDGID'), isNull);
   });
