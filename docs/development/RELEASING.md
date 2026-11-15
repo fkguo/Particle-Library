@@ -78,8 +78,11 @@ announcing.
 
 - **Hadron group headers** come from PDG Live and are stored in the notes
   sidecar by `tool/fetch_pdg_group_headers.py` (20 groups: ten meson, ten
-  baryon). Re-run it when the PDG Live group headers change, then re-run
-  `tool/fetch_pdg_notes.py` only for the per-particle notes it owns.
+  baryon). Decay-table `P(MeV/c)`, scale factor/CL and the
+  “branching fractions are our estimates” note come from
+  `tool/fetch_pdg_decay_details.py`. Both scripts are resumable and can be
+  re-run against a new snapshot/edition; then re-run
+  `tool/fetch_pdg_notes.py` for the per-particle summaries it owns.
 
 - **macOS** uses the vendored Sparkle framework. `SUFeedURL` points at
   `appcast.xml`; `SUPublicEDKey` is in `macos/Runner/Info.plist`. The Ed25519

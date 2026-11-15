@@ -6,6 +6,7 @@ import '../../app/app_theme.dart';
 import '../../app/navigation.dart';
 import '../../domain/display.dart';
 import '../../domain/labels.dart';
+import '../../data/pdg_notes.dart';
 import '../../domain/models.dart';
 import '../common/description_text.dart';
 import '../common/display_value.dart';
@@ -40,6 +41,24 @@ class _DecayCatalogState extends State<DecayCatalog> {
   final Set<int> _expanded = {};
   bool _flat = false;
   int _visibleLimit = _pageSize;
+  Map<String, PdgDecayDetail> _details = const {};
+  String? _decayNote;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLiveDetails();
+  }
+
+  Future<void> _loadLiveDetails() async {
+    final details = await PdgNotes.decayDetailsForParent(widget.parent.pdgid);
+    final note = await PdgNotes.decayNoteFor(widget.parent.pdgid);
+    if (!mounted) return;
+    setState(() {
+      _details = details;
+      _decayNote = note;
+    });
+  }
 
   @override
   void dispose() {
@@ -144,6 +163,15 @@ class _DecayCatalogState extends State<DecayCatalog> {
             ],
           ),
         ),
+        if (_decayNote case final note?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Insets.l, 0, Insets.l, Insets.s),
+            child: DescriptionText(
+              note,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: context.palette.textSecondary),
+            ),
+          ),
         if (widget.decays.isEmpty)
           EmptyPanel(message: strings.particleNoDecays, icon: Icons.call_split)
         else if (query.isNotEmpty)
@@ -160,6 +188,7 @@ class _DecayCatalogState extends State<DecayCatalog> {
                 path: _path(row, byId),
                 summaryRows: widget.summariesByEntry[row.id] ?? const [],
                 measurementCount: widget.measurementCounts[row.id] ?? 0,
+                detail: _details[row.pdgid],
                 hasChildren: false,
                 expanded: false,
                 onToggle: null,
@@ -205,6 +234,7 @@ class _DecayCatalogState extends State<DecayCatalog> {
         path: const [],
         summaryRows: widget.summariesByEntry[row.id] ?? const [],
         measurementCount: widget.measurementCounts[row.id] ?? 0,
+        detail: _details[row.pdgid],
         hasChildren: childList.isNotEmpty,
         expanded: isExpanded,
         onToggle: childList.isEmpty
@@ -232,6 +262,7 @@ class _DecayTile extends StatelessWidget {
     required this.path,
     required this.summaryRows,
     required this.measurementCount,
+    required this.detail,
     required this.hasChildren,
     required this.expanded,
     required this.onToggle,
@@ -243,6 +274,7 @@ class _DecayTile extends StatelessWidget {
   final List<Entry> path;
   final List<Summary> summaryRows;
   final int measurementCount;
+  final PdgDecayDetail? detail;
   final bool hasChildren;
   final bool expanded;
   final VoidCallback? onToggle;
@@ -335,6 +367,12 @@ class _DecayTile extends StatelessWidget {
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: palette.textSecondary),
                           ),
+                        if (detail case final live?)
+                          if (live.pText.isNotEmpty)
+                            MetaChip('P(MeV/c) ${live.pText}'),
+                        if (detail case final live?)
+                          if (live.scaleCl.isNotEmpty)
+                            MetaChip('scale/CL ${live.scaleCl}'),
                       ],
                     ),
                   ],

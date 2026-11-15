@@ -17,6 +17,7 @@ import '../common/ui.dart';
 import '../reviews/reviews_page.dart';
 import 'catalog_expand_button.dart';
 import 'catalog_groups.dart';
+import 'group_header_card.dart';
 
 typedef _CatalogLoad = ({
   CatalogData catalog,
@@ -231,7 +232,7 @@ class _CatalogPageState extends State<CatalogPage> {
                       Insets.l,
                       0,
                     ),
-                    child: _CatalogGroupHeaderCard(header: header),
+                    child: GroupHeaderCard(header: header),
                   ),
               const SizedBox(height: Insets.s),
               Padding(
@@ -270,44 +271,6 @@ class _CatalogPageState extends State<CatalogPage> {
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-class _CatalogGroupHeaderCard extends StatelessWidget {
-  const _CatalogGroupHeaderCard({required this.header});
-
-  final PdgGroupHeader header;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(Insets.m, 12, Insets.m, 12),
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: palette.divider),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          DescriptionText(
-            header.title,
-            style: Theme.of(context).textTheme.bodyMedium
-                ?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          if (header.content.trim().isNotEmpty) ...[
-            const SizedBox(height: 6),
-            DescriptionText(
-              header.content,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: palette.textSecondary),
-            ),
-          ],
-        ],
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_scope.dart';
 import '../../app/app_strings.dart';
@@ -29,6 +30,7 @@ import '../common/page_outline.dart';
 import '../common/raw_fields.dart';
 import '../common/ui.dart';
 import '../catalog/catalog_groups.dart';
+import '../catalog/group_header_card.dart';
 import '../reviews/review_index.dart';
 import '../reviews/reviews_page.dart';
 import '../decay/decay_catalog.dart';
@@ -130,6 +132,7 @@ class _ParticleBodyState extends State<_ParticleBody> {
   Map<String, PdgCitation> _citations = const <String, PdgCitation>{};
   List<String> _reviewFiles = const <String>[];
   List<PdgSeeAlso> _seeAlso = const <PdgSeeAlso>[];
+  PdgGroupHeader? _groupHeader;
   final GlobalKey _overviewKey = GlobalKey();
   final GlobalKey _tabsKey = GlobalKey();
   final GlobalKey _identityKey = GlobalKey();
@@ -142,6 +145,7 @@ class _ParticleBodyState extends State<_ParticleBody> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_loadPdgNote());
+      unawaited(_loadGroupHeader());
     });
   }
 
@@ -186,6 +190,15 @@ class _ParticleBodyState extends State<_ParticleBody> {
           ),
       };
     });
+  }
+
+  Future<void> _loadGroupHeader() async {
+    final group = catalogGroupFor(widget.view.entry);
+    final node = group == null ? null : catalogGroupNode(group.kind);
+    if (node == null) return;
+    final headers = await PdgNotes.groupHeaders();
+    if (!mounted) return;
+    setState(() => _groupHeader = headers[node]);
   }
 
   Future<void> _openRelatedReviews(
@@ -338,6 +351,16 @@ class _ParticleBodyState extends State<_ParticleBody> {
                 onOpen: (pdgid) => AppNav.openPdgid(context, pdgid),
               ),
             ),
+            if (_groupHeader case final header?)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.l,
+                  Insets.s,
+                  Insets.l,
+                  0,
+                ),
+                child: GroupHeaderCard(header: header),
+              ),
             ContentHeader(
               key: _overviewKey,
               title: ParticleSymbol(
@@ -391,6 +414,33 @@ class _ParticleBodyState extends State<_ParticleBody> {
                   icon: const Icon(Icons.menu_book_outlined, size: 19),
                   onPressed: () =>
                       unawaited(_openRelatedReviews(context, category)),
+                ),
+                IconButton(
+                  tooltip: strings.inspireSearchOpenInspire,
+                  icon: const Icon(Icons.travel_explore, size: 19),
+                  onPressed: () => unawaited(
+                    launchUrl(
+                      Uri.https('inspirehep.net', '/literature', {
+                        'sort': 'mostrecent',
+                        'size': '25',
+                        'page': '1',
+                        'q': 'keywords ${view.entry.pdgid}*',
+                      }),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'PDG API JSON',
+                  icon: const Icon(Icons.data_object, size: 19),
+                  onPressed: () => unawaited(
+                    launchUrl(
+                      Uri.parse(
+                        'https://pdgapi.lbl.gov/summaries/${view.entry.pdgid}',
+                      ),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                  ),
                 ),
                 CopyIconButton(
                   text: _copyParticle(context, view),

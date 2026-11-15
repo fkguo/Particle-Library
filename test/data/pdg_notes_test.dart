@@ -112,6 +112,15 @@ void main() {
     expect(headers['BXXX012']?.title, 'EXOTIC BARYONS');
   });
 
+  test('decay-table P and estimate note are loaded from the sidecar', () async {
+    final details = await PdgNotes.decayDetailsForParent('B033');
+    expect(details['B033.1']?.pText, '229');
+    expect(
+      await PdgNotes.decayNoteFor('B033'),
+      contains('branching fractions'),
+    );
+  });
+
   test('identifiers without notes return null', () async {
     expect(await PdgNotes.forPdgid('NOT-A-PDGID'), isNull);
   });
