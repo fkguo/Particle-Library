@@ -74,7 +74,10 @@ def main() -> None:
             (
                 name
                 for name in archive.namelist()
+                # Only the outer application bundle. Sparkle also ships an
+                # Updater.app with its own version and would otherwise win.
                 if name.endswith(".app/Contents/Info.plist")
+                and name.count("/") == 2
             ),
             None,
         )

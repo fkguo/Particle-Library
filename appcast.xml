@@ -6,20 +6,17 @@
     <description>Particle Library releases</description>
     <language>en</language>
     <item>
-      <title>Particle Library 0.2.3</title>
-      <pubDate>Thu, 05 Nov 2026 09:25:00 +0000</pubDate>
-      <sparkle:version>21</sparkle:version>
-      <sparkle:shortVersionString>0.2.3</sparkle:shortVersionString>
+      <title>Particle Library 0.2.4</title>
+      <pubDate>Sun, 15 Nov 2026 15:58:54 +0000</pubDate>
+      <sparkle:version>22</sparkle:version>
+      <sparkle:shortVersionString>0.2.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[
-        Trend charts split PDG Average and PDG Fit into selectable series,
-        tap to inspect a point, and the newest edition is listed first.
-      ]]></description>
+      <description><![CDATA[All PDG Live hadron group headers, valence-quark content, and decay-table details; in-app updates on macOS and Android.]]></description>
       <enclosure
-        url="https://github.com/fkguo/Particle-Library/releases/download/v0.2.3/Particle-Library-0.2.3-macOS-universal.zip"
-        length="64942009"
+        url="https://github.com/fkguo/Particle-Library/releases/download/v0.2.4/Particle-Library-0.2.4-macOS-universal.zip"
+        length="66129398"
         type="application/octet-stream"
-        sparkle:edSignature="rAMsSKkL1DOET6JvyLz+v729kEPdPIv5vO/oqVpnWlAHxfAawDKUXgQmFbhwB109+prS9krApRGhNF15DtN+AQ==" />
+        sparkle:edSignature="xf9jGQeHZP0d2yyWgA+cgbHPNgMu2wkb+PwcHry8Dmm2JGcrsTTg7jECTGqG4zHlZSoF4+RaO8UorIYTnGsyDA==" />
     </item>
   </channel>
 </rss>
