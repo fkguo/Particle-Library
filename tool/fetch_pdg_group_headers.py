@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 import sqlite3
 import time
 import urllib.error
@@ -70,6 +71,23 @@ def fetch(node: str, timeout: int = 30, retries: int = 3) -> str:
     raise RuntimeError(f"{node}: {last}")
 
 
+def normalize_math(text: str) -> str:
+    r"""Turn pdgLive's MathJax wrappers into plain LaTeX for DescriptionText.
+
+    pdgLive marks up symbols as ``${{\mathit \Delta}}$``; the renderer only
+    accepts safe LaTeX inside the dollar delimiters.  Strip the wrapper
+    commands while keeping real TeX such as ``\overline`` and scripts.
+    """
+    # These commands only italicise/upright-shape a symbol. Dropping them is
+    # lossless for this header content and keeps every expression inside the
+    # subset accepted by DescriptionText's safe-LaTeX check.
+    text = text.replace(r"\mathit", "").replace(r"\mathrm", "")
+    text = text.replace("−", "-")
+    text = re.sub(r"\\(pm|mp)\{\}", r"\\\1", text)
+    text = re.sub(r"\{\s*\}", "", text)
+    return " ".join(text.split())
+
+
 def clean(fragment: str) -> str:
     soup = BeautifulSoup(fragment, "lxml")
     for br in soup.find_all("br"):
@@ -104,6 +122,8 @@ def main() -> int:
     for index, (kind, node) in enumerate(GROUPS.items(), 1):
         html = fetch(node)
         title, content = parse_header(html)
+        title = normalize_math(title)
+        content = normalize_math(content)
         source = GROUP_URL + node
         rows.append((node, title, content, source))
         print(f"[{index}/{len(GROUPS)}] {kind} / {node}: {title[:80]}")

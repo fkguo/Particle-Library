@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdgapp/app/app_theme.dart';
 import 'package:pdgapp/data/pdg_notes.dart';
@@ -10,6 +11,25 @@ void main() {
   late Map<String, PdgGroupHeader> headers;
   setUpAll(() async {
     headers = await PdgNotes.groupHeaders();
+  });
+
+  testWidgets('Delta header renders as math instead of raw LaTeX', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: SizedBox(
+            width: 900,
+            child: DescriptionText(headers['BXXX010']!.title),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(Math), findsWidgets);
   });
 
   for (final node in const [
