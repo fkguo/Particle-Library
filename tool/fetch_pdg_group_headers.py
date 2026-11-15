@@ -88,6 +88,30 @@ def normalize_math(text: str) -> str:
     return " ".join(text.split())
 
 
+def compact_group_spacing(text: str) -> str:
+    """Remove whitespace inside math and between adjacent math spans.
+
+    pdgLive sometimes emits each quark as a separate ``$u$ $d$`` pair and
+    sometimes as one ``$ud$`` span.  Both should render as the same compact
+    quark string, while prose spaces such as ``For $I = 1$`` stay intact.
+    """
+    text = re.sub(
+        r"\$([^$]*)\$",
+        lambda match: "$" + re.sub(r"\s+", "", match.group(1)) + "$",
+        text,
+    )
+    # Merge adjacent math spans into one span: $u$ $d$ -> $ud$, not "$$".
+    previous = None
+    while text != previous:
+        previous = text
+        text = re.sub(
+            r"\$([^$]*)\$\s*\$([^$]*)\$",
+            lambda match: "$" + match.group(1) + match.group(2) + "$",
+            text,
+        )
+    return " ".join(text.split())
+
+
 def clean(fragment: str) -> str:
     soup = BeautifulSoup(fragment, "lxml")
     for br in soup.find_all("br"):
@@ -122,8 +146,8 @@ def main() -> int:
     for index, (kind, node) in enumerate(GROUPS.items(), 1):
         html = fetch(node)
         title, content = parse_header(html)
-        title = normalize_math(title)
-        content = normalize_math(content)
+        title = compact_group_spacing(normalize_math(title))
+        content = compact_group_spacing(normalize_math(content))
         source = GROUP_URL + node
         rows.append((node, title, content, source))
         print(f"[{index}/{len(GROUPS)}] {kind} / {node}: {title[:80]}")

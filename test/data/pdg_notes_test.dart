@@ -107,6 +107,7 @@ void main() {
     expect(delta, isNotNull);
     expect(delta!.title, contains('BARYONS'));
     expect(delta.content, contains(r'\Delta'));
+    expect(delta.content, isNot(contains(r'$ $')));
     expect(delta.content, isNotEmpty);
     expect(headers['MXXX005']?.content, contains('For'));
     expect(headers['BXXX012']?.title, 'EXOTIC BARYONS');
